@@ -60,7 +60,7 @@ LAUNCH_CONFIG = {
                 "b": 2
             }
         },
-        # comment out extensions to disable them or use the `--disable-ext ext_name` option via the CLI.
+        # comment out extensions to disable them or use the `--without-ext ext_name` option via the CLI.
         # {
         #     "name": ".exts.local_extension2",
         #     "package": "bot"
@@ -102,7 +102,7 @@ Options:
   --mention-as-prefix, --mention-as-command-prefix
                                   Enable the usage of bot mentions as a
                                   prefix.
-  --disable-ext, --disable-extension TEXT
+  --without-ext, --without-extension TEXT
                                   The qualified name(s) of the extension(s) to
                                   disable upon startup.
   --log-level, --bot-log-level [NOTSET|DEBUG|INFO|WARNING|WARN|ERROR|FATAL|CRITICAL]

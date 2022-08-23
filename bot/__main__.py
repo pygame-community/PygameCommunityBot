@@ -9,16 +9,16 @@ import os
 import os.path
 import sys
 import types
-from typing import Optional
+from typing import Any, Optional
 
 import click
 import discord
 from discord.ext import commands
-import snakecore  # TODO: Remove this if not using snakecore
+import snakecore
 
 from .bot import (
-    TemplateBot as Bot,
-)  # TODO: Rename TemplateBot according to your bot application.
+    PygameBot as Bot,
+)
 
 try:
     import uvloop  # type: ignore
@@ -39,15 +39,20 @@ log_levels: set[str] = {
     "NOTSET",
 }
 
+
+DEFAULT_EXTENSIONS: list[dict[str, Any]] = [
+    # Add extensions here that should always be loaded upon startup.
+    # These can only be excluded through the --ignore-ext' or '--disable-all-exts'
+    # CLI options.
+    {"name": f"{__package__}.exts.debug_info"},
+]
+
+
 DEFAULT_BOT_CONFIG: dict = {"intents": discord.Intents.default().value}
 DEFAULT_LAUNCH_CONFIG: dict = {
     "command_prefix": "!",
     "mention_as_command_prefix": False,
-    "extensions": [
-        {
-            "name": f"{__package__}.exts.ping_pong"
-        },  # TODO: Remove sample extension entry from default if it was deleted
-    ],  # load default extension
+    "extensions": [],
 }
 
 BOT_CONFIG: dict = copy.deepcopy(DEFAULT_BOT_CONFIG)
@@ -133,9 +138,16 @@ async def close_bot(bot: Bot) -> None:
     f"By default, {DEFAULT_LAUNCH_CONFIG['command_prefix']} is used as a prefix."))
 @click.option("--mention-as-prefix", "--mention-as-command-prefix", "mention_as_command_prefix",
     is_flag=True, help="Enable the usage of bot mentions as a prefix.")
-@click.option("--disable-ext", "--disable-extension", "disable_extension",
+@click.option("--ignore-ext", "--ignore-extension", "ignore_extension",
     multiple=True, type=str,
-    help="The qualified name(s) of the extension(s) to disable upon startup.")
+    help="The qualified name(s) of the extension(s) to ignore when loading extensions "
+    "during startup.")
+@click.option("--ignore-all-exts", "--ignore-all-extensions", "ignore_all_extensions",
+    is_flag=True, help="Ignore all extensions at startup.")
+@click.option("--ignore-default-exts", "--ignore-default-extensions", "ignore_default_extensions",
+    is_flag=True, help="Ignore default extensions at startup.")
+@click.option("--ignore-extra-exts", "--ignore-extra-extensions", "ignore_extra_extensions",
+    is_flag=True, help="Ignore extra (non-default) extensions at startup.")
 @click.option("--log-level", "--bot-log-level", "log_level",
     show_default=True, type=click.Choice(
         ('NOTSET', 'DEBUG', 'INFO', 'WARNING', 'WARN', 'ERROR', 'FATAL', 'CRITICAL')),
@@ -149,7 +161,10 @@ def main(
     command_prefix: tuple[str, ...],
     mention_as_command_prefix: bool,
     intents: Optional[int],
-    disable_extension: tuple[str, ...],
+    ignore_extension: tuple[str, ...],
+    ignore_all_extensions: bool,
+    ignore_default_extensions: bool,
+    ignore_extra_extensions: bool,
     log_level: Optional[str],
 ):
     """Launch this Discord bot application."""
@@ -169,6 +184,8 @@ def main(
     except ImportError:
         click.echo(f"Could not find a 'bot_config.py' file.", err=True)
         raise click.Abort()
+    else:
+        click.echo(f"Successfully loaded 'BOT_CONFIG' from {bot_config_path}")
 
     # load optional LAUNCH_CONFIG data
     try:
@@ -184,6 +201,8 @@ def main(
             raise click.Abort()
     except ImportError:
         click.echo("No 'launch_config.py' file found, using defaults instead...")
+    else:
+        click.echo(f"Successfully loaded 'LAUNCH_CONFIG' from {launch_config_path}")
 
     # -------------------------------------------------------------------------
     # BOT_CONFIG.auth
@@ -348,17 +367,33 @@ def main(
     # -------------------------------------------------------------------------
     # TODO: Add support for more LAUNCH_CONFIG variables as desired
 
-    # remove disabled extensions
-    if disable_extension:
-        disable_extension = set(disable_extension)
-        LAUNCH_CONFIG["extensions"] = [
-            ext_dict
-            for ext_dict in LAUNCH_CONFIG["extensions"]
-            if ext_dict["name"] not in disable_extension
-        ]
+    # handle extensions
+
+    if ignore_all_extensions:
+        LAUNCH_CONFIG["extensions"] = []
+    else:
+        default_extensions = DEFAULT_EXTENSIONS
+        extra_extensions = LAUNCH_CONFIG["extensions"]
+        final_extensions = []
+
+        if not ignore_default_extensions:
+            final_extensions.extend(default_extensions)
+        if not ignore_extra_extensions:
+            final_extensions.extend(extra_extensions)
+
+        if ignore_extension:
+            ignore_extension_set = set(ignore_extension)
+            final_extensions = [
+                ext_dict
+                for ext_dict in final_extensions
+                if ext_dict["name"] not in ignore_extension_set
+            ]
+
+        LAUNCH_CONFIG["extensions"] = final_extensions
 
     # pass configuration data to bot instance
     bot = Bot(final_prefix, intents=discord.Intents(BOT_CONFIG["intents"]))
+
     bot.bot_config = BOT_CONFIG
     bot.launch_config = LAUNCH_CONFIG
 
