@@ -12,13 +12,19 @@ exclude = '''
     | \.mypy_cache
     | \.tox
     | \.venv
-    | \venv
+    | venv
     | _build
     | buck-out
     | build
     | dist
   )/
 )
+'''
+
+force-exclude = '''
+config.py
+botconfig.py
+launchconfig.py
 '''
 
 [tool.isort]
@@ -33,9 +39,9 @@ include = [
 ]
 exclude = [
   "**/__pycache__",
-  "bot_config.py",
+  "botconfig.py",
   "build",
   "dist",
-  "launch_config.py"
+  "launchconfig.py"
 ]
 pythonVersion = "3.9"

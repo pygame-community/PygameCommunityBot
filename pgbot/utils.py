@@ -1,8 +1,32 @@
 import asyncio
-from typing import Optional, Sequence, Union
+import importlib
+from logging import Logger
+import os
+import sys
+import types
+from typing import Any, Optional, Sequence, Union
+
 import discord
 from discord.ext import commands
 import snakecore
+
+
+def import_module_from_path(module_name: str, file_path: str) -> types.ModuleType:
+    abs_file_path = os.path.abspath(file_path)
+    spec = importlib.util.spec_from_file_location(module_name, abs_file_path)
+    if spec is None:
+        raise ImportError(
+            f"failed to generate module spec for module named '{module_name}' at '{abs_file_path}'"
+        )
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[module_name] = module
+    try:
+        spec.loader.exec_module(module)
+    except FileNotFoundError as fnf:
+        raise ImportError(
+            f"failed to find code for module named '{module_name}' at '{abs_file_path}'"
+        ) from fnf
+    return module
 
 
 async def message_delete_reaction_listener(
@@ -45,20 +69,16 @@ async def message_delete_reaction_listener(
 
         check = None
         await bot.is_owner(invoker)  # fetch and cache bot owners implicitly
-        valid_user_ids = set(
-            (
-                (
-                    invoker.id,
-                    *(
-                        (bot.owner_id,)
-                        if bot.owner_id
-                        else tuple(bot.owner_ids)
-                        if bot.owner_ids
-                        else ()
-                    ),
-                )
-            )
-        )
+        # fmt: off
+        valid_user_ids = set((
+            (invoker.id, *(
+            (bot.owner_id,)
+            if bot.owner_id else
+            tuple(bot.owner_ids)
+            if bot.owner_ids
+            else ()),)
+        ))
+        # fmt: on
         if isinstance(invoker, discord.Member):
             check = (
                 lambda event: event.message_id == msg.id
@@ -82,7 +102,8 @@ async def message_delete_reaction_listener(
             )
         else:
             raise TypeError(
-                f"argument 'invoker' expected discord.Member/.User, not {invoker.__class__.__name__}"
+                "argument 'invoker' expected discord.Member/.User, "
+                f"not {invoker.__class__.__name__}"
             )
 
         event: discord.RawReactionActionEvent = await bot.wait_for(
