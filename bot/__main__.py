@@ -104,7 +104,7 @@ async def start_bot(bot: Bot) -> None:
         await snakecore.init(
             global_client=bot
         )  # TODO: Remove this if not using snakecore
-        print(f"Starting bot ({bot.__class__.__name__})...")
+        print(f"\nStarting bot ({bot.__class__.__name__})...")
         await bot.start(bot.bot_config["auth"]["token"])
     except KeyboardInterrupt:
         pass
@@ -170,22 +170,23 @@ def main(
     """Launch this Discord bot application."""
 
     # load mandatory BOT_CONFIG data
+    click.echo("Searching for configuration files...")
     try:
         bot_config = import_module_from_path("bot_config", bot_config_path)
         try:
             BOT_CONFIG.update(bot_config.BOT_CONFIG)
         except AttributeError:
             click.echo(
-                "Could not find the 'BOT_CONFIG' dictionary in the 'bot_config.py' "
+                "  Could not find the 'BOT_CONFIG' dictionary in the 'bot_config.py' "
                 f"file at '{bot_config_path}'.",
                 err=True,
             )
             raise click.Abort()
     except ImportError:
-        click.echo(f"Could not find a 'bot_config.py' file.", err=True)
+        click.echo(f"  Could not find a 'bot_config.py' file.", err=True)
         raise click.Abort()
     else:
-        click.echo(f"Successfully loaded 'BOT_CONFIG' from {bot_config_path}")
+        click.echo(f"  Successfully loaded 'BOT_CONFIG' from {bot_config_path}")
 
     # load optional LAUNCH_CONFIG data
     try:
@@ -194,16 +195,17 @@ def main(
             LAUNCH_CONFIG.update(launch_config.LAUNCH_CONFIG)
         except AttributeError:
             click.echo(
-                "Could not find the 'LAUNCH_CONFIG' dictionary in the "
+                "  Could not find the 'LAUNCH_CONFIG' dictionary in the "
                 f"'launch_config.py' file at '{launch_config_path}'.",
                 err=True,
             )
             raise click.Abort()
     except ImportError:
-        click.echo("No 'launch_config.py' file found, using defaults instead...")
+        click.echo("  No 'launch_config.py' file found, using defaults instead...")
     else:
-        click.echo(f"Successfully loaded 'LAUNCH_CONFIG' from {launch_config_path}")
+        click.echo(f"  Successfully loaded 'LAUNCH_CONFIG' from {launch_config_path}")
 
+    click.echo("Reading configuration data...")
     # -------------------------------------------------------------------------
     # BOT_CONFIG.auth
     ## BOT_CONFIG.auth.client_id
@@ -221,7 +223,7 @@ def main(
         )
     ):
         click.echo(
-            "BOT_CONFIG error: 'auth' variable must be of type 'dict' "
+            "  BOT_CONFIG error: 'auth' variable must be of type 'dict' "
             "and must at least contain 'client_id' of type 'int' and "
             "'token' of type 'str'",
             err=True,
@@ -257,7 +259,7 @@ def main(
 
         if intents_fail:
             click.echo(
-                "BOT_CONFIG error: 'intents' variable must be of type 'int' or 'str' "
+                "  BOT_CONFIG error: 'intents' variable must be of type 'int' or 'str' (STRING) "
                 "and must be interpretable as an integer.",
                 err=True,
             )
@@ -283,7 +285,7 @@ def main(
         and not all(isinstance(pfx, str) for pfx in LAUNCH_CONFIG["command_prefix"])
     ):
         click.echo(
-            "LAUNCH_CONFIG error: Optional 'command_prefix' variable must be of type "
+            "  LAUNCH_CONFIG error: Optional 'command_prefix' variable must be of type "
             "'str', of type 'list'/'tuple' containing strings or just None.",
             err=True,
         )
@@ -294,7 +296,7 @@ def main(
 
     if not isinstance(LAUNCH_CONFIG["mention_as_command_prefix"], bool):
         click.echo(
-            "LAUNCH_CONFIG error: 'mention_as_command_prefix' variable must be of type 'bool'.",
+            "  LAUNCH_CONFIG error: 'mention_as_command_prefix' variable must be of type 'bool'.",
             err=True,
         )
         raise click.Abort()
@@ -316,7 +318,7 @@ def main(
         final_prefix = commands.when_mentioned
     else:
         click.echo(
-            "LAUNCH_CONFIG error: 'mention_as_command_prefix' variable must be True if 'command_prefix' is None.",
+            "  LAUNCH_CONFIG error: 'mention_as_command_prefix' variable must be True if 'command_prefix' is None.",
             err=True,
         )
         raise click.Abort()
@@ -326,7 +328,7 @@ def main(
 
     if not isinstance(LAUNCH_CONFIG["extensions"], (list, tuple)):
         click.echo(
-            "LAUNCH_CONFIG error: 'exts' variable must be a container of type 'list'/'tuple' "
+            "  LAUNCH_CONFIG error: 'exts' variable must be a container of type 'list'/'tuple' "
             "containing dictionaries that specify parameters for the extensions to load.",
             err=True,
         )
@@ -337,7 +339,7 @@ def main(
         for ext_dict in LAUNCH_CONFIG["extensions"]
     ):
         click.echo(
-            "LAUNCH_CONFIG error: The objects in the 'exts' variable container must be of type 'dict' "
+            "  LAUNCH_CONFIG error: The objects in the 'exts' variable container must be of type 'dict' "
             "and must at least contain the 'name' key mapping to the string name of an extension to load.",
             err=True,
         )
@@ -359,13 +361,15 @@ def main(
         and LAUNCH_CONFIG["log_level"] not in log_levels
     ):
         click.echo(
-            "LAUNCH_CONFIG error: 'log_level' variable must be a valid log level name of type 'str' or None.",
+            "  LAUNCH_CONFIG error: 'log_level' variable must be a valid log level name of type 'str' or None.",
             err=True,
         )
         raise click.Abort()
 
     # -------------------------------------------------------------------------
     # TODO: Add support for more LAUNCH_CONFIG variables as desired
+
+    click.echo("  Finished reading configuration data")
 
     # handle extensions
 
