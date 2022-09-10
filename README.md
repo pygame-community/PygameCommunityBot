@@ -24,6 +24,14 @@ botconfig = {
         "token": "...",
         "...": ...
     },
+    "databases": {
+        "a_database": {
+            "name": "a_database",
+            "url": "sqlite+aiosqlite:///path/to/a_database.db",
+            "connect_args": {},  # arguments to pass to aiosqlite.connect() from sqlalchemy
+        },
+        {"...": ...} # other databases
+    },
     "intents": 0b1100011111111011111101 # https://discord.com/developers/docs/topics/gateway#list-of-intents
 }
 ```

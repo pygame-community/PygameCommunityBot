@@ -9,6 +9,10 @@ from typing import Any, Optional, Sequence, Union
 import discord
 from discord.ext import commands
 import snakecore
+import sqlalchemy
+import sqlalchemy.exc
+import sqlalchemy.ext.asyncio
+from sqlalchemy.ext.asyncio import create_async_engine, AsyncEngine, AsyncConnection
 
 
 def import_module_from_path(module_name: str, file_path: str) -> types.ModuleType:
@@ -27,6 +31,116 @@ def import_module_from_path(module_name: str, file_path: str) -> types.ModuleTyp
             f"failed to find code for module named '{module_name}' at '{abs_file_path}'"
         ) from fnf
     return module
+
+
+async def load_databases(
+    db_data: dict[str, Union[str, dict[str, Any]]],
+    raise_exceptions: bool = True,
+    logger: Optional[Logger] = None,
+):
+    dbs = {}
+
+    for db_name, db_dict in db_data.items():
+        engine = None
+
+        try:
+            engine_kwargs = dict(future=True)
+
+            if "connect_args" in db_dict:
+                engine_kwargs["connect_args"] = db_dict["connect_args"]
+
+            engine = create_async_engine(db_dict["url"], **engine_kwargs)
+
+            async with engine.connect() as conn:
+                pass
+
+        except sqlalchemy.exc.SQLAlchemyError as exc:
+            if logger is not None:
+                logger.error(
+                    f"Failed to create engine and functioning connection "
+                    + (
+                        f"'{engine.name}+{engine.driver}' "
+                        if engine is not None
+                        else ""
+                    )
+                    + f"for database '{db_name}'",
+                    exc_info=exc,
+                )
+
+            if raise_exceptions:
+                raise
+        else:
+            dbs[db_name] = {"name": db_name, "engine": engine, "url": db_dict["url"]}
+
+            if "connect_args" in db_dict:
+                dbs[db_name]["connect_args"] = db_data["connect_args"]
+
+            if logger is not None:
+                logger.info(
+                    f"Successfully configured engine '{engine.name}+{engine.driver}' "
+                    f"for database '{db_name}'"
+                )
+
+    return dbs
+
+
+async def unload_databases(
+    dbs: dict[str, dict[str, Union[str, dict, AsyncEngine]]],
+    raise_exceptions: bool = True,
+    logger: Optional[Logger] = None,
+):
+    db_dict: dict[str, Union[dict[str, str], str, Any]]
+    for db_name, db_dict in dbs.items():
+        engine: AsyncEngine = db_dict["engine"]
+        primary_connection: Optional[AsyncConnection] = db_dict.get(
+            "primary_connection"
+        )
+
+        if primary_connection is not None:
+            try:
+                await primary_connection.commit()
+            except sqlalchemy.exc.SQLAlchemyError as err:
+                if logger is not None:
+                    logger.error(
+                        f"Failed to commit final transactions to database '{db_name}' via primary connection'",
+                        exc_info=err,
+                    )
+
+                if raise_exceptions:
+                    raise
+            try:
+                await primary_connection.close()
+            except sqlalchemy.exc.SQLAlchemyError as err:
+                if logger is not None:
+                    logger.error(
+                        f"Failed to close primary connection to database '{db_name}'",
+                        exc_info=err,
+                    )
+
+                if raise_exceptions:
+                    raise
+            else:
+                if logger is not None:
+                    logger.info(
+                        f"Successfully closed primary connection to database '{db_name}'"
+                    )
+
+        try:
+            await engine.dispose()
+        except sqlalchemy.exc.SQLAlchemyError as err:
+            if logger is not None:
+                logger.error(
+                    f"Failed to dispose connection pool of engine '{engine.name}+{engine.driver}' of database '{db_name}'",
+                    exc_info=err,
+                )
+
+            if raise_exceptions:
+                raise
+        else:
+            if logger is not None:
+                logger.info(
+                    f"Successfully disposed connection pool of engine '{engine.name}+{engine.driver}' of database '{db_name}'"
+                )
 
 
 async def message_delete_reaction_listener(

@@ -305,6 +305,46 @@ def main(
             raise click.Abort()
 
     # -------------------------------------------------------------------------
+    # botconfig.databases
+
+    if "databases" in botconfig:
+        if not isinstance(botconfig["databases"], dict) or not all(
+            isinstance(k, str)
+            and isinstance(db_dict, dict)
+            and "name" in db_dict
+            and isinstance(db_dict["name"], str)
+            and db_dict["name"] == k
+            and "url" in db_dict
+            and isinstance(db_dict["url"], str)
+            and isinstance(db_dict.get("connect_args", {}), dict)
+            for k, db_dict in botconfig["databases"].items()
+        ):
+            click.secho(
+                "  botconfig error: 'databases' variable must be of type 'dict' and "
+                "must map database names to one or more database dictionaries.\n"
+                "  Each of them must contain at least a 'name' key for the database "
+                "name and a 'url' key mapping to an SQLAlchemy-compatible database "
+                "URL string.\n"
+                "  The 'connect_args' dictionary for setting up a database "
+                "connection is driver-specific and optional.\n"
+                "  The first database is always the primary one.\n\n"
+                "  {\n"
+                '      "...": {"...": ...},\n'
+                '      "databases": {\n'
+                '          "my_database": {\n'
+                '              "name": "my_database",\n'
+                '              "url": "engine+driver://path/to/my_database",\n'
+                '              "connect_args": {"...": ...}\n'
+                "          }\n"
+                "      },\n"
+                '      "...": ...,\n'
+                "  }\n",
+                err=True,
+                fg="red",
+            )
+            raise click.Abort()
+
+    # -------------------------------------------------------------------------
     # TODO: Add support for more botconfig variables as desired
 
     # -------------------------------------------------------------------------

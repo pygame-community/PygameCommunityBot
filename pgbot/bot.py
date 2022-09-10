@@ -2,13 +2,16 @@
 """
 
 import asyncio
+import contextvars
 import datetime
 import logging
 from typing import Type, Union
 
+from sqlalchemy.ext.asyncio import AsyncEngine
 import discord
 from discord.ext import commands
 import snakecore
+from snakecore.constants import UNSET
 
 from . import utils
 
@@ -20,6 +23,8 @@ class PygameBot(snakecore.commands.Bot):
         super().__init__(*args, **kwargs)
         self._botconfig: dict = {}
         self._launchconfig: dict = {}
+        self._databases: dict[str, dict[str, Union[str, dict, AsyncEngine]]] = {}
+        self._database: dict[str, Union[str, dict, AsyncEngine]] = {}
         self._recent_error_messages: dict[int, discord.Message] = {}
 
     async def get_context(
@@ -33,7 +38,30 @@ class PygameBot(snakecore.commands.Bot):
         setattr(new_ctx, "created_at", datetime.datetime.now(datetime.timezone.utc))
         return new_ctx
 
+    async def _create_database_connections(self) -> None:
+        self._databases = await utils.load_databases(
+            self._botconfig["databases"], raise_exceptions=False, logger=_logger
+        )
+
+        failures = len(self._botconfig["databases"].keys() - self._databases.keys())
+
+        if failures == len(self._botconfig["databases"]):
+            _logger.warning(
+                f"Could not establish a connection to any supported database"
+            )
+
+        if self._databases:
+            self._database = next(iter(self._databases.values()))
+
+    async def _close_database_connections(self) -> None:
+        await utils.unload_databases(
+            self._databases, raise_exceptions=False, logger=_logger
+        )
+
     async def setup_hook(self) -> None:
+        if "databases" in self._botconfig:
+            await self._create_database_connections()
+
         for ext_dict in self._launchconfig["extensions"]:
             try:
                 await self.load_extension_with_config(
@@ -53,6 +81,10 @@ class PygameBot(snakecore.commands.Bot):
                 _logger.info(
                     f"Successfully loaded extension '{ext_dict.get('package', '')}{ext_dict['name']}' at launch"
                 )
+
+    async def teardown_hook(self) -> None:
+        if "databases" in self._botconfig:
+            await self._close_database_connections()
 
     async def on_ready(self):
         print(f"Logged in as {self.user} (ID: {self.user.id})")
@@ -202,3 +234,47 @@ class PygameBot(snakecore.commands.Bot):
                 pass
             finally:
                 del self._recent_error_messages[ctx.message.id]
+
+    def get_database(self):
+        """Get the database dictionary for the primary database of this bot,
+        containing the keys "name" for the database name, "engine" for the
+        SQLAlchemy engine and if available, "conect_args" for a dictionary
+        containing the database driver library-specific arguments for their
+        `.connect()` function.
+
+        Returns:
+            dict: The dictionary.
+        """
+        db_dict = self._database.copy()
+        if "url" in db_dict:
+            del db_dict["url"]
+        return db_dict
+
+    def get_databases(
+        self, *names: str
+    ) -> list[dict[str, Union[str, dict, AsyncEngine]]]:
+        """Get the database dictionaries for all the databases of this bot,
+        containing the keys "name" for the database name, "engine" for the
+        SQLAlchemy engine and if available, "conect_args" for a dictionary
+        containing the database driver library-specific arguments for their
+        `.connect()` function. The first dictionary to be returned is always
+        that of the bot's primary database.
+
+        If string database names are given, only the
+        dictionaries of those (if found) will be returned by the bot.
+
+        Returns:
+            list[dict]: The dictionaries.
+        """
+
+        db_dicts = []
+
+        for name in names if names else self._databases:
+            if name in self._databases:
+                db_dict = self._databases[name].copy()
+                if "url" in db_dict:
+                    del db_dict["url"]
+
+                db_dicts.append(db_dict)
+
+        return db_dicts
