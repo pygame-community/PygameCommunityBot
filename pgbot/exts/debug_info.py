@@ -19,11 +19,6 @@ class DebugInfo(commands.Cog):
         super().__init__()
         self.bot = bot
         self.response_message_cache: OrderedDict[int, discord.Message] = OrderedDict()
-        self.loading_emoji = "🔄"
-
-    @commands.Cog.listener()
-    async def on_ready(self) -> None:
-        self.loading_emoji = self.bot.get_emoji(1017826887990509661) or "🔄"
 
     @commands.Cog.listener()
     async def on_message_edit(self, old: discord.Message, new: discord.Message) -> None:
@@ -39,26 +34,7 @@ class DebugInfo(commands.Cog):
         elif new.id in self.response_message_cache:
             del self.response_message_cache[new.id]
 
-    async def cog_before_invoke(self, ctx: commands.Context[BotT]) -> None:
-        if ctx.command is not None and ctx.command.cog is self:
-            try:
-                await ctx.message.add_reaction(self.loading_emoji)
-            except discord.HTTPException:
-                pass
-
     async def cog_after_invoke(self, ctx: commands.Context[BotT]) -> None:
-        if (
-            discord.utils.find(
-                lambda reaction: reaction.emoji == self.loading_emoji,
-                ctx.message.reactions,
-            )
-            is not None
-        ):
-            try:
-                await ctx.message.remove_reaction(self.loading_emoji, self.bot.user)
-            except discord.HTTPException:
-                pass
-
         for _ in range(min(100, max(len(self.response_message_cache) - 512, 0))):
             self.response_message_cache.popitem(last=False)
 
