@@ -26,6 +26,30 @@ class PygameBot(snakecore.commands.Bot):
         self._databases: dict[dict[str, Union[str, dict, AsyncEngine]]] = {}
         self._database: dict[str, Union[str, dict, AsyncEngine]] = {}
         self._recent_error_messages: dict[int, discord.Message] = {}
+        self.loading_emoji = "🔄"
+
+        self.before_invoke(self.bot_before_invoke)
+        self.after_invoke(self.bot_after_invoke)
+
+    async def bot_before_invoke(self, ctx: commands.Context):
+        if ctx.command is not None:
+            try:
+                await ctx.message.add_reaction(self.loading_emoji)
+            except discord.HTTPException:
+                pass
+
+    async def bot_after_invoke(self, ctx: commands.Context):
+        if (
+            discord.utils.find(
+                lambda reaction: reaction.emoji == self.loading_emoji,
+                ctx.message.reactions,
+            )
+            is not None
+        ):
+            try:
+                await ctx.message.remove_reaction(self.loading_emoji, self.user)
+            except discord.HTTPException:
+                pass
 
     async def get_context(
         self,
@@ -90,6 +114,7 @@ class PygameBot(snakecore.commands.Bot):
             await self._close_database_connections()
 
     async def on_ready(self):
+        self.loading_emoji = self.get_emoji(1017826887990509661) or self.loading_emoji
         print(f"Logged in as {self.user} (ID: {self.user.id})")
         print("------")
 
@@ -229,7 +254,6 @@ class PygameBot(snakecore.commands.Bot):
             )
 
     async def on_command_completion(self, ctx: commands.Context):
-
         if ctx.message.id in self._recent_error_messages:
             try:
                 await self._recent_error_messages[ctx.message.id].delete()
