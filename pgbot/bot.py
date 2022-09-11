@@ -23,7 +23,7 @@ class PygameBot(snakecore.commands.Bot):
         super().__init__(*args, **kwargs)
         self._botconfig: dict = {}
         self._launchconfig: dict = {}
-        self._databases: dict[str, dict[str, Union[str, dict, AsyncEngine]]] = {}
+        self._databases: dict[dict[str, Union[str, dict, AsyncEngine]]] = {}
         self._database: dict[str, Union[str, dict, AsyncEngine]] = {}
         self._recent_error_messages: dict[int, discord.Message] = {}
 
@@ -39,13 +39,16 @@ class PygameBot(snakecore.commands.Bot):
         return new_ctx
 
     async def _create_database_connections(self) -> None:
-        self._databases = await utils.load_databases(
-            self._botconfig["databases"], raise_exceptions=False, logger=_logger
-        )
+        self._databases = {
+            db_dict["name"]: db_dict
+            for db_dict in await utils.load_databases(
+                self._launchconfig["databases"], raise_exceptions=False, logger=_logger
+            )
+        }
 
-        failures = len(self._botconfig["databases"].keys() - self._databases.keys())
+        failures = len(self._launchconfig["databases"]) - len(self._databases.keys())
 
-        if failures == len(self._botconfig["databases"]):
+        if failures == len(self._launchconfig["databases"]):
             _logger.warning(
                 f"Could not establish a connection to any supported database"
             )
@@ -59,7 +62,7 @@ class PygameBot(snakecore.commands.Bot):
         )
 
     async def setup_hook(self) -> None:
-        if "databases" in self._botconfig:
+        if "databases" in self._launchconfig:
             await self._create_database_connections()
 
         for ext_dict in self._launchconfig["extensions"]:
@@ -243,8 +246,12 @@ class PygameBot(snakecore.commands.Bot):
         `.connect()` function.
 
         Returns:
-            dict: The dictionary.
+            dict: The dictionary, or an empty dictionary if nothing was
+              loaded/configured.
         """
+        if not self._database:
+            return None
+
         db_dict = self._database.copy()
         if "url" in db_dict:
             del db_dict["url"]

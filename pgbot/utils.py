@@ -34,13 +34,14 @@ def import_module_from_path(module_name: str, file_path: str) -> types.ModuleTyp
 
 
 async def load_databases(
-    db_data: dict[str, Union[str, dict[str, Any]]],
+    db_data: Sequence[dict[str, Union[str, dict[str, Any]]]],
     raise_exceptions: bool = True,
     logger: Optional[Logger] = None,
-):
-    dbs = {}
+) -> list[dict[str, Union[str, dict, AsyncEngine]]]:
+    dbs = []
 
-    for db_name, db_dict in db_data.items():
+    for db_dict in db_data:
+        db_name = db_dict["name"]
         engine = None
 
         try:
@@ -70,7 +71,7 @@ async def load_databases(
             if raise_exceptions:
                 raise
         else:
-            dbs[db_name] = {"name": db_name, "engine": engine, "url": db_dict["url"]}
+            dbs.append({"name": db_name, "engine": engine, "url": db_dict["url"]})
 
             if "connect_args" in db_dict:
                 dbs[db_name]["connect_args"] = db_data["connect_args"]
@@ -85,45 +86,13 @@ async def load_databases(
 
 
 async def unload_databases(
-    dbs: dict[str, dict[str, Union[str, dict, AsyncEngine]]],
+    dbs: Sequence[dict[str, Union[str, dict, AsyncEngine]]],
     raise_exceptions: bool = True,
     logger: Optional[Logger] = None,
 ):
-    db_dict: dict[str, Union[dict[str, str], str, Any]]
-    for db_name, db_dict in dbs.items():
+    for db_dict in dbs:
+        db_name = db_dict["name"]
         engine: AsyncEngine = db_dict["engine"]
-        primary_connection: Optional[AsyncConnection] = db_dict.get(
-            "primary_connection"
-        )
-
-        if primary_connection is not None:
-            try:
-                await primary_connection.commit()
-            except sqlalchemy.exc.SQLAlchemyError as err:
-                if logger is not None:
-                    logger.error(
-                        f"Failed to commit final transactions to database '{db_name}' via primary connection'",
-                        exc_info=err,
-                    )
-
-                if raise_exceptions:
-                    raise
-            try:
-                await primary_connection.close()
-            except sqlalchemy.exc.SQLAlchemyError as err:
-                if logger is not None:
-                    logger.error(
-                        f"Failed to close primary connection to database '{db_name}'",
-                        exc_info=err,
-                    )
-
-                if raise_exceptions:
-                    raise
-            else:
-                if logger is not None:
-                    logger.info(
-                        f"Successfully closed primary connection to database '{db_name}'"
-                    )
 
         try:
             await engine.dispose()
