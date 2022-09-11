@@ -2,12 +2,14 @@
 """
 
 import asyncio
-import contextvars
 import datetime
 import logging
-from typing import Type, Union
+from typing import Optional, Type, Union
 
-from sqlalchemy.ext.asyncio import AsyncEngine
+from sqlalchemy.ext.asyncio import AsyncEngine, AsyncConnection
+import sqlalchemy.engine
+import sqlalchemy.exc
+from sqlalchemy import text
 import discord
 from discord.ext import commands
 import snakecore
@@ -23,10 +25,13 @@ class PygameBot(snakecore.commands.Bot):
         super().__init__(*args, **kwargs)
         self._botconfig: dict = {}
         self._launchconfig: dict = {}
-        self._databases: dict[dict[str, Union[str, dict, AsyncEngine]]] = {}
-        self._database: dict[str, Union[str, dict, AsyncEngine]] = {}
-        self._recent_error_messages: dict[int, discord.Message] = {}
         self.loading_emoji = "🔄"
+
+        self._recent_error_messages: dict[int, discord.Message] = {}
+
+        self._main_database: dict[str, Union[str, dict, AsyncEngine]] = {}
+        self._databases: dict[dict[str, Union[str, dict, AsyncEngine]]] = {}
+        self._extension_data_storage_is_init = False
 
         self.before_invoke(self.bot_before_invoke)
         self.after_invoke(self.bot_after_invoke)
@@ -78,7 +83,7 @@ class PygameBot(snakecore.commands.Bot):
             )
 
         if self._databases:
-            self._database = next(iter(self._databases.values()))
+            self._main_database = next(iter(self._databases.values()))
 
     async def _close_database_connections(self) -> None:
         await utils.unload_databases(
@@ -88,6 +93,7 @@ class PygameBot(snakecore.commands.Bot):
     async def setup_hook(self) -> None:
         if "databases" in self._launchconfig:
             await self._create_database_connections()
+            await self._init_extension_data_storage()
 
         for ext_dict in self._launchconfig["extensions"]:
             try:
@@ -195,7 +201,7 @@ class PygameBot(snakecore.commands.Bot):
             try:
                 (
                     (
-                        await snakecore.utils.embed_utils.replace_embed_at(
+                        await snakecore.utils.embeds.replace_embed_at(
                             target_message,
                             title=title,
                             description=msg,
@@ -205,7 +211,7 @@ class PygameBot(snakecore.commands.Bot):
                     )
                     if target_message is not None
                     else (
-                        target_message := await snakecore.utils.embed_utils.send_embed(
+                        target_message := await snakecore.utils.embeds.send_embed(
                             context.channel,
                             title=title,
                             description=msg,
@@ -216,7 +222,7 @@ class PygameBot(snakecore.commands.Bot):
                 )
             except discord.NotFound:
                 # response message was deleted, send a new message
-                target_message = await snakecore.utils.embed_utils.send_embed(
+                target_message = await snakecore.utils.embeds.send_embed(
                     context.channel,
                     title=title,
                     description=msg,
@@ -262,7 +268,7 @@ class PygameBot(snakecore.commands.Bot):
             finally:
                 del self._recent_error_messages[ctx.message.id]
 
-    def get_database(self):
+    def get_database_data(self) -> Optional[dict[str, Union[str, dict, AsyncEngine]]]:
         """Get the database dictionary for the primary database of this bot,
         containing the keys "name" for the database name, "engine" for the
         SQLAlchemy engine and if available, "conect_args" for a dictionary
@@ -270,16 +276,27 @@ class PygameBot(snakecore.commands.Bot):
         `.connect()` function.
 
         Returns:
-            dict: The dictionary, or an empty dictionary if nothing was
+            Optional[dict]: The dictionary, or None dictionary if nothing was
               loaded/configured.
         """
-        if not self._database:
+        if not self._main_database:
             return None
 
-        db_dict = self._database.copy()
+        db_dict = self._main_database.copy()
         if "url" in db_dict:
             del db_dict["url"]
         return db_dict
+
+    def get_database(self) -> Optional[AsyncEngine]:
+        """Get the `sqlachemy.ext.asyncio.AsyncEngine` object for the primary
+        database of this bot.
+
+        Returns:
+            Optional[AsyncEngine]: The engine, or None if nothing was
+              loaded/configured.
+        """
+
+        return self._main_database.get("engine")
 
     def get_databases(
         self, *names: str
@@ -309,3 +326,264 @@ class PygameBot(snakecore.commands.Bot):
                 db_dicts.append(db_dict)
 
         return db_dicts
+
+    async def _init_extension_data_storage(self):
+        if not self._main_database:
+            return
+
+        engine: AsyncEngine = self._main_database["engine"]
+        conn: AsyncConnection
+        async with engine.connect() as conn:
+            if engine.name == "sqlite":
+                await conn.execute(
+                    text(
+                        "CREATE TABLE IF NOT EXISTS "
+                        "bot_extension_data"
+                        "(name TEXT, version TEXT, table_name_prefix TEXT, data BLOB)"
+                    )
+                )
+
+            elif engine.name == "postgresql":
+                await conn.execute(
+                    text(
+                        "CREATE TABLE IF NOT EXISTS "
+                        "bot_extension_data"
+                        "(name TEXT, version TEXT, table_name_prefix TEXT, data BYTEA)"
+                    )
+                )
+
+            await conn.commit()
+
+        self._extension_data_storage_is_init = True
+
+    async def _uninit_extension_data_storage(self):
+        self._extension_data_storage_is_init = False
+
+    async def create_extension_data(
+        self,
+        extension_name: str,
+        version: str,
+        table_name_prefix: str,
+        initial_data: Optional[bytes] = None,
+    ) -> dict[str, Union[str, bytes]]:
+
+        if not self._extension_data_storage_is_init:
+            raise RuntimeError("Extension data storage was not initialized.")
+        elif not isinstance(extension_name, str):
+            raise TypeError(
+                f"argument 'extension_name' must be a fully qualified extension "
+                "name of type 'str', not "
+                f"'{extension_name.__class__.__name__}'"
+            )
+        elif not isinstance(version, str):
+            raise TypeError(
+                f"argument 'version' must be of type 'str', not "
+                f"'{version.__class__.__name__}'"
+            )
+        elif not isinstance(table_name_prefix, str):
+            raise TypeError(
+                f"argument 'table_name_prefix' must be of type 'str', not "
+                f"'{table_name_prefix.__class__.__name__}'"
+            )
+        elif initial_data is not None and not isinstance(initial_data, bytes):
+            raise TypeError(
+                f"argument 'initial_data' must be 'None' or of type 'bytes', "
+                f"not '{initial_data.__class__.__name__}'"
+            )
+
+        engine: AsyncEngine = self._main_database["engine"]
+        conn: AsyncConnection
+
+        if engine.name not in ("sqlite", "postgresql"):
+            raise RuntimeError(f"Unsupported database dialect '{engine.name}'")
+
+        async with engine.connect() as conn:
+            ins_res = await conn.execute(
+                text(
+                    "INSERT INTO bot_extension_data "
+                    "(name, version, table_name_prefix, data) "
+                    "VALUES (:extension_name, :version, :table_name_prefix, :initial_data)"
+                ),
+                dict(
+                    extension_name=extension_name,
+                    version=version,
+                    table_name_prefix=table_name_prefix,
+                    initial_data=initial_data,
+                ),
+            )
+            await conn.commit()
+
+    async def read_extension_data(
+        self, extension_name: str
+    ) -> dict[str, Union[str, bytes]]:
+        if not self._extension_data_storage_is_init:
+            raise RuntimeError("Extension data storage was not initialized.")
+
+        elif not isinstance(extension_name, str):
+            raise TypeError(
+                f"argument 'extension_name' must be of type 'str', not "
+                f"'{extension_name.__class__.__name__}'"
+            )
+
+        engine: AsyncEngine = self._main_database["engine"]
+        conn: AsyncConnection
+
+        if engine.name not in ("sqlite", "postgresql"):
+            raise RuntimeError(f"Unsupported database dialect '{engine.name}'")
+
+        async with engine.connect() as conn:
+            result: sqlalchemy.engine.Result = await conn.execute(
+                text("SELECT * FROM bot_extension_data"),
+                dict(extension_name=extension_name),
+            )
+
+            row = result.first()
+            if row is None:
+                raise LookupError(
+                    f"Could not find extension storage data for extension named "
+                    f"'{extension_name}'"
+                )
+
+            return dict(
+                extension_name=row.name,
+                version=row.version,
+                table_name_prefix=row.table_name_prefix,
+                data=row.data,
+            )
+
+    async def check_extension_data_exists(self, extension_name: str):
+        if not self._extension_data_storage_is_init:
+            raise RuntimeError("Extension data storage was not initialized.")
+
+        elif not isinstance(extension_name, str):
+            raise TypeError(
+                f"argument 'extension_name' must be a fully qualified extension "
+                "name of type 'str', not "
+                f"'{extension_name.__class__.__name__}'"
+            )
+
+        engine: AsyncEngine = self._main_database["engine"]
+        conn: AsyncConnection
+
+        if engine.name not in ("sqlite", "postgresql"):
+            raise RuntimeError(f"Unsupported database dialect '{engine.name}'")
+
+        async with engine.connect() as conn:
+            storage_exists = bool(
+                (
+                    await conn.execute(
+                        text(
+                            "SELECT EXISTS(SELECT 1 FROM bot_extension_data WHERE name == :extension_name)"
+                        ),
+                        dict(extension_name=extension_name),
+                    )
+                ).first()[0]
+            )
+        return storage_exists
+
+    async def update_extension_data(
+        self,
+        extension_name: str,
+        version: Optional[str] = None,
+        table_name_prefix: Optional[str] = None,
+        data: Optional[bytes] = None,
+    ) -> dict[str, Union[str, bytes]]:
+
+        if not self._extension_data_storage_is_init:
+            raise RuntimeError("Extension data storage was not initialized.")
+
+        elif not isinstance(extension_name, str):
+            raise TypeError(
+                f"argument 'extension_name' must be a fully qualified extension "
+                "name of type 'str', not "
+                f"'{extension_name.__class__.__name__}'"
+            )
+
+        elif version is not None and not isinstance(version, str):
+            raise TypeError(
+                f"argument 'version' must be of type 'str', not "
+                f"'{version.__class__.__name__}'"
+            )
+        elif table_name_prefix is not None and not isinstance(table_name_prefix, str):
+            raise TypeError(
+                f"argument 'table_name_prefix' must be of type 'str', not "
+                f"'{table_name_prefix.__class__.__name__}'"
+            )
+        elif data is not None and not isinstance(data, bytes):
+            raise TypeError(
+                f"argument 'data' must be 'None' or of type 'bytes', "
+                f"not '{data.__class__.__name__}'"
+            )
+
+        if not any((version, table_name_prefix, data)):
+            raise TypeError(
+                f"'version', 'table_name_prefix' and 'data' cannot all be 'None'"
+            )
+
+        engine: AsyncEngine = self._main_database["engine"]
+        conn: AsyncConnection
+
+        if engine.name not in ("sqlite", "postgresql"):
+            raise RuntimeError(f"Unsupported database dialect '{engine.name}'")
+
+        async with engine.connect() as conn:
+            if not (
+                await conn.execute(
+                    text(
+                        "SELECT EXISTS(SELECT 1 FROM bot_extension_data WHERE name == :extension_name)"
+                    ),
+                    dict(extension_name=extension_name),
+                )
+            ).first()[0]:
+                raise LookupError(
+                    f"Could not find extension storage data for extension named "
+                    f"'{extension_name}'"
+                )
+
+            params = {}
+            params |= dict(version=version) if version is not None else {}
+            params |= (
+                dict(table_name_prefix=table_name_prefix)
+                if table_name_prefix is not None
+                else {}
+            )
+            params |= dict(data=data) if data is not None else {}
+
+            target_columns = ", ".join((f"{k} = :{k}" for k in params))
+
+            params["extension_name"] = extension_name
+            print(target_columns, params)
+
+            await conn.execute(
+                text(
+                    "UPDATE bot_extension_data"
+                    + f" SET {target_columns}"
+                    + " FROM bot_extension_data AS bes WHERE bes.name == :extension_name",
+                ),
+                parameters=params,
+            )
+            await conn.commit()
+
+    async def delete_extension_data(self, extension_name: str):
+        if not self._extension_data_storage_is_init:
+            raise RuntimeError("Extension data storage was not initialized.")
+
+        elif not isinstance(extension_name, str):
+            raise TypeError(
+                f"argument 'extension_name' must be a fully qualified extension "
+                "name of type 'str', not "
+                f"'{extension_name.__class__.__name__}'"
+            )
+
+        engine: AsyncEngine = self._main_database["engine"]
+        conn: AsyncConnection
+
+        if engine.name not in ("sqlite", "postgresql"):
+            raise RuntimeError(f"Unsupported database dialect '{engine.name}'")
+
+        async with engine.connect() as conn:
+            await conn.execute(
+                text("DELETE FROM bot_extension_data WHERE name == :extension_name"),
+                dict(extension_name=extension_name),
+            )
+            await conn.commit()

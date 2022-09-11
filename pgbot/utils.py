@@ -34,23 +34,23 @@ def import_module_from_path(module_name: str, file_path: str) -> types.ModuleTyp
 
 
 async def load_databases(
-    db_data: Sequence[dict[str, Union[str, dict[str, Any]]]],
+    db_info_data: Sequence[dict[str, Union[str, dict[str, Any]]]],
     raise_exceptions: bool = True,
     logger: Optional[Logger] = None,
 ) -> list[dict[str, Union[str, dict, AsyncEngine]]]:
     dbs = []
 
-    for db_dict in db_data:
-        db_name = db_dict["name"]
+    for db_info_dict in db_info_data:
+        db_name = db_info_dict["name"]
         engine = None
 
         try:
-            engine_kwargs = dict(future=True)
+            engine_kwargs = {}
 
-            if "connect_args" in db_dict:
-                engine_kwargs["connect_args"] = db_dict["connect_args"]
+            if "connect_args" in db_info_dict:
+                engine_kwargs["connect_args"] = db_info_dict["connect_args"]
 
-            engine = create_async_engine(db_dict["url"], **engine_kwargs)
+            engine = create_async_engine(db_info_dict["url"], **engine_kwargs)
 
             async with engine.connect() as conn:
                 pass
@@ -71,10 +71,10 @@ async def load_databases(
             if raise_exceptions:
                 raise
         else:
-            dbs.append({"name": db_name, "engine": engine, "url": db_dict["url"]})
+            dbs.append({"name": db_name, "engine": engine, "url": db_info_dict["url"]})
 
-            if "connect_args" in db_dict:
-                dbs[db_name]["connect_args"] = db_data["connect_args"]
+            if "connect_args" in db_info_dict:
+                dbs[db_name]["connect_args"] = db_info_data["connect_args"]
 
             if logger is not None:
                 logger.info(
