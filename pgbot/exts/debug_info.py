@@ -49,7 +49,7 @@ class DebugInfo(commands.Cog):
         )
 
     @commands.command()
-    async def ping(self, ctx: commands.Context[BotT], random_arg: int):
+    async def ping(self, ctx: commands.Context[BotT]):
         """
         ->type Other commands
         ->signature pg!ping
