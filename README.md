@@ -65,6 +65,7 @@ launchconfig = {
         },
         {"...": ...} # other databases
     ],
+    "main_database_name": "a_database"
 }
 ```
 

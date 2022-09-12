@@ -393,18 +393,18 @@ def main(
     # launchconfig.databases
 
     if "databases" in launchconfig:
-        if not isinstance(launchconfig["databases"], (list, tuple)) or not all(
-            isinstance(db_dict, dict)
-            and "name" in db_dict
-            and isinstance(db_dict["name"], str)
-            and "url" in db_dict
-            and isinstance(db_dict["url"], str)
-            and isinstance(db_dict.get("connect_args", {}), dict)
-            for db_dict in launchconfig["databases"]
+        if not isinstance(launchconfig["databases"], list) or not all(
+            isinstance(db_info_dict, dict)
+            and "name" in db_info_dict
+            and isinstance(db_info_dict["name"], str)
+            and "url" in db_info_dict
+            and isinstance(db_info_dict["url"], str)
+            and isinstance(db_info_dict.get("connect_args", {}), dict)
+            for db_info_dict in launchconfig["databases"]
         ):
             click.secho(
                 "  launchconfig error: 'databases' variable must be of type "
-                "'list'/'tuple' and must contain one or more database "
+                "'list' and must contain one or more database "
                 "dictionaries.\n"
                 "  Each of them must contain at least a 'name' key for the database "
                 "name and a 'url' key mapping to an SQLAlchemy-compatible database "
@@ -428,6 +428,34 @@ def main(
                 fg="red",
             )
             raise click.Abort()
+
+        if "main_database_name" in launchconfig:
+            if not isinstance(launchconfig["main_database_name"], str):
+                click.secho(
+                    "  launchconfig error: 'main_database_name' variable must be of type "
+                    "'str' and must be the name of a database specified in 'databases'",
+                    err=True,
+                    fg="red",
+                )
+                raise click.Abort()
+
+            for i in range(len(launchconfig["databases"])):
+                if (
+                    launchconfig["databases"][i]["name"]
+                    == launchconfig["main_database_name"]
+                ):
+                    new_main_database = launchconfig["databases"].pop(i)
+                    # move selected main db to front
+                    launchconfig["databases"].insert(0, new_main_database)
+                    break
+            else:
+                click.secho(
+                    "  launchconfig error: 'main_database_name' variable must be "
+                    "the name of a database specified in 'databases'",
+                    err=True,
+                    fg="red",
+                )
+                raise click.Abort()
 
     # -------------------------------------------------------------------------
     # launchconfig.log_level
