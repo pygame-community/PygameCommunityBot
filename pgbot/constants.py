@@ -1,3 +1,3 @@
 import discord
 
-DEFAULT_EMBED_COLOR: discord.Color = discord.Color(0xFFD868)
+DEFAULT_EMBED_COLOR = 0xFFD868
