@@ -6,8 +6,10 @@ import discord
 from discord.ext import commands
 import snakecore
 
-from pgbot import constants, utils
+from pgbot import constants, PygameBot, utils
+from .base import BaseCommandCog
 
+BotT = PygameBot
 
 # regex for doc string
 cmd_docstring_regex = re.compile(
@@ -69,32 +71,17 @@ def get_doc_from_func(func: typing.Callable):
     return data
 
 
-async def send_help_message(
-    ctx: commands.Context,
-    bot: commands.Bot,
-    original_msg: discord.Message,
-    invoker: discord.Member,
+async def create_help_command_embeds(
+    ctx: commands.Context[BotT],
     qualified_name: typing.Optional[str] = None,
-    page: int = 1,
 ):
-    """
-    Edit original_msg to a help message. If command is supplied it will
-    only show information about that specific command. Otherwise sends
-    the general help embed.
-
-    Args:
-        original_msg: The message to edit
-        invoker: The member who requested the help command
-        page: The page of the embed, 0 by default
-    """
-
     doc_fields = {}
     embeds = []
 
-    is_admin = bot.is_owner(invoker)
+    is_admin = await ctx.bot.is_owner(ctx.author)
 
     if not qualified_name:
-        for cmd in sorted(bot.walk_commands(), key=lambda cmd: cmd.qualified_name):
+        for cmd in sorted(ctx.bot.walk_commands(), key=lambda cmd: cmd.qualified_name):
             if cmd.hidden or not is_admin and cmd.extras.get("admin_only", False):
                 continue
 
@@ -123,11 +110,11 @@ async def send_help_message(
             discord.Embed(
                 title="Help",
                 description=BOT_HELP_DIALOG_FSTRING.format(
-                    bot.user.mention,
+                    ctx.bot.user.mention,
                     ", ".join(
                         (
                             p
-                            for p in (await bot.get_prefix(original_msg))
+                            for p in (await ctx.bot.get_prefix(ctx.message))
                             if not snakecore.utils.is_markdown_mention(p)
                         )
                     ),
@@ -146,7 +133,7 @@ async def send_help_message(
             )
 
     else:
-        cmd = bot.get_command(qualified_name)
+        cmd = ctx.bot.get_command(qualified_name)
         if (
             cmd is not None
             and not cmd.hidden
@@ -165,12 +152,7 @@ async def send_help_message(
                 doc = get_doc_from_func(cmd.callback)
                 if not doc:
                     # function found, but does not have help.
-                    return await snakecore.utils.embeds.replace_embed_at(
-                        original_msg,
-                        title="Could not get docs",
-                        description="Command has no documentation",
-                        color=0xFF0000,
-                    )
+                    return embeds
 
                 body = f"`{doc['signature']}`\n`Category: {doc['type']}`\n\n"
 
@@ -222,67 +204,97 @@ async def send_help_message(
                             )
                         )
 
-    if not embeds:
-        return await snakecore.utils.embeds.replace_embed_at(
-            original_msg,
-            title="Command not found",
-            description="No such command exists",
-            color=0xFF0000,
-        )
+    return embeds
 
-    snakecore.utils.hold_task(
-        asyncio.create_task(
-            utils.message_delete_reaction_listener(
-                original_msg,
-                ctx.author,
-                emoji="🗑",
-                timeout=30,
+
+class CustomHelp(BaseCommandCog):
+    def __init__(self, bot: BotT) -> None:
+        super().__init__(bot)
+
+    @commands.guild_only()
+    @commands.command(extras=dict(invoke_on_message_edit=True))
+    async def help(
+        self,
+        ctx: commands.Context,
+        *names: str,
+    ):
+        """
+        ->type Get help
+        ->signature pg!help [command]
+        ->description Ask me for help
+        ->example command pg!help help
+        -----
+        Implement pg!help, to display a help message
+        """
+
+        # needed for typecheckers to know that ctx.author is a member
+        if isinstance(ctx.author, discord.User):
+            return
+
+        qualified_name = " ".join(names)
+        embeds = await create_help_command_embeds(ctx, qualified_name=qualified_name)
+
+        if not embeds:
+            if not self.bot.get_command(qualified_name):
+                raise commands.CommandInvokeError(
+                    Exception(f"Command `{qualified_name}` was not found.")
+                )
+            else:
+                raise commands.CommandInvokeError(
+                    Exception(
+                        f"Command `{qualified_name}` does not provide any documentation."
+                    )
+                )
+
+        paginator = None
+        if (
+            response_message := self.recent_response_messages.get(ctx.message.id)
+        ) is not None:
+            try:
+                if (
+                    paginator_list := self.recent_embed_paginators.get(
+                        response_message.id
+                    )
+                ) is not None:
+                    paginator = paginator_list[0]
+                    if paginator.is_running():
+                        paginator_list[1].cancel()
+
+                paginator = snakecore.utils.pagination.EmbedPaginator(
+                    (response_message := await response_message.edit(content="\u200b", embed=None)),
+                    *embeds,
+                    callers=ctx.author,
+                    inactivity_timeout=60,
+                    theme_color=constants.DEFAULT_EMBED_COLOR,
+                )
+            except discord.NotFound:
+                paginator = snakecore.utils.pagination.EmbedPaginator(
+                    (response_message := await ctx.channel.send(content="\u200b")),
+                    *embeds,
+                    callers=ctx.author,
+                    inactivity_timeout=60,
+                    theme_color=constants.DEFAULT_EMBED_COLOR,
+                )
+        else:
+            paginator = snakecore.utils.pagination.EmbedPaginator(
+                (response_message := await ctx.channel.send(content="\u200b")),
+                *embeds,
+                callers=ctx.author,
+                inactivity_timeout=60,
+                theme_color=constants.DEFAULT_EMBED_COLOR,
             )
-        )
-    )
 
-    try:
-        await snakecore.utils.pagination.EmbedPaginator(
-            original_msg,
-            *embeds,
-            caller=invoker,
-            start_page_number=page,
-            inactivity_timeout=60,
-            theme_color=constants.DEFAULT_EMBED_COLOR,
-        ).mainloop()
-    except discord.HTTPException:
-        pass
+        paginator_list = [
+            paginator,
+            asyncio.create_task(paginator.mainloop(client=self.bot)),
+        ]
+
+        self.recent_response_messages[ctx.message.id] = response_message
+
+        self.recent_embed_paginators[response_message.id] = paginator_list
+
+        await paginator_list[1]
 
 
-# class CustomHelp(commands.Cog):
-
-#     @commands.command()
-#     async def help(
-#         self,
-#         ctx: commands.Context,
-#         *names: str,
-#         page: int = 1,
-#     ):
-#         """
-#         ->type Get help
-#         ->signature pg!help [command]
-#         ->description Ask me for help
-#         ->example command pg!help help
-#         -----
-#         Implement pg!help, to display a help message
-#         """
-
-#         # needed for typecheckers to know that ctx.author is a member
-#         if isinstance(ctx.author, discord.User):
-#             return
-
-#         response_message = common.recent_response_messages[ctx.message.id]
-
-#         await send_help_message(
-#             ctx,
-#             common.bot,
-#             response_message,
-#             ctx.author,
-#             " ".join(names),
-#             page=page,
-#         )
+async def setup(bot: BotT):
+    await bot.add_cog(CustomHelp(bot))
