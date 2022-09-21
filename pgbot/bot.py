@@ -50,6 +50,7 @@ class PygameBot(snakecore.commands.Bot):
         self._databases: dict[dict[str, Union[str, dict, AsyncEngine]]] = {}
         self._extension_data_storage_is_init = False
 
+        self.before_invoke(self.bot_before_invoke)
         self.after_invoke(self.bot_after_invoke)
 
     @property
@@ -72,11 +73,14 @@ class PygameBot(snakecore.commands.Bot):
     def cached_embed_paginators_maxsize(self):
         return self._cached_embed_paginators_maxsize
 
-    async def process_commands(self, message: discord.Message, /) -> None:
+    async def process_commands(
+        self, message: discord.Message, /, ctx: Optional[commands.Context] = None
+    ) -> None:
         if message.author.bot:
             return
 
-        ctx = await self.get_context(message)
+        if ctx is None:
+            ctx = await self.get_context(message)
         # the type of the invocation context's bot attribute will be correct
 
         invoke_task = asyncio.create_task(self.invoke(ctx))
@@ -104,10 +108,20 @@ class PygameBot(snakecore.commands.Bot):
             if (ctx := await self.get_context(new)).valid and (
                 ctx.command.extras.get("invoke_on_message_edit", False)
                 or ctx.command.extras.get("invoke_on_message_edit") is not False
-                and ctx.cog is not None
-                and getattr(ctx.cog, "invoke_on_message_edit", False)
+                and ctx.command.cog is not None
+                and getattr(ctx.command.cog, "invoke_on_message_edit", False)
             ):
-                await self.invoke(ctx)
+                await self.process_commands(new, ctx=ctx)
+
+    async def bot_before_invoke(self, ctx: commands.Context):
+        if (
+            ctx.command.extras.get("reference_message_is_argument", False)
+            and ctx.message.reference is not None
+            and isinstance(ctx.message.reference.resolved, discord.Message)
+        ):
+            ctx.args.insert(
+                1 if ctx.command.cog is None else 2, ctx.message.reference.resolved
+            )
 
     async def bot_after_invoke(self, ctx: commands.Context):
         if any(
@@ -136,7 +150,7 @@ class PygameBot(snakecore.commands.Bot):
             except discord.HTTPException:
                 pass
 
-            await asyncio.sleep(0.2)
+            await asyncio.sleep(0.01)
 
     async def get_context(
         self,
