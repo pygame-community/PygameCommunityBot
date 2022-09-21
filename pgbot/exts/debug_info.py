@@ -1,17 +1,17 @@
 import random
+from typing import Optional, Union
 import discord
 from discord.ext import commands
 import snakecore
 
 from pgbot import constants, PygameBot, __version__ as bot_version
-from pgbot.utils import message_delete_reaction_listener
 
 from .base import BaseCommandCog
 
 BotT = PygameBot
 
 
-class DebugInfo(BaseCommandCog):
+class DebugInfo(BaseCommandCog, name="debug-info"):
     invoke_on_message_edit: bool = True
 
     def __init__(self, bot: BotT) -> None:
@@ -28,22 +28,21 @@ class DebugInfo(BaseCommandCog):
         )
 
     @commands.command()
-    async def ping(self, ctx: commands.Context[BotT]):
-        """
-        ->type Other commands
-        ->signature pg!ping
-        ->description Get the ping of the bot
-        -----
-        Implement pg!ping, to get ping
-        """
+    async def ping(
+        self,
+        ctx: commands.Context[BotT],
+    ):
+        """Get the ping of the bot, including the current Discord API latency."""
 
         response_embed = discord.Embed(
             title=random.choice(("Pingy Pongy", "Pong!")),
             color=constants.DEFAULT_EMBED_COLOR,
         )
 
+        response_message = self.cached_response_messages.get(ctx.message.id)
+
         try:
-            if response_message := self.recent_response_messages.get(ctx.message.id):
+            if response_message is not None:
                 response_message = await response_message.edit(embed=response_embed)
                 timedelta = response_message.edited_at - (
                     ctx.message.edited_at or ctx.message.created_at
@@ -53,7 +52,7 @@ class DebugInfo(BaseCommandCog):
 
         finally:
             if response_message is None:
-                self.recent_response_messages[
+                self.cached_response_messages[
                     ctx.message.id
                 ] = response_message = await ctx.send(embed=response_embed)
                 timedelta = response_message.created_at - ctx.message.created_at

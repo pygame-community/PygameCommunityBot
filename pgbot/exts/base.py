@@ -8,44 +8,54 @@ from discord.ext import commands
 import snakecore
 from snakecore.utils.pagination import EmbedPaginator
 
-from pgbot import PygameBot
-
-BotT = PygameBot
+BotT = snakecore.commands.Bot
 
 
 class BaseCommandCog(commands.Cog):
     def __init__(self, bot: BotT) -> None:
         super().__init__()
         self.bot = bot
-        self._global_response_message_cache = hasattr(
-            bot, "recent_response_messages"
-        ) and isinstance(bot.recent_response_messages, MutableMapping)
+        self._global_cached_response_messages = (
+            hasattr(bot, "cached_response_messages")
+            and hasattr(bot, "cached_response_messages_maxsize")
+            and isinstance(bot.cached_response_messages, MutableMapping)
+        )
 
-        if self._global_response_message_cache:
-            self.recent_response_messages: MutableMapping[int, discord.Message]
-            self.recent_response_messages = bot.recent_response_messages
+        if self._global_cached_response_messages:
+            self.cached_response_messages: MutableMapping[
+                int, discord.Message
+            ] = bot.cached_response_messages
+            self.cached_response_messages_maxsize: int = (
+                bot.cached_response_messages_maxsize
+            )
         else:
-            self.recent_response_messages: OrderedDict[int, discord.Message]
-            self.recent_response_messages = OrderedDict()
+            self.cached_response_messages: OrderedDict[
+                int, discord.Message
+            ] = OrderedDict()
+            self.cached_response_messages_maxsize: int = 50
 
-        self._global_embed_paginator_cache = hasattr(
-            bot, "recent_embed_paginators"
-        ) and isinstance(bot.recent_embed_paginators, MutableMapping)
+        self._global_cached_embed_paginators = (
+            hasattr(bot, "cached_embed_paginators")
+            and hasattr(bot, "cached_embed_paginators_maxsize")
+            and isinstance(bot.cached_embed_paginators, MutableMapping)
+        )
 
-        if self._global_embed_paginator_cache:
-            self.recent_embed_paginators: MutableMapping[
+        if self._global_cached_embed_paginators:
+            self.cached_embed_paginators: MutableMapping[
                 int, list[Union[EmbedPaginator, asyncio.Task[None]]]
-            ]
-            self.recent_embed_paginators = bot.recent_embed_paginators
+            ] = bot.cached_embed_paginators
+            self.cached_embed_paginators_maxsize: int = (
+                bot.cached_embed_paginators_maxsize
+            )
         else:
-            self.recent_embed_paginators: OrderedDict[
+            self.cached_embed_paginators: OrderedDict[
                 int, list[Union[EmbedPaginator, asyncio.Task[None]]]
-            ]
-            self.recent_embed_paginators = OrderedDict()
+            ] = OrderedDict()
+            self.cached_embed_paginators_maxsize: int = 50
 
     @commands.Cog.listener()
     async def on_message_edit(self, old: discord.Message, new: discord.Message) -> None:
-        if new.author.bot or not self._global_response_message_cache:
+        if new.author.bot or not self._global_cached_response_messages:
             return
 
         if (time.time() - (new.edited_at or new.created_at).timestamp()) < 120:
@@ -58,19 +68,49 @@ class BaseCommandCog(commands.Cog):
                 await self.bot.invoke(ctx)
 
     async def cog_after_invoke(self, ctx: commands.Context[BotT]) -> None:
-        if not self._global_response_message_cache and not self._global_embed_paginator_cache:
-            for _ in range(min(100, max(len(self.recent_response_messages) - 512, 0))):
-                _, response_message = self.recent_response_messages.popitem(last=False)
-                paginator_list = self.recent_embed_paginators.get(response_message.id)
+        if (
+            not self._global_cached_response_messages
+            and not self._global_cached_embed_paginators
+        ):
+            for _ in range(
+                min(
+                    100,
+                    max(
+                        len(self.cached_response_messages)
+                        - self.cached_response_messages_maxsize,
+                        0,
+                    ),
+                )
+            ):
+                _, response_message = self.cached_response_messages.popitem(last=False)
+                paginator_list = self.cached_embed_paginators.get(response_message.id)
                 if paginator_list is not None and paginator_list[0].is_running():
                     paginator_list[1].cancel()
 
-        elif not self._global_response_message_cache:
-            for _ in range(min(100, max(len(self.recent_response_messages) - 512, 0))):
-                self.recent_response_messages.popitem(last=False)
+        elif not self._global_cached_response_messages:
+            for _ in range(
+                min(
+                    100,
+                    max(
+                        len(self.cached_response_messages)
+                        - self.cached_response_messages_maxsize,
+                        0,
+                    ),
+                )
+            ):
+                self.cached_response_messages.popitem(last=False)
 
-        elif not self._global_embed_paginator_cache:
-            for _ in range(min(100, max(len(self.recent_embed_paginators) - 512, 0))):
-                _, paginator_list = self.recent_embed_paginators.popitem(last=False)
+        elif not self._global_cached_embed_paginators:
+            for _ in range(
+                min(
+                    100,
+                    max(
+                        len(self.cached_embed_paginators)
+                        - self.cached_embed_paginators_maxsize,
+                        0,
+                    ),
+                )
+            ):
+                _, paginator_list = self.cached_embed_paginators.popitem(last=False)
                 if paginator_list[0].is_running():
                     paginator_list[1].cancel()

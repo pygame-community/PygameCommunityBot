@@ -14,7 +14,7 @@ Two files called `botconfig.py` and `launchconfig.py` should be used to provide 
 If having separate configuration files is not desirable, a single `config.py` file can be used to contain the data of both `botconfig.py` and `launchconfig.py` instead.
 
 ### `botconfig.py`
-This file is meant to hold the configuration settings, credentials and API endpoints of the bot application. Creating this file is mandatory and all data must be stored within a dictionary called `botconfig`. `"client_id"` and `"token"` within `"authentication"` are mandatory. If using hosting solutions based on ephemeral file systems, credentials stored within the `"authentication"` dictionary like `"client_id"` and `"token"` can be turned into uppercase environment variables prefixed with `AUTH_` (e.g. `AUTH_CLIENT_ID` and `AUTH_TOKEN`) instead. As this file is a Python file, those credentials can be loaded into the `botconfig` dictionary during startup via `os.environ`.
+This file is meant to hold all essential configuration settings of the bot application, such as credentials and API endpoints. Creating this file is mandatory and all data must be stored within a dictionary called `botconfig`. `"client_id"` and `"token"` within `"authentication"` are mandatory. If using hosting solutions based on ephemeral file systems, credentials stored within the `"authentication"` dictionary like `"client_id"` and `"token"` can be turned into uppercase environment variables prefixed with `AUTH_` (e.g. `AUTH_CLIENT_ID` and `AUTH_TOKEN`) instead. As this file is a Python file, those credentials can be loaded into the `botconfig` dictionary during startup via `os.environ`.
 
 #### Example code for ` botconfig.py` 
 ```py
@@ -29,7 +29,7 @@ botconfig = {
 ```
 
 ### `launchconfig.py`
-This file is meant to customize the launching/startup process of the bot application. Creating this file is optional but recommended. All data must be stored within a dictionary called `launchconfig`. 
+This file is meant to customize the launching/startup process of the bot application using optional configuration settings. Creating this file is optional but recommended. All data must be stored within a dictionary called `launchconfig`. 
 
 For the dictionaries within the `"extensions"` list, the `"name"` and `"package"` keys match the names of the `name` and `package` arguments in the [`discord.ext.commands.Bot.load_extension`](https://discordpy.readthedocs.io/en/latest/ext/commands/api.html#discord.ext.commands.Bot.load_extension) method and the values are meant to be forwarded to it, during startup. `"config"` (only supported with `snakecore`) can be used as a way to provide keyword arguments to extensions while they load, if supported. 
 

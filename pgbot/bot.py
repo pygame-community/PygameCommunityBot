@@ -13,7 +13,7 @@ import sqlalchemy.engine
 import sqlalchemy.exc
 from sqlalchemy import text
 import discord
-from discord.ext import commands
+from discord.ext import commands, tasks
 import snakecore
 from snakecore.constants import UNSET
 from snakecore.utils.pagination import EmbedPaginator
@@ -30,38 +30,71 @@ class PygameBot(snakecore.commands.Bot):
         self._launchconfig: dict = {}
         self.loading_emoji = "🔄"
 
-        self._loading_reaction_semaphore: asyncio.Semaphore = UNSET
+        self._loading_reaction_queue: asyncio.Queue = UNSET
 
         self._recent_response_error_messages: dict[int, discord.Message] = {}
 
-        self._recent_response_messages: OrderedDict[
+        self._cached_response_messages: OrderedDict[
             int, discord.Message
         ] = OrderedDict()
 
-        self._recent_embed_paginators: dict[
+        self._cached_response_messages_maxsize = 1000
+
+        self._cached_embed_paginators: dict[
             int, list[Union[EmbedPaginator, asyncio.Task[None]]]
         ] = {}
 
-        self._response_message_cache_size = 512
+        self._cached_embed_paginators_maxsize = 1000
 
         self._main_database: dict[str, Union[str, dict, AsyncEngine]] = {}
         self._databases: dict[dict[str, Union[str, dict, AsyncEngine]]] = {}
         self._extension_data_storage_is_init = False
 
-        self.before_invoke(self.bot_before_invoke)
         self.after_invoke(self.bot_after_invoke)
 
     @property
-    def recent_response_messages(self):
+    def cached_response_messages(self):
         """A mapping of invocation message IDs to successful response messages."""
-        return self._recent_response_messages
+        return self._cached_response_messages
 
     @property
-    def recent_embed_paginators(self):
+    def cached_response_messages_maxsize(self):
+        return self._cached_response_messages_maxsize
+
+    @property
+    def cached_embed_paginators(self):
         """A mapping of successful response message IDs to a list containing an
         EmbedPaginator object along with an asyncio Task object to run it.
         """
-        return self._recent_embed_paginators
+        return self._cached_embed_paginators
+
+    @property
+    def cached_embed_paginators_maxsize(self):
+        return self._cached_embed_paginators_maxsize
+
+    async def process_commands(self, message: discord.Message, /) -> None:
+        if message.author.bot:
+            return
+
+        ctx = await self.get_context(message)
+        # the type of the invocation context's bot attribute will be correct
+
+        invoke_task = asyncio.create_task(self.invoke(ctx))
+        try:
+            await asyncio.wait_for(asyncio.shield(invoke_task), timeout=1.5)
+            # check if command invocation is taking time
+        except asyncio.TimeoutError:
+            await self._loading_reaction_queue.put(
+                ctx.message.add_reaction(self.loading_emoji)
+            )
+            if not invoke_task.done():
+                await invoke_task
+        except asyncio.CancelledError:
+            if not invoke_task.done():
+                invoke_task.cancel()
+        else:
+            if not invoke_task.done():
+                await invoke_task
 
     async def on_message_edit(self, old: discord.Message, new: discord.Message) -> None:
         if new.author.bot:
@@ -76,38 +109,34 @@ class PygameBot(snakecore.commands.Bot):
             ):
                 await self.invoke(ctx)
 
-    async def bot_before_invoke(self, ctx: commands.Context):
-        if ctx.command is not None:
-            try:
-                async with self._loading_reaction_semaphore:
-                    await ctx.message.add_reaction(self.loading_emoji)
-            except discord.HTTPException:
-                pass
-
     async def bot_after_invoke(self, ctx: commands.Context):
-        if (
-            discord.utils.find(
-                lambda reaction: reaction.emoji == self.loading_emoji,
-                ctx.message.reactions,
-            )
-            is not None
+        if any(
+            reaction.emoji == self.loading_emoji for reaction in ctx.message.reactions
         ):
-            try:
-                async with self._loading_reaction_semaphore:
-                    await asyncio.sleep(0.5)
-                    await ctx.message.remove_reaction(self.loading_emoji, self.user)
-            except discord.HTTPException:
-                pass
+            await self._loading_reaction_queue.put(
+                ctx.message.remove_reaction(self.loading_emoji, self.user)
+            )
 
         resp_msg_cache_overflow = (
-            len(self._recent_response_messages) - self._response_message_cache_size
+            len(self._cached_response_messages) - self._cached_response_messages_maxsize
         )
 
         for _ in range(min(max(resp_msg_cache_overflow, 0), 100)):
-            _, response_message = self._recent_response_messages.popitem(last=False)
-            paginator_list = self._recent_embed_paginators.get(response_message.id)
+            _, response_message = self._cached_response_messages.popitem(last=False)
+            paginator_list = self._cached_embed_paginators.get(response_message.id)
             if paginator_list is not None and paginator_list[0].is_running():
                 paginator_list[1].cancel()
+
+    @tasks.loop(reconnect=False)
+    async def handle_loading_reactions(self):
+        while True:
+            reaction_coro = await self._loading_reaction_queue.get()
+            try:
+                await reaction_coro
+            except discord.HTTPException:
+                pass
+
+            await asyncio.sleep(0.2)
 
     async def get_context(
         self,
@@ -144,8 +173,7 @@ class PygameBot(snakecore.commands.Bot):
         )
 
     async def setup_hook(self) -> None:
-        self._loading_reaction_semaphore = asyncio.Semaphore(value=1)
-
+        self._loading_reaction_queue = asyncio.Queue()
         if "databases" in self._launchconfig:
             await self._create_database_connections()
             await self._init_extension_data_storage()
@@ -171,6 +199,7 @@ class PygameBot(snakecore.commands.Bot):
                 )
 
     async def teardown_hook(self) -> None:
+        self.handle_loading_reactions.cancel()
         if "databases" in self._botconfig:
             await self._close_database_connections()
 
@@ -178,6 +207,9 @@ class PygameBot(snakecore.commands.Bot):
         self.loading_emoji = self.get_emoji(1017826887990509661) or self.loading_emoji
         print(f"Logged in as {self.user} (ID: {self.user.id})")
         print("------")
+        handle_loading_reactions = self.handle_loading_reactions
+        if not handle_loading_reactions.is_running():
+            handle_loading_reactions.start()
 
     async def on_command_error(
         self, context: commands.Context["PygameBot"], exception: commands.CommandError
@@ -197,7 +229,7 @@ class PygameBot(snakecore.commands.Bot):
             send_error_message = False
 
         title = exception.__class__.__name__
-        description = exception.args[0]
+        description = exception.args[0] if isinstance(exception.args[0], str) else ""
         if len(description) > 3800:
             description = description[:3801] + "..."
         footer_text = exception.__class__.__name__
@@ -205,8 +237,6 @@ class PygameBot(snakecore.commands.Bot):
         log_exception = False
         has_cause = False
 
-        title = ""
-        description = ""
         color = 0xFF0000
 
         if isinstance(
@@ -215,6 +245,11 @@ class PygameBot(snakecore.commands.Bot):
             return
 
         elif isinstance(exception, commands.BadArgument):
+            if (
+                isinstance(exception, commands.BadFlagArgument)
+                and exception.original.args
+            ):
+                description = exception.original.args[0]
             title = "Invalid argument(s)!"
             description = (
                 f"{description}\n\nFor help on bot commands, call `help <command>` with "
@@ -237,7 +272,7 @@ class PygameBot(snakecore.commands.Bot):
                 "has finished."
             )
         elif isinstance(exception, commands.CommandInvokeError):
-            if exception.__cause__ is None:
+            if isinstance(exception.__cause__, (type(None), discord.HTTPException)):
                 title = f"Command `{context.invoked_with}` reported an error:"
                 description = exception.args[0] if exception.args else ""
                 description = description.replace(
@@ -248,24 +283,30 @@ class PygameBot(snakecore.commands.Bot):
                 footer_text = exception.__class__.__name__
 
             else:
+                log_exception = True
                 has_cause = True
-                if isinstance(exception.__cause__, discord.HTTPException):
-                    title = footer_text = exception.__cause__.__class__.__name__
-                    description = (
-                        exception.__cause__.args[0] if exception.__cause__.args else ""
-                    )
-                else:
-                    log_exception = True
-                    has_cause = True
-                    title = "Unknown error!"
-                    description = (
-                        "An unknown error occured while running the "
-                        f"{context.command.qualified_name} command!\n"
-                        "This is most likely a bug in the bot itself, and `@Wizard 🝑`s will "
-                        f"recast magical spells on it soon!\n\n"
-                        f"```\n{exception.__cause__.args[0] if exception.__cause__.args else ''}```"
-                    )
-                    footer_text = exception.__cause__.__class__.__name__
+                title = "Unknown error!"
+                description = (
+                    "An unknown error occured while running the "
+                    f"{context.command.qualified_name} command!\n"
+                    "This is most likely a bug in the bot itself, and our fellow bot wizards will "
+                    f"recast magical spells on it soon!\n\n"
+                    f"```\n{exception.__cause__.args[0] if exception.__cause__.args else ''}```"
+                )
+                footer_text = exception.__cause__.__class__.__name__
+
+        elif isinstance(exception, commands.ConversionError):
+            log_exception = True
+            has_cause = True
+            title = "Unknown error!"
+            description = (
+                "An unknown error occured while running the "
+                f"{context.command.qualified_name} command!\n"
+                "This is most likely a bug in the bot itself, and our fellow bot wizards will "
+                f"recast magical spells on it soon!\n\n"
+                f"```\n{exception.__cause__.args[0] if exception.__cause__.args else ''}```"
+            )
+            footer_text = exception.__cause__.__class__.__name__
 
         footer_text = f"{footer_text}\n(React with 🗑 to delete this error message in the next 30s)"
 
@@ -627,7 +668,6 @@ class PygameBot(snakecore.commands.Bot):
             target_columns = ", ".join((f"{k} = :{k}" for k in params))
 
             params["extension_name"] = extension_name
-            print(target_columns, params)
 
             await conn.execute(
                 text(
