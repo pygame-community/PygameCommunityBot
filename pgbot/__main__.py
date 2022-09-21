@@ -15,6 +15,7 @@ from . import utils
 from .bot import (
     PygameBot as Bot,
 )
+from .exts.custom_help import CustomHelpCommand
 
 try:
     import uvloop  # type: ignore
@@ -40,7 +41,8 @@ DEFAULT_EXTENSIONS: list[dict[str, Any]] = [
     # These can only be excluded through the --ignore-ext' or '--disable-all-exts'
     # CLI options.
     {"name": f"{__package__}.exts.debug_info"},
- #   {"name": f"{__package__}.exts.custom_help"},
+    #   {"name": f"{__package__}.exts.custom_help_old"},
+    #   {"name": f"{__package__}.exts.custom_help"},
 ]
 
 
@@ -510,7 +512,11 @@ def main(
         launchconfig["extensions"] = final_extensions
 
     # pass configuration data to bot instance
-    bot = Bot(final_prefix, intents=discord.Intents(botconfig["intents"]))
+    bot = Bot(
+        final_prefix,
+        intents=discord.Intents(botconfig["intents"]),
+        help_command=CustomHelpCommand(),
+    )
 
     bot._botconfig = botconfig
     bot._launchconfig = launchconfig
