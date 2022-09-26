@@ -4,7 +4,7 @@ from logging import Logger
 import os
 import sys
 import types
-from typing import Any, Optional, Sequence, Union
+from typing import Any, Iterable, Optional, Sequence, Union
 
 import discord
 from discord.ext import commands
@@ -14,15 +14,14 @@ import sqlalchemy.exc
 import sqlalchemy.ext.asyncio
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncEngine, AsyncConnection
 
-
 def import_module_from_path(module_name: str, file_path: str) -> types.ModuleType:
     abs_file_path = os.path.abspath(file_path)
-    spec = importlib.util.spec_from_file_location(module_name, abs_file_path)
+    spec = importlib.util.spec_from_file_location(module_name, abs_file_path)  # type: ignore
     if spec is None:
         raise ImportError(
             f"failed to generate module spec for module named '{module_name}' at '{abs_file_path}'"
         )
-    module = importlib.util.module_from_spec(spec)
+    module = importlib.util.module_from_spec(spec)  # type: ignore
     sys.modules[module_name] = module
     try:
         spec.loader.exec_module(module)
@@ -74,7 +73,7 @@ async def load_databases(
             dbs.append({"name": db_name, "engine": engine, "url": db_info_dict["url"]})
 
             if "connect_args" in db_info_dict:
-                dbs[db_name]["connect_args"] = db_info_data["connect_args"]
+                dbs[db_name]["connect_args"] = db_info_data["connect_args"]  # type: ignore
 
             if logger is not None:
                 logger.info(
@@ -86,12 +85,15 @@ async def load_databases(
 
 
 async def unload_databases(
-    dbs: Sequence[dict[str, Union[str, dict, AsyncEngine]]],
+    dbs: Iterable[dict[str, Union[str, dict, AsyncEngine]]],
     raise_exceptions: bool = True,
     logger: Optional[Logger] = None,
 ):
     for db_dict in dbs:
         db_name = db_dict["name"]
+        if not isinstance(db_dict["engine"], AsyncEngine):
+            raise TypeError("db_dict['engine'] must be instance of AsnycEngine for all dicts in 'dbs'")
+
         engine: AsyncEngine = db_dict["engine"]
 
         try:
@@ -117,7 +119,7 @@ async def message_delete_reaction_listener(
     msg: discord.Message,
     invoker: Union[discord.Member, discord.User],
     emoji: Union[discord.Emoji, discord.PartialEmoji, str],
-    role_whitelist: Sequence[int] = None,
+    role_whitelist: Optional[Sequence[int]] = None,
     timeout: Optional[float] = None,
 ):
     """Allows for a message to be deleted using a specific reaction.
@@ -130,9 +132,9 @@ async def message_delete_reaction_listener(
           a message.
         emoji (Union[discord.Emoji, discord.PartialEmoji, str]): The emoji to
           listen for.
-        role_whitelist (Sequence[int]): A sequence (that supports `__contains__`) of
+        role_whitelist (Sequence[int], optional): A sequence (that supports `__contains__`) of
           role IDs whose reactions can also be picked up by this function.
-        timeout (Optional[float]): A timeout for waiting, before automatically
+        timeout (Optional[float], optional): A timeout for waiting, before automatically
           removing any added reactions and returning silently.
 
     Raises:

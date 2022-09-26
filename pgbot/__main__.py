@@ -71,7 +71,7 @@ def clear_logging_handlers(logger: Optional[logging.Logger] = None):
 
 
 @contextlib.contextmanager
-def logging_handling(log_level: int = logging.INFO) -> None:
+def logging_handling(log_level: int = logging.INFO):
     try:
         setup_logging(log_level=log_level)
         yield
@@ -514,7 +514,7 @@ def main(
     # pass configuration data to bot instance
     bot = Bot(
         final_prefix,
-        intents=discord.Intents(botconfig["intents"]),
+        intents=discord.Intents(botconfig["intents"]),  # type: ignore
         help_command=CustomHelpCommand(),
     )
 

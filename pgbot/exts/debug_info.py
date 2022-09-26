@@ -1,3 +1,4 @@
+import datetime
 import random
 from typing import Optional, Union
 import discord
@@ -41,22 +42,22 @@ class DebugInfo(BaseCommandCog, name="debug-info"):
 
         response_message = self.cached_response_messages.get(ctx.message.id)
 
-        try:
-            if response_message is not None:
+        if response_message is not None:
+            try:
                 response_message = await response_message.edit(embed=response_embed)
-                timedelta = response_message.edited_at - (
-                    ctx.message.edited_at or ctx.message.created_at
-                )
-        except discord.NotFound:
-            pass
-
-        finally:
-            if response_message is None:
+            except discord.NotFound:
                 self.cached_response_messages[
                     ctx.message.id
                 ] = response_message = await ctx.send(embed=response_embed)
-                timedelta = response_message.created_at - ctx.message.created_at
-
+        else:
+            self.cached_response_messages[
+                ctx.message.id
+            ] = response_message = await ctx.send(embed=response_embed)
+        
+        timedelta = response_message.edited_at - ( # type: ignore
+            ctx.message.edited_at or ctx.message.created_at
+        )
+       
         sec = timedelta.total_seconds()
         sec2 = self.bot.latency
 

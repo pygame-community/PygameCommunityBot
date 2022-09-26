@@ -6,7 +6,7 @@ from collections import OrderedDict
 import datetime
 import logging
 import time
-from typing import Optional, Type, Union
+from typing import Any, Optional, Type, Union
 
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncConnection
 import sqlalchemy.engine
@@ -47,7 +47,7 @@ class PygameBot(snakecore.commands.Bot):
         self._cached_embed_paginators_maxsize = 1000
 
         self._main_database: dict[str, Union[str, dict, AsyncEngine]] = {}
-        self._databases: dict[dict[str, Union[str, dict, AsyncEngine]]] = {}
+        self._databases: dict[str, dict[str, Union[str, dict, AsyncEngine]]] = {}
         self._extension_data_storage_is_init = False
 
         self.before_invoke(self.bot_before_invoke)
@@ -81,11 +81,10 @@ class PygameBot(snakecore.commands.Bot):
 
         if ctx is None:
             ctx = await self.get_context(message)
-        # the type of the invocation context's bot attribute will be correct
 
         invoke_task = asyncio.create_task(self.invoke(ctx))
         try:
-            await asyncio.wait_for(asyncio.shield(invoke_task), timeout=1.5)
+            await asyncio.wait_for(asyncio.shield(invoke_task), timeout=2)
             # check if command invocation is taking time
         except asyncio.TimeoutError:
             await self._loading_reaction_queue.put(
@@ -105,7 +104,7 @@ class PygameBot(snakecore.commands.Bot):
             return
 
         if (time.time() - (new.edited_at or new.created_at).timestamp()) < 120:
-            if (ctx := await self.get_context(new)).valid and (
+            if (ctx := await self.get_context(new)).valid and ctx.command is not None and (
                 ctx.command.extras.get("invoke_on_message_edit", False)
                 or ctx.command.extras.get("invoke_on_message_edit") is not False
                 and ctx.command.cog is not None
@@ -115,7 +114,7 @@ class PygameBot(snakecore.commands.Bot):
 
     async def bot_before_invoke(self, ctx: commands.Context):
         if (
-            ctx.command.extras.get("reference_message_is_argument", False)
+            ctx.command is not None and ctx.command.extras.get("reference_message_is_argument", False)
             and ctx.message.reference is not None
             and isinstance(ctx.message.reference.resolved, discord.Message)
         ):
@@ -126,7 +125,7 @@ class PygameBot(snakecore.commands.Bot):
     async def bot_after_invoke(self, ctx: commands.Context):
         if any(
             reaction.emoji == self.loading_emoji for reaction in ctx.message.reactions
-        ):
+        ) and self.user is not None:
             await self._loading_reaction_queue.put(
                 ctx.message.remove_reaction(self.loading_emoji, self.user)
             )
@@ -137,9 +136,9 @@ class PygameBot(snakecore.commands.Bot):
 
         for _ in range(min(max(resp_msg_cache_overflow, 0), 100)):
             _, response_message = self._cached_response_messages.popitem(last=False)
-            paginator_list = self._cached_embed_paginators.get(response_message.id)
-            if paginator_list is not None and paginator_list[0].is_running():
-                paginator_list[1].cancel()
+            paginator_list = self._cached_embed_paginators.get(response_message.id) 
+            if paginator_list is not None and paginator_list[0].is_running(): # type: ignore
+                paginator_list[1].cancel() # type: ignore
 
     @tasks.loop(reconnect=False)
     async def handle_loading_reactions(self):
@@ -168,7 +167,7 @@ class PygameBot(snakecore.commands.Bot):
             db_dict["name"]: db_dict
             for db_dict in await utils.load_databases(
                 self._launchconfig["databases"], raise_exceptions=False, logger=_logger
-            )
+            ) if isinstance(db_dict["name"], str)
         }
 
         failures = len(self._launchconfig["databases"]) - len(self._databases.keys())
@@ -183,7 +182,7 @@ class PygameBot(snakecore.commands.Bot):
 
     async def _close_database_connections(self) -> None:
         await utils.unload_databases(
-            self._databases, raise_exceptions=False, logger=_logger
+            self._databases.values(), raise_exceptions=False, logger=_logger
         )
 
     async def setup_hook(self) -> None:
@@ -218,6 +217,7 @@ class PygameBot(snakecore.commands.Bot):
             await self._close_database_connections()
 
     async def on_ready(self):
+        assert self.user is not None
         self.loading_emoji = self.get_emoji(1017826887990509661) or self.loading_emoji
         print(f"Logged in as {self.user} (ID: {self.user.id})")
         print("------")
@@ -234,8 +234,9 @@ class PygameBot(snakecore.commands.Bot):
         if self.extra_events.get("on_command_error", None):
             send_error_message = False
 
-        command = context.command
-        if command and command.has_error_handler():
+        if not (command := context.command):
+            return
+        elif command.has_error_handler():
             send_error_message = False
 
         cog = context.cog
@@ -318,7 +319,7 @@ class PygameBot(snakecore.commands.Bot):
                 f"{context.command.qualified_name} command!\n"
                 "This is most likely a bug in the bot itself, and our fellow bot wizards will "
                 f"recast magical spells on it soon!\n\n"
-                f"```\n{exception.__cause__.args[0] if exception.__cause__.args else ''}```"
+                f"```\n{exception.__cause__.args[0] if exception.__cause__ and exception.__cause__.args else ''}```"
             )
             footer_text = exception.__cause__.__class__.__name__
 
@@ -426,7 +427,7 @@ class PygameBot(snakecore.commands.Bot):
               loaded/configured.
         """
 
-        return self._main_database.get("engine")
+        return self._main_database.get("engine") # type: ignore
 
     def get_databases(
         self, *names: str
@@ -461,7 +462,7 @@ class PygameBot(snakecore.commands.Bot):
         if not self._main_database:
             return
 
-        engine: AsyncEngine = self._main_database["engine"]
+        engine: AsyncEngine = self._main_database["engine"]  # type: ignore
         conn: AsyncConnection
         async with engine.connect() as conn:
             if engine.name == "sqlite":
@@ -495,7 +496,7 @@ class PygameBot(snakecore.commands.Bot):
         version: str,
         table_name_prefix: str,
         initial_data: Optional[bytes] = None,
-    ) -> dict[str, Union[str, bytes]]:
+    ):
 
         if not self._extension_data_storage_is_init:
             raise RuntimeError("Extension data storage was not initialized.")
@@ -521,14 +522,14 @@ class PygameBot(snakecore.commands.Bot):
                 f"not '{initial_data.__class__.__name__}'"
             )
 
-        engine: AsyncEngine = self._main_database["engine"]
+        engine: AsyncEngine = self._main_database["engine"]  # type: ignore
         conn: AsyncConnection
 
         if engine.name not in ("sqlite", "postgresql"):
             raise RuntimeError(f"Unsupported database dialect '{engine.name}'")
 
         async with engine.connect() as conn:
-            ins_res = await conn.execute(
+            await conn.execute(
                 text(
                     "INSERT INTO bot_extension_data "
                     "(name, version, table_name_prefix, data) "
@@ -555,7 +556,7 @@ class PygameBot(snakecore.commands.Bot):
                 f"'{extension_name.__class__.__name__}'"
             )
 
-        engine: AsyncEngine = self._main_database["engine"]
+        engine: AsyncEngine = self._main_database["engine"]  # type: ignore
         conn: AsyncConnection
 
         if engine.name not in ("sqlite", "postgresql"):
@@ -567,7 +568,7 @@ class PygameBot(snakecore.commands.Bot):
                 dict(extension_name=extension_name),
             )
 
-            row = result.first()
+            row: Any = result.first()
             if row is None:
                 raise LookupError(
                     f"Could not find extension storage data for extension named "
@@ -592,7 +593,7 @@ class PygameBot(snakecore.commands.Bot):
                 f"'{extension_name.__class__.__name__}'"
             )
 
-        engine: AsyncEngine = self._main_database["engine"]
+        engine: AsyncEngine = self._main_database["engine"]  # type: ignore
         conn: AsyncConnection
 
         if engine.name not in ("sqlite", "postgresql"):
@@ -617,7 +618,7 @@ class PygameBot(snakecore.commands.Bot):
         version: Optional[str] = None,
         table_name_prefix: Optional[str] = None,
         data: Optional[bytes] = None,
-    ) -> dict[str, Union[str, bytes]]:
+    ):
 
         if not self._extension_data_storage_is_init:
             raise RuntimeError("Extension data storage was not initialized.")
@@ -650,7 +651,7 @@ class PygameBot(snakecore.commands.Bot):
                 f"'version', 'table_name_prefix' and 'data' cannot all be 'None'"
             )
 
-        engine: AsyncEngine = self._main_database["engine"]
+        engine: AsyncEngine = self._main_database["engine"]  # type: ignore
         conn: AsyncConnection
 
         if engine.name not in ("sqlite", "postgresql"):
@@ -704,7 +705,7 @@ class PygameBot(snakecore.commands.Bot):
                 f"'{extension_name.__class__.__name__}'"
             )
 
-        engine: AsyncEngine = self._main_database["engine"]
+        engine: AsyncEngine = self._main_database["engine"]  # type: ignore
         conn: AsyncConnection
 
         if engine.name not in ("sqlite", "postgresql"):

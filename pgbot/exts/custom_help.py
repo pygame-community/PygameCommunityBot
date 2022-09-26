@@ -26,7 +26,7 @@ class CustomHelpCommand(commands.HelpCommand):
     bot = commands.Bot(help_command=EmbedHelpCommand())
     """
     # Set the embed colour here
-    COLOUR = discord.Colour.blurple()
+    COLOR = discord.Color(value=constants.DEFAULT_EMBED_COLOR)
 
     def get_ending_note(self):
         return "Use {0}{1} [command] for more info on a command.".format(
@@ -37,7 +37,7 @@ class CustomHelpCommand(commands.HelpCommand):
         return "{0.qualified_name} {0.signature}".format(command)
 
     async def send_bot_help(self, mapping):
-        embed = discord.Embed(title="Bot Commands", colour=self.COLOUR)
+        embed = discord.Embed(title="Bot Commands", colur=self.COLOR)
         description = self.context.bot.description
         if description:
             embed.description = description
@@ -93,7 +93,7 @@ class CustomHelpCommand(commands.HelpCommand):
     # This makes it so it uses the function above
     # Less work for us to do since they're both similar.
     # If you want to make regular command help look different then override it
-    send_command_help = send_group_help
+    send_command_help = send_group_help  # type: ignore
 
 
 async def setup(bot: BotT):
