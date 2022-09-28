@@ -43,30 +43,16 @@ class BaseCommandCog(commands.Cog):
 
         if self._global_cached_embed_paginators:
             self.cached_embed_paginators: OrderedDict[  # type: ignore
-                int, list[Union[EmbedPaginator, asyncio.Task[None]]]
+                int, tuple[EmbedPaginator, asyncio.Task[None]]
             ] = bot.cached_embed_paginators  # type: ignore
             self.cached_embed_paginators_maxsize = int(
                 bot.cached_embed_paginators_maxsize  # type: ignore
             )
         else:
             self.cached_embed_paginators: OrderedDict[
-                int, list[Union[EmbedPaginator, asyncio.Task[None]]]
+                int, tuple[EmbedPaginator, asyncio.Task[None]]
             ] = OrderedDict()
             self.cached_embed_paginators_maxsize: int = 50
-
-    @commands.Cog.listener()
-    async def on_message_edit(self, old: discord.Message, new: discord.Message) -> None:
-        if new.author.bot or not self._global_cached_response_messages:
-            return
-
-        if (time.time() - (new.edited_at or new.created_at).timestamp()) < 120:
-            if (ctx := await self.bot.get_context(new)).valid and ctx.command is not None and (
-                ctx.command.extras.get("invoke_on_message_edit", False)
-                or ctx.command.extras.get("invoke_on_message_edit") is not False
-                and ctx.cog is not None
-                and getattr(ctx.cog, "invoke_on_message_edit", False)
-            ):
-                await self.bot.invoke(ctx)
 
     async def cog_after_invoke(self, ctx: commands.Context[BotT]) -> None:
         if (
