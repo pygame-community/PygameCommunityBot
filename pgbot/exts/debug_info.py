@@ -53,11 +53,11 @@ class DebugInfo(BaseCommandCog, name="debug-info"):
             self.cached_response_messages[
                 ctx.message.id
             ] = response_message = await ctx.send(embed=response_embed)
-        
-        timedelta = response_message.edited_at - ( # type: ignore
+
+        timedelta = response_message.edited_at - (  # type: ignore
             ctx.message.edited_at or ctx.message.created_at
         )
-       
+
         sec = timedelta.total_seconds()
         sec2 = self.bot.latency
 

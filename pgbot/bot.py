@@ -41,7 +41,7 @@ class PygameBot(snakecore.commands.Bot):
         self._cached_response_messages_maxsize = 1000
 
         self._cached_embed_paginators: dict[
-            int, list[Union[EmbedPaginator, asyncio.Task[None]]]
+            int, tuple[EmbedPaginator, asyncio.Task[None]]
         ] = {}
 
         self._cached_embed_paginators_maxsize = 1000
@@ -104,28 +104,40 @@ class PygameBot(snakecore.commands.Bot):
             return
 
         if (time.time() - (new.edited_at or new.created_at).timestamp()) < 120:
-            if (ctx := await self.get_context(new)).valid and ctx.command is not None and (
-                ctx.command.extras.get("invoke_on_message_edit", False)
-                or ctx.command.extras.get("invoke_on_message_edit") is not False
-                and ctx.command.cog is not None
-                and getattr(ctx.command.cog, "invoke_on_message_edit", False)
+            if (
+                (ctx := await self.get_context(new)).valid
+                and ctx.command is not None
+                and (
+                    ctx.command.extras.get("invoke_on_message_edit", False)
+                    or ctx.command.extras.get("invoke_on_message_edit") is not False
+                    and ctx.command.cog is not None
+                    and getattr(ctx.command.cog, "invoke_on_message_edit", False)
+                )
             ):
                 await self.process_commands(new, ctx=ctx)
 
     async def bot_before_invoke(self, ctx: commands.Context):
         if (
-            ctx.command is not None and ctx.command.extras.get("reference_message_is_argument", False)
+            ctx.command is not None
+            and ctx.command.extras.get("reference_message_is_argument", False)
             and ctx.message.reference is not None
             and isinstance(ctx.message.reference.resolved, discord.Message)
         ):
-            ctx.args.insert(
-                1 if ctx.command.cog is None else 2, ctx.message.reference.resolved
-            )
+            if ctx.args and isinstance(
+                ctx.args[0], commands.Cog
+            ):  # command was defined inside cog
+                ctx.args.insert(2, ctx.message.reference.resolved)
+            else:
+                ctx.args.insert(1, ctx.message.reference.resolved)
 
     async def bot_after_invoke(self, ctx: commands.Context):
-        if any(
-            reaction.emoji == self.loading_emoji for reaction in ctx.message.reactions
-        ) and self.user is not None:
+        if (
+            any(
+                reaction.emoji == self.loading_emoji
+                for reaction in ctx.message.reactions
+            )
+            and self.user is not None
+        ):
             await self._loading_reaction_queue.put(
                 ctx.message.remove_reaction(self.loading_emoji, self.user)
             )
@@ -136,9 +148,36 @@ class PygameBot(snakecore.commands.Bot):
 
         for _ in range(min(max(resp_msg_cache_overflow, 0), 100)):
             _, response_message = self._cached_response_messages.popitem(last=False)
-            paginator_list = self._cached_embed_paginators.get(response_message.id) 
-            if paginator_list is not None and paginator_list[0].is_running(): # type: ignore
-                paginator_list[1].cancel() # type: ignore
+            paginator_list = self._cached_embed_paginators.get(response_message.id)
+            if paginator_list is not None and paginator_list[0].is_running():  # type: ignore
+                paginator_list[1].cancel()  # type: ignore
+
+        if (
+            ctx.command is not None
+            and (
+                ctx.command.extras.get("response_message_deletion_by_author", False)
+                or ctx.command.extras.get("response_message_deletion_by_author")
+                is not False
+                and ctx.command.cog is not None
+                and getattr(
+                    ctx.command.cog, "response_message_deletion_by_author", False
+                )
+            )
+            and (response_message := self.cached_response_messages.get(ctx.message.id))
+            is not None
+        ):
+
+            snakecore.utils.hold_task(
+                asyncio.create_task(
+                    utils.message_delete_reaction_listener(
+                        self,
+                        response_message,
+                        ctx.author,
+                        emoji="🗑",
+                        timeout=30,
+                    )
+                )
+            )
 
     @tasks.loop(reconnect=False)
     async def handle_loading_reactions(self):
@@ -167,7 +206,8 @@ class PygameBot(snakecore.commands.Bot):
             db_dict["name"]: db_dict
             for db_dict in await utils.load_databases(
                 self._launchconfig["databases"], raise_exceptions=False, logger=_logger
-            ) if isinstance(db_dict["name"], str)
+            )
+            if isinstance(db_dict["name"], str)
         }
 
         failures = len(self._launchconfig["databases"]) - len(self._databases.keys())
@@ -427,7 +467,7 @@ class PygameBot(snakecore.commands.Bot):
               loaded/configured.
         """
 
-        return self._main_database.get("engine") # type: ignore
+        return self._main_database.get("engine")  # type: ignore
 
     def get_databases(
         self, *names: str

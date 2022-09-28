@@ -14,6 +14,7 @@ import sqlalchemy.exc
 import sqlalchemy.ext.asyncio
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncEngine, AsyncConnection
 
+
 def import_module_from_path(module_name: str, file_path: str) -> types.ModuleType:
     abs_file_path = os.path.abspath(file_path)
     spec = importlib.util.spec_from_file_location(module_name, abs_file_path)  # type: ignore
@@ -92,7 +93,9 @@ async def unload_databases(
     for db_dict in dbs:
         db_name = db_dict["name"]
         if not isinstance(db_dict["engine"], AsyncEngine):
-            raise TypeError("db_dict['engine'] must be instance of AsnycEngine for all dicts in 'dbs'")
+            raise TypeError(
+                "db_dict['engine'] must be instance of AsnycEngine for all dicts in 'dbs'"
+            )
 
         engine: AsyncEngine = db_dict["engine"]
 
