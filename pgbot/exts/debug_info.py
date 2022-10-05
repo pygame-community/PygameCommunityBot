@@ -54,7 +54,7 @@ class DebugInfo(BaseCommandCog, name="debug-info"):
                 ctx.message.id
             ] = response_message = await ctx.send(embed=response_embed)
 
-        timedelta = response_message.edited_at - (  # type: ignore
+        timedelta = (response_message.edited_at or response_message.created_at) - (  # type: ignore
             ctx.message.edited_at or ctx.message.created_at
         )
 
