@@ -84,7 +84,7 @@ class PygameBot(snakecore.commands.Bot):
 
         invoke_task = asyncio.create_task(self.invoke(ctx))
         try:
-            await asyncio.wait_for(asyncio.shield(invoke_task), timeout=2)
+            await asyncio.wait_for(asyncio.shield(invoke_task), timeout=3)
             # check if command invocation is taking time
         except asyncio.TimeoutError:
             await self._loading_reaction_queue.put(
@@ -188,7 +188,7 @@ class PygameBot(snakecore.commands.Bot):
             except discord.HTTPException:
                 pass
 
-            await asyncio.sleep(0.01)
+            await asyncio.sleep(0.1)
 
     async def get_context(
         self,
