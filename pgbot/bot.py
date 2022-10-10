@@ -504,13 +504,13 @@ class PygameBot(snakecore.commands.Bot):
 
         engine: AsyncEngine = self._main_database["engine"]  # type: ignore
         conn: AsyncConnection
-        async with engine.connect() as conn:
+        async with engine.begin() as conn:
             if engine.name == "sqlite":
                 await conn.execute(
                     text(
                         "CREATE TABLE IF NOT EXISTS "
                         "bot_extension_data"
-                        "(name TEXT, version TEXT, table_name_prefix TEXT, data BLOB)"
+                        "(name VARCHAR(1000), version VARCHAR(1000), table_name_prefix VARCHAR(1000), data BLOB)"
                     )
                 )
 
@@ -519,11 +519,9 @@ class PygameBot(snakecore.commands.Bot):
                     text(
                         "CREATE TABLE IF NOT EXISTS "
                         "bot_extension_data"
-                        "(name TEXT, version TEXT, table_name_prefix TEXT, data BYTEA)"
+                        "(name VARCHAR(1000), version VARCHAR(1000), table_name_prefix VARCHAR(1000), data BYTEA)"
                     )
                 )
-
-            await conn.commit()
 
         self._extension_data_storage_is_init = True
 
@@ -532,7 +530,7 @@ class PygameBot(snakecore.commands.Bot):
 
     async def create_extension_data(
         self,
-        extension_name: str,
+        name: str,
         version: str,
         table_name_prefix: str,
         initial_data: Optional[bytes] = None,
@@ -540,11 +538,11 @@ class PygameBot(snakecore.commands.Bot):
 
         if not self._extension_data_storage_is_init:
             raise RuntimeError("Extension data storage was not initialized.")
-        elif not isinstance(extension_name, str):
+        elif not isinstance(name, str):
             raise TypeError(
-                f"argument 'extension_name' must be a fully qualified extension "
+                f"argument 'name' must be a fully qualified extension "
                 "name of type 'str', not "
-                f"'{extension_name.__class__.__name__}'"
+                f"'{name.__class__.__name__}'"
             )
         elif not isinstance(version, str):
             raise TypeError(
@@ -573,10 +571,10 @@ class PygameBot(snakecore.commands.Bot):
                 text(
                     "INSERT INTO bot_extension_data "
                     "(name, version, table_name_prefix, data) "
-                    "VALUES (:extension_name, :version, :table_name_prefix, :initial_data)"
+                    "VALUES (:name, :version, :table_name_prefix, :initial_data)"
                 ),
                 dict(
-                    extension_name=extension_name,
+                    name=name,
                     version=version,
                     table_name_prefix=table_name_prefix,
                     initial_data=initial_data,
@@ -584,16 +582,14 @@ class PygameBot(snakecore.commands.Bot):
             )
             await conn.commit()
 
-    async def read_extension_data(
-        self, extension_name: str
-    ) -> dict[str, Union[str, bytes]]:
+    async def read_extension_data(self, name: str) -> dict[str, Union[str, bytes]]:
         if not self._extension_data_storage_is_init:
             raise RuntimeError("Extension data storage was not initialized.")
 
-        elif not isinstance(extension_name, str):
+        elif not isinstance(name, str):
             raise TypeError(
-                f"argument 'extension_name' must be of type 'str', not "
-                f"'{extension_name.__class__.__name__}'"
+                f"argument 'name' must be of type 'str', not "
+                f"'{name.__class__.__name__}'"
             )
 
         engine: AsyncEngine = self._main_database["engine"]  # type: ignore
@@ -605,32 +601,32 @@ class PygameBot(snakecore.commands.Bot):
         async with engine.connect() as conn:
             result: sqlalchemy.engine.Result = await conn.execute(
                 text("SELECT * FROM bot_extension_data"),
-                dict(extension_name=extension_name),
+                dict(name=name),
             )
 
             row: Any = result.first()
             if row is None:
                 raise LookupError(
                     f"Could not find extension storage data for extension named "
-                    f"'{extension_name}'"
+                    f"'{name}'"
                 )
 
             return dict(
-                extension_name=row.name,
+                name=row.name,
                 version=row.version,
                 table_name_prefix=row.table_name_prefix,
                 data=row.data,
             )
 
-    async def check_extension_data_exists(self, extension_name: str):
+    async def check_extension_data_exists(self, name: str):
         if not self._extension_data_storage_is_init:
             raise RuntimeError("Extension data storage was not initialized.")
 
-        elif not isinstance(extension_name, str):
+        elif not isinstance(name, str):
             raise TypeError(
-                f"argument 'extension_name' must be a fully qualified extension "
+                f"argument 'name' must be a fully qualified extension "
                 "name of type 'str', not "
-                f"'{extension_name.__class__.__name__}'"
+                f"'{name.__class__.__name__}'"
             )
 
         engine: AsyncEngine = self._main_database["engine"]  # type: ignore
@@ -644,9 +640,9 @@ class PygameBot(snakecore.commands.Bot):
                 (
                     await conn.execute(
                         text(
-                            "SELECT EXISTS(SELECT 1 FROM bot_extension_data WHERE name == :extension_name)"
+                            "SELECT EXISTS(SELECT 1 FROM bot_extension_data WHERE name == :name)"
                         ),
-                        dict(extension_name=extension_name),
+                        dict(name=name),
                     )
                 ).first()[0]
             )
@@ -654,7 +650,7 @@ class PygameBot(snakecore.commands.Bot):
 
     async def update_extension_data(
         self,
-        extension_name: str,
+        name: str,
         version: Optional[str] = None,
         table_name_prefix: Optional[str] = None,
         data: Optional[bytes] = None,
@@ -663,11 +659,11 @@ class PygameBot(snakecore.commands.Bot):
         if not self._extension_data_storage_is_init:
             raise RuntimeError("Extension data storage was not initialized.")
 
-        elif not isinstance(extension_name, str):
+        elif not isinstance(name, str):
             raise TypeError(
-                f"argument 'extension_name' must be a fully qualified extension "
+                f"argument 'name' must be a fully qualified extension "
                 "name of type 'str', not "
-                f"'{extension_name.__class__.__name__}'"
+                f"'{name.__class__.__name__}'"
             )
 
         elif version is not None and not isinstance(version, str):
@@ -697,18 +693,18 @@ class PygameBot(snakecore.commands.Bot):
         if engine.name not in ("sqlite", "postgresql"):
             raise RuntimeError(f"Unsupported database dialect '{engine.name}'")
 
-        async with engine.connect() as conn:
+        async with engine.begin() as conn:
             if not (
                 await conn.execute(
                     text(
-                        "SELECT EXISTS(SELECT 1 FROM bot_extension_data WHERE name == :extension_name)"
+                        "SELECT EXISTS(SELECT 1 FROM bot_extension_data WHERE name == :name)"
                     ),
-                    dict(extension_name=extension_name),
+                    dict(name=name),
                 )
             ).first()[0]:
                 raise LookupError(
                     f"Could not find extension storage data for extension named "
-                    f"'{extension_name}'"
+                    f"'{name}'"
                 )
 
             params = {}
@@ -722,27 +718,26 @@ class PygameBot(snakecore.commands.Bot):
 
             target_columns = ", ".join((f"{k} = :{k}" for k in params))
 
-            params["extension_name"] = extension_name
+            params["name"] = name
 
             await conn.execute(
                 text(
                     "UPDATE bot_extension_data"
                     + f" SET {target_columns}"
-                    + " FROM bot_extension_data AS bes WHERE bes.name == :extension_name",
+                    + " FROM bot_extension_data AS bes WHERE bes.name == :name",
                 ),
                 parameters=params,
             )
-            await conn.commit()
 
-    async def delete_extension_data(self, extension_name: str):
+    async def delete_extension_data(self, name: str):
         if not self._extension_data_storage_is_init:
             raise RuntimeError("Extension data storage was not initialized.")
 
-        elif not isinstance(extension_name, str):
+        elif not isinstance(name, str):
             raise TypeError(
-                f"argument 'extension_name' must be a fully qualified extension "
+                f"argument 'name' must be a fully qualified extension "
                 "name of type 'str', not "
-                f"'{extension_name.__class__.__name__}'"
+                f"'{name.__class__.__name__}'"
             )
 
         engine: AsyncEngine = self._main_database["engine"]  # type: ignore
@@ -751,9 +746,8 @@ class PygameBot(snakecore.commands.Bot):
         if engine.name not in ("sqlite", "postgresql"):
             raise RuntimeError(f"Unsupported database dialect '{engine.name}'")
 
-        async with engine.connect() as conn:
+        async with engine.begin() as conn:
             await conn.execute(
-                text("DELETE FROM bot_extension_data WHERE name == :extension_name"),
-                dict(extension_name=extension_name),
+                text("DELETE FROM bot_extension_data WHERE name == :name"),
+                dict(name=name),
             )
-            await conn.commit()
