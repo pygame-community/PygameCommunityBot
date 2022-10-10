@@ -253,7 +253,7 @@ class PygameBot(snakecore.commands.Bot):
 
     async def teardown_hook(self) -> None:
         self.handle_loading_reactions.cancel()
-        if "databases" in self._botconfig:
+        if self._databases:
             await self._close_database_connections()
 
     async def on_ready(self):
