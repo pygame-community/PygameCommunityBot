@@ -722,9 +722,9 @@ class PygameBot(snakecore.commands.Bot):
 
             await conn.execute(
                 text(
-                    "UPDATE bot_extension_data"
+                    "UPDATE bot_extension_data AS bed"
                     + f" SET {target_columns}"
-                    + " FROM bot_extension_data AS bes WHERE bes.name == :name",
+                    + " WHERE bed.name == :name",
                 ),
                 parameters=params,
             )
