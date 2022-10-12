@@ -292,7 +292,7 @@ class PygameBot(snakecore.commands.Bot):
         log_exception = False
         has_cause = False
 
-        color = 0xFF0000
+        color = 0x170401
 
         if isinstance(
             exception, commands.CommandNotFound
@@ -321,14 +321,52 @@ class PygameBot(snakecore.commands.Bot):
         elif isinstance(exception, commands.DisabledCommand):
             title = f"Cannot execute command! ({exception.args[0]})"
             description = (
-                f"The specified command has been temporarily disabled, "
-                "while the bot wizards are casting their spells on it!\n"
-                "Please try running the command after the maintenance work "
-                "has finished."
+                f"The specified command has been globally disabled. "
+                "Please stand by as the bot wizards search for "
+                "workarounds and solutions to this issue."
             )
-        elif isinstance(exception, commands.CommandInvokeError):
-            if isinstance(exception.__cause__, (type(None), discord.HTTPException)):
-                title = f"Command `{context.invoked_with}` reported an error:"
+
+        elif isinstance(exception, commands.CheckFailure):
+            title = "Command invocation check(s) failed"
+            if isinstance(
+                exception,
+                (
+                    commands.MissingPermissions,
+                    commands.MissingRole,
+                    commands.MissingAnyRole,
+                    commands.BotMissingPermissions,
+                    commands.BotMissingRole,
+                    commands.BotMissingAnyRole,
+                ),
+            ):
+                title = "You're missing some "
+
+                if isinstance(
+                    exception,
+                    (
+                        commands.BotMissingPermissions,
+                        commands.BotMissingRole,
+                        commands.BotMissingAnyRole,
+                    ),
+                ):
+                    title = "I'm missing some "
+
+                if isinstance(
+                    exception,
+                    (commands.MissingPermissions, commands.BotMissingPermissions),
+                ):
+                    title += "permissions"
+                else:
+                    title += "roles"
+
+        elif isinstance(
+            exception, (commands.CommandInvokeError, commands.ConversionError)
+        ):
+            if isinstance(exception, commands.CommandInvokeError) and (
+                not exception.__cause__
+                or isinstance(exception.__cause__, discord.HTTPException)
+            ):
+                title = f"Command `{context.invoked_with}` reported an error"
                 description = exception.args[0] if exception.args else ""
                 description = description.replace(
                     f"Command raised an exception: {exception.original.__class__.__name__}: ",
@@ -337,7 +375,7 @@ class PygameBot(snakecore.commands.Bot):
                 color = 0x851D08
                 footer_text = exception.__class__.__name__
 
-            else:
+            elif exception.__cause__:
                 log_exception = True
                 has_cause = True
                 title = "Unknown error!"
@@ -345,23 +383,11 @@ class PygameBot(snakecore.commands.Bot):
                     "An unknown error occured while running the "
                     f"{context.command.qualified_name} command!\n"
                     "This is most likely a bug in the bot itself, and our fellow bot wizards will "
-                    f"recast magical spells on it soon!\n\n"
+                    "banish it in no time!\n\n"
                     f"```\n{exception.__cause__.args[0] if exception.__cause__.args else ''}```"
                 )
+                color = 0xFF0000
                 footer_text = exception.__cause__.__class__.__name__
-
-        elif isinstance(exception, commands.ConversionError):
-            log_exception = True
-            has_cause = True
-            title = "Unknown error!"
-            description = (
-                "An unknown error occured while running the "
-                f"{context.command.qualified_name} command!\n"
-                "This is most likely a bug in the bot itself, and our fellow bot wizards will "
-                f"recast magical spells on it soon!\n\n"
-                f"```\n{exception.__cause__.args[0] if exception.__cause__ and exception.__cause__.args else ''}```"
-            )
-            footer_text = exception.__cause__.__class__.__name__
 
         footer_text = f"{footer_text}\n(React with 🗑 to delete this error message in the next 30s)"
 
@@ -370,27 +396,22 @@ class PygameBot(snakecore.commands.Bot):
                 context.message.id
             )
             try:
-                (
-                    (
-                        await snakecore.utils.embeds.replace_embed_at(
-                            target_message,
-                            title=title,
-                            description=description,
-                            color=color,
-                            footer_text=footer_text,
-                        )
+                if target_message is not None:
+                    await snakecore.utils.embeds.replace_embed_at(
+                        target_message,
+                        title=title,
+                        description=description,
+                        color=color,
+                        footer_text=footer_text,
                     )
-                    if target_message is not None
-                    else (
-                        target_message := await snakecore.utils.embeds.send_embed(
-                            context.channel,
-                            title=title,
-                            description=description,
-                            color=color,
-                            footer_text=footer_text,
-                        )
+                else:
+                    target_message = await snakecore.utils.embeds.send_embed(
+                        context.channel,
+                        title=title,
+                        description=description,
+                        color=color,
+                        footer_text=footer_text,
                     )
-                )
             except discord.NotFound:
                 # response message was deleted, send a new message
                 target_message = await snakecore.utils.embeds.send_embed(
@@ -439,25 +460,6 @@ class PygameBot(snakecore.commands.Bot):
             finally:
                 del self._recent_response_error_messages[ctx.message.id]
 
-    def get_database_data(self) -> Optional[dict[str, Union[str, dict, AsyncEngine]]]:
-        """Get the database dictionary for the primary database of this bot,
-        containing the keys "name" for the database name, "engine" for the
-        SQLAlchemy engine and if available, "conect_args" for a dictionary
-        containing the database driver library-specific arguments for their
-        `.connect()` function.
-
-        Returns:
-            Optional[dict]: The dictionary, or None dictionary if nothing was
-              loaded/configured.
-        """
-        if not self._main_database:
-            return None
-
-        db_dict = self._main_database.copy()
-        if "url" in db_dict:
-            del db_dict["url"]
-        return db_dict
-
     def get_database(self) -> Optional[AsyncEngine]:
         """Get the `sqlachemy.ext.asyncio.AsyncEngine` object for the primary
         database of this bot.
@@ -469,15 +471,15 @@ class PygameBot(snakecore.commands.Bot):
 
         return self._main_database.get("engine")  # type: ignore
 
-    def get_databases(
+    def get_databases_data(
         self, *names: str
     ) -> list[dict[str, Union[str, dict, AsyncEngine]]]:
-        """Get the database dictionaries for all the databases of this bot,
-        containing the keys "name" for the database name, "engine" for the
-        SQLAlchemy engine and if available, "conect_args" for a dictionary
-        containing the database driver library-specific arguments for their
-        `.connect()` function. The first dictionary to be returned is always
-        that of the bot's primary database.
+        """Get the database dictionaries for all the currently configured databases,
+        containing the keys "name" for the database name, "engine" for the SQLAlchemy
+        engine and if available, "conect_args" for a dictionary containing the
+        database driver library-specific arguments for their `.connect()` function.
+        The first dictionary to be returned is always that of the bot's primary
+        database.
 
         If string database names are given, only the
         dictionaries of those (if found) will be returned by the bot.
