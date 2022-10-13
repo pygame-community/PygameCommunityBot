@@ -35,7 +35,7 @@ class EmbedHelpCommand(commands.HelpCommand):
     def get_ending_note(self):
         return (
             f"Use {self.context.clean_prefix}{self.context.invoked_with} "
-            "[command] for more info on a command."
+            "[name] for more info on a command or category."
         )
 
     def get_command_signature(self, command: commands.Command):
@@ -58,6 +58,13 @@ class EmbedHelpCommand(commands.HelpCommand):
 
         if mapping:
             embed_dict["fields"] = []
+            embed_dict["fields"].append(
+                dict(
+                    name="Categories: "
+                    f"{len(mapping)-1 if None in mapping else len(mapping)}",
+                    value="\u200b",
+                )
+            )
         for cog, cmds in mapping.items():
             name = "No Category" if cog is None else cog.qualified_name
             filtered = await self.filter_commands(cmds, sort=True)
@@ -95,11 +102,13 @@ class EmbedHelpCommand(commands.HelpCommand):
 
         filtered = await self.filter_commands(all_commands, sort=True)
         embed_dict["fields"] = []
-        embed_dict["fields"].append(dict(name="Subcommands", value="\u200b"))
+        embed_dict["fields"].append(
+            dict(name=f"Subcommands: {len(filtered)}", value="\u200b")
+        )
         embed_dict["fields"].extend(
             (
                 dict(
-                    name=f"\u200b    {self.get_command_signature(command)}",
+                    name=f"•  `{self.get_command_signature(command).strip()}`",
                     value=command.short_doc or "...",
                     inline=False,
                 )
@@ -120,19 +129,30 @@ class EmbedHelpCommand(commands.HelpCommand):
         start_embed_dict = {}
         start_embed_dict["title"] = f"Help for `{group.qualified_name}`"
         start_embed_dict["color"] = self.color
+        if isinstance(group.cog, commands.Cog):
+            start_embed_dict["author"] = dict(name=f"{group.cog.qualified_name}")
 
         embed_dict = start_embed_dict.copy()
+        embed_dict["description"] = ""
+
+        if (
+            signature_str := self.get_command_signature(group).strip()
+        ) != group.qualified_name:  # ignore empty signatures
+            embed_dict["description"] = f"```\n{signature_str}```\n"
+
         if group.help:
-            embed_dict["description"] = group.help
+            embed_dict["description"] += group.help
 
         if isinstance(group, commands.Group):
             filtered = await self.filter_commands(group.commands, sort=True)
             embed_dict["fields"] = []
-            embed_dict["fields"].append(dict(name="Subcommands:", value="\u200b"))
+            embed_dict["fields"].append(
+                dict(name=f"Subcommands: {len(filtered)}", value="\u200b")
+            )
             embed_dict["fields"].extend(
                 (
                     dict(
-                        name=f"\u200b    {self.get_command_signature(command)}",
+                        name=f"•  `{self.get_command_signature(command).strip()}`",
                         value=command.short_doc or "...",
                         inline=False,
                     )
