@@ -1,5 +1,6 @@
 import asyncio
 from typing import Any, Mapping, Optional
+
 import discord
 from discord.ext import commands
 import snakecore
@@ -47,7 +48,10 @@ class EmbedHelpCommand(commands.HelpCommand):
     async def send_bot_help(
         self, mapping: Mapping[Optional[commands.Cog], list[commands.Command]]
     ):
-        start_embed_dict = dict(title="Help", color=self.COLOR)
+        start_embed_dict = {}
+        start_embed_dict["title"] = "Help"
+        start_embed_dict["color"] = self.COLOR
+
         description = self.context.bot.description
         if description:
             start_embed_dict["description"] = description
@@ -64,7 +68,7 @@ class EmbedHelpCommand(commands.HelpCommand):
                 if cog and cog.description:
                     value = f"{cog.description}\n**Commands**\n{value}"
 
-                embed_dict["fields"].append(dict(name=name, value=value))
+                embed_dict["fields"].append(dict(name=name, value=value, inline=False))
 
         embed_dict["footer"] = dict(text=self.get_ending_note())
 
@@ -76,15 +80,16 @@ class EmbedHelpCommand(commands.HelpCommand):
         )
 
     async def send_cog_help(self, cog: commands.Cog):
-        start_embed_dict = dict(
-            title=f"`{cog.qualified_name}` Commands", color=self.COLOR
-        )
+        start_embed_dict = {}
+        start_embed_dict["title"] = f"`{cog.qualified_name}` Commands"
+        start_embed_dict["color"] = self.COLOR
         embed_dict = start_embed_dict.copy()
         if cog.description:
             embed_dict["description"] = cog.description
 
         filtered = await self.filter_commands(cog.get_commands(), sort=True)
-        embed_dict["fields"] = [dict(name="Subcommands", value="\u200b")]
+        embed_dict["fields"] = []
+        embed_dict["fields"].append(dict(name="Subcommands", value="\u200b"))
         embed_dict["fields"].extend(
             (
                 dict(
@@ -106,16 +111,18 @@ class EmbedHelpCommand(commands.HelpCommand):
         )
 
     async def send_group_help(self, group: commands.Group):
-        start_embed_dict = dict(
-            title=f"Help for `{group.qualified_name}`", color=self.COLOR
-        )
+        start_embed_dict = {}
+        start_embed_dict["title"] = f"Help for `{group.qualified_name}`"
+        start_embed_dict["color"] = self.COLOR
+
         embed_dict = start_embed_dict.copy()
         if group.help:
             embed_dict["description"] = group.help
 
         if isinstance(group, commands.Group):
             filtered = await self.filter_commands(group.commands, sort=True)
-            embed_dict["fields"] = [dict(name="Subcommands", value="\u200b")]
+            embed_dict["fields"] = []
+            embed_dict["fields"].append(dict(name="Subcommands", value="\u200b"))
             embed_dict["fields"].extend(
                 (
                     dict(
@@ -139,14 +146,17 @@ class EmbedHelpCommand(commands.HelpCommand):
     # This makes it so it uses the function above
     # Less work for us to do since they're both similar.
     # If you want to make regular command help look different then override it
-    send_command_help = send_group_help
+    send_command_help = send_group_help  # type: ignore
 
     async def send_help_embeds(self, embeds: list[discord.Embed]):
         paginator = None
-        cog: Optional[BaseCommandCog] = self.cog
-        if not cog:
+        cog = self.cog
+        if not isinstance(cog, BaseCommandCog):
             raise RuntimeError("A BaseCommandCog cog instance must be set")
+
         ctx = self.context
+        assert isinstance(ctx.author, discord.Member)
+
         if (
             response_message := cog.cached_response_messages.get(ctx.message.id)
         ) is not None:
