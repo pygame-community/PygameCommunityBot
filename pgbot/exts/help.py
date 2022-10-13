@@ -1,20 +1,17 @@
 import asyncio
-from typing import Any, Mapping, Optional
+from typing import Any, Mapping, Optional, Union
 
 import discord
 from discord.ext import commands
 import snakecore
 
-from pgbot import constants, PygameBot
 from .base import BaseCommandCog
 
-BotT = PygameBot
+BotT = Union[snakecore.commands.Bot, snakecore.commands.AutoShardedBot]
 
 
 class EmbedHelpCommand(commands.HelpCommand):
     # Based on https://gist.github.com/Rapptz/31a346ed1eb545ddeb0d451d81a60b3b
-    COLOR = constants.DEFAULT_EMBED_COLOR
-
     default_command_extras = {
         "invoke_on_message_edit": True,
         "response_message_deletion_by_author": True,
@@ -32,6 +29,7 @@ class EmbedHelpCommand(commands.HelpCommand):
 
         command_attrs["extras"].update(self.default_command_extras)
 
+        self.color = int(options.get("color", 0))
         super().__init__(**options)
 
     def get_ending_note(self):
@@ -50,7 +48,7 @@ class EmbedHelpCommand(commands.HelpCommand):
     ):
         start_embed_dict = {}
         start_embed_dict["title"] = "Help"
-        start_embed_dict["color"] = self.COLOR
+        start_embed_dict["color"] = self.color
 
         description = self.context.bot.description
         if description:
@@ -60,11 +58,11 @@ class EmbedHelpCommand(commands.HelpCommand):
 
         if mapping:
             embed_dict["fields"] = []
-        for cog, commands in mapping.items():
+        for cog, cmds in mapping.items():
             name = "No Category" if cog is None else cog.qualified_name
-            filtered = await self.filter_commands(commands, sort=True)
+            filtered = await self.filter_commands(cmds, sort=True)
             if filtered:
-                value = "\n".join(self.get_command_signature(c) for c in commands)
+                value = "\n".join(self.get_command_signature(c) for c in cmds)
                 if cog and cog.description:
                     value = f"{cog.description}\n**Commands**\n{value}"
 
@@ -82,18 +80,26 @@ class EmbedHelpCommand(commands.HelpCommand):
     async def send_cog_help(self, cog: commands.Cog):
         start_embed_dict = {}
         start_embed_dict["title"] = f"`{cog.qualified_name}` Commands"
-        start_embed_dict["color"] = self.COLOR
+        start_embed_dict["color"] = self.color
         embed_dict = start_embed_dict.copy()
         if cog.description:
             embed_dict["description"] = cog.description
 
-        filtered = await self.filter_commands(cog.get_commands(), sort=True)
+        all_commands = []
+        for cmd in cog.get_commands():
+            all_commands.append(cmd)
+            if isinstance(cmd, commands.Group):
+                all_commands.extend(
+                    sorted(cmd.walk_commands(), key=lambda c: c.qualified_name)
+                )
+
+        filtered = await self.filter_commands(all_commands, sort=True)
         embed_dict["fields"] = []
         embed_dict["fields"].append(dict(name="Subcommands", value="\u200b"))
         embed_dict["fields"].extend(
             (
                 dict(
-                    name=self.get_command_signature(command),
+                    name=f"\u200b    {self.get_command_signature(command)}",
                     value=command.short_doc or "...",
                     inline=False,
                 )
@@ -113,7 +119,7 @@ class EmbedHelpCommand(commands.HelpCommand):
     async def send_group_help(self, group: commands.Group):
         start_embed_dict = {}
         start_embed_dict["title"] = f"Help for `{group.qualified_name}`"
-        start_embed_dict["color"] = self.COLOR
+        start_embed_dict["color"] = self.color
 
         embed_dict = start_embed_dict.copy()
         if group.help:
@@ -122,11 +128,11 @@ class EmbedHelpCommand(commands.HelpCommand):
         if isinstance(group, commands.Group):
             filtered = await self.filter_commands(group.commands, sort=True)
             embed_dict["fields"] = []
-            embed_dict["fields"].append(dict(name="Subcommands", value="\u200b"))
+            embed_dict["fields"].append(dict(name="Subcommands:", value="\u200b"))
             embed_dict["fields"].extend(
                 (
                     dict(
-                        name=self.get_command_signature(command),
+                        name=f"\u200b    {self.get_command_signature(command)}",
                         value=command.short_doc or "...",
                         inline=False,
                     )
@@ -178,7 +184,7 @@ class EmbedHelpCommand(commands.HelpCommand):
                     *embeds,
                     caller=ctx.author,
                     inactivity_timeout=60,
-                    theme_color=constants.DEFAULT_EMBED_COLOR,
+                    theme_color=self.color,
                 )
             except discord.NotFound:
                 paginator = snakecore.utils.pagination.EmbedPaginator(
@@ -186,7 +192,7 @@ class EmbedHelpCommand(commands.HelpCommand):
                     *embeds,
                     caller=ctx.author,
                     inactivity_timeout=60,
-                    theme_color=constants.DEFAULT_EMBED_COLOR,
+                    theme_color=self.color,
                 )
         else:
             paginator = snakecore.utils.pagination.EmbedPaginator(
@@ -194,7 +200,7 @@ class EmbedHelpCommand(commands.HelpCommand):
                 *embeds,
                 caller=ctx.author,
                 inactivity_timeout=60,
-                theme_color=constants.DEFAULT_EMBED_COLOR,
+                theme_color=self.color,
             )
 
         paginator_tuple = (
@@ -214,8 +220,9 @@ class HelpCommandCog(BaseCommandCog, name="help-commands"):
     pass
 
 
-async def setup(bot: BotT):
+@snakecore.commands.decorators.with_config_kwargs
+async def setup(bot: BotT, theme_color: Union[int, discord.Color] = 0):
     await bot.add_cog((help_command_cog := HelpCommandCog(bot)))
-    embed_help_command = EmbedHelpCommand()
+    embed_help_command = EmbedHelpCommand(color=int(theme_color))
     bot.help_command = embed_help_command
     embed_help_command.cog = help_command_cog
