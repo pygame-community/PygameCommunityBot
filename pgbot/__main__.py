@@ -42,7 +42,7 @@ DEFAULT_EXTENSIONS: list[dict[str, Any]] = [
     {"name": f"{__package__}.exts.debug_info"},
     {
         "name": f"{__package__}.exts.help",
-        "config": {"theme_color": constants.DEFAULT_EMBED_COLOR},
+        "config": {"color": constants.DEFAULT_EMBED_COLOR},
     },
 ]
 
