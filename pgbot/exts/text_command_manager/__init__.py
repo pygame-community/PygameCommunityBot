@@ -40,7 +40,7 @@ class TCMDCantRunReason(enum.Enum):
 
 
 class TextCommandManager(BaseCommandCog, name="text-command-manager"):
-    def __init__(self, bot: BotT, db_engine: AsyncEngine) -> None:
+    def __init__(self, bot: BotT, db_engine: AsyncEngine, theme_color: int = 0) -> None:
         super().__init__(bot)
         self.db_engine = db_engine
         self.cached_guild_tcmd_state_maps: OrderedDict[
@@ -48,6 +48,7 @@ class TextCommandManager(BaseCommandCog, name="text-command-manager"):
         ] = OrderedDict()
         self.cached_guild_tcmd_state_maps_maxlen = 100
         bot.add_check(self.global_tcmd_check)
+        self.theme_color = theme_color
 
     async def global_tcmd_check(self, ctx: commands.Context[BotT]):
         if not (
@@ -84,7 +85,7 @@ class TextCommandManager(BaseCommandCog, name="text-command-manager"):
 
             raise commands.CheckFailure(
                 f'The "{ctx.command.qualified_name}" command is disabled in this '
-                "guild/server, due to a parent command being disabled "
+                "guild/server, due to subcommands being disabled by a parent command "
                 f"({possible_parent_qualnames})."
             )
         elif cannot_run_reason in (
@@ -143,18 +144,19 @@ class TextCommandManager(BaseCommandCog, name="text-command-manager"):
         elif not (
             isinstance(ctx.command, commands.Command)
             and await self.guild_tcmd_states_exists(ctx.guild.id)
-        ):
-            return (
-                None  # nothing was configured for target guild, always allow invocation
-            )
+        ):  # nothing was configured for target guild, always allow invocation
+            return None
+
+        everyone_role_id = ctx.guild.id
+        all_channels_id = ctx.guild.id - 1
 
         guild_tcmd_state_map: dict[
             str, GuildTextCommandState
         ] = await self.fetch_guild_tcmd_states(ctx.guild.id)
 
-        # is_admin = ctx.author.guild_permissions.administrator
+        is_admin = ctx.author.guild_permissions.administrator
 
-        tcmd_states = []
+        tcmd_states: list[GuildTextCommandState] = []
         for i, tcmd_obj in enumerate((ctx.command, *ctx.command.parents)):
             tcmd_uuid = tcmd_obj.extras.get("uuid")
             if tcmd_uuid is not None:
@@ -178,16 +180,9 @@ class TextCommandManager(BaseCommandCog, name="text-command-manager"):
                     UUID(int=qualname_sha1 >> max(qualname_sha1.bit_length() - 128, 0))
                 )  # truncate to <= 128 bits
 
-            tcmd_states.append(guild_tcmd_state_map.get(tcmd_uuid, {}))
+            tcmd_states.append(guild_tcmd_state_map.get(tcmd_uuid, {}))  # type: ignore
 
         tcmd_states.append(guild_tcmd_state_map[ZERO_UUID])  # get fake root command
-
-        tcmd_disabled = False
-        missing_channel_permissions = False
-        missing_role_permissions = False
-
-        all_channels_id = ctx.guild.id - 1
-        everyone_role_id = ctx.guild.id
 
         tcmd_state_channel_chainmap = ChainMap(
             *(tcmd_state.get("channels", {}) for tcmd_state in tcmd_states)
@@ -209,7 +204,12 @@ class TextCommandManager(BaseCommandCog, name="text-command-manager"):
                     TCMDCantRunReason.DISABLED_BY_PARENT
                 )  # command is disabled via a parent's subcommand bit
 
+            if is_admin:
+                continue
+
             channel_overrides = tcmd_state.get("channels")
+            category_id = ctx.channel.category_id if ctx.channel.category_id else 0
+
             if channel_overrides:
                 if all_channels_id in channel_overrides:
                     target_channel_overrides = (
@@ -217,24 +217,60 @@ class TextCommandManager(BaseCommandCog, name="text-command-manager"):
                         if i == 0
                         else ChainMap(*tcmd_state_channel_chainmap.maps[: i + 1])
                     )  # pick overrides of current command and possibly preceding subcommands
-                    if not target_channel_overrides[all_channels_id] and not (
-                        ctx.channel.id in target_channel_overrides
-                        or (ctx.channel.category_id if ctx.channel.category_id else 0)
-                        in target_channel_overrides  # 0 is always invalid
+
+                    if (
+                        target_channel_overrides[all_channels_id]
+                        and not (
+                            # a channel's category or the channel must not be disabled for permission to be granted
+                            target_channel_overrides.get(
+                                category_id,
+                                True,
+                            )
+                            is True
+                            and target_channel_overrides.get(ctx.channel.id, True)
+                            is not False
+                            or target_channel_overrides.get(ctx.channel.id, True)
+                            is True
+                        )
+                    ) or (
+                        not target_channel_overrides[all_channels_id]
+                        and not (
+                            # if a channel's category is enabled, the channel must not be disabled for permission to be granted
+                            target_channel_overrides.get(
+                                category_id,
+                                False,
+                            )
+                            is True
+                            and target_channel_overrides.get(ctx.channel.id, True)
+                            is not False
+                            or target_channel_overrides.get(ctx.channel.id, False)
+                            is True
+                        )
                     ):
                         return TCMDCantRunReason.MISSING_CHANNEL_PERMISSIONS
                 elif (
                     i == len(tcmd_states) - 1
-                ):  # we're at the fake root command and "All Channels" is not configured as an override on any preceding commands
-                    target_channel_overrides = tcmd_state_channel_chainmap  # pick overrides of target command and parent commands
+                ):  # we're at the fake root command and "All Channels" is not configured as an override on any preceding commands,
+                    # pretend as if it were set to False
+
+                    # pick overrides of original command and all preceding parent commands
+                    target_channel_overrides = tcmd_state_channel_chainmap
+
                     if not (
-                        ctx.channel.id in target_channel_overrides
-                        or (ctx.channel.category_id if ctx.channel.category_id else 0)
-                        in target_channel_overrides
+                        # if a channel's category is enabled, the channel must not be disabled for permission to be granted
+                        target_channel_overrides.get(
+                            category_id,
+                            False,
+                        )
+                        is True
+                        and target_channel_overrides.get(ctx.channel.id, True)
+                        is not False
+                        or target_channel_overrides.get(ctx.channel.id, False) is True
                     ):
                         return TCMDCantRunReason.MISSING_CHANNEL_PERMISSIONS
 
             role_overrides = tcmd_state.get("roles")
+            roles = ctx.author.roles
             if role_overrides:
                 if everyone_role_id in role_overrides:
                     target_role_overrides = (
@@ -242,18 +278,42 @@ class TextCommandManager(BaseCommandCog, name="text-command-manager"):
                         if i == 0
                         else ChainMap(*tcmd_state_role_chainmap.maps[: i + 1])
                     )  # pick overrides of current command and possibly preceding subcommands
-                    if not any(
-                        role.id in target_role_overrides
-                        and target_role_overrides[role.id]
-                        for role in ctx.author.roles
+
+                    if (
+                        target_role_overrides[everyone_role_id]
+                        and not (
+                            (
+                                none_disabled := all(
+                                    target_role_overrides.get(roles[i].id, True)
+                                    for i in range(1, len(roles))
+                                )
+                            )
+                            or (
+                                not none_disabled
+                                and (
+                                    any_enabled := any(
+                                        target_role_overrides.get(roles[i].id, False)
+                                        for i in range(1, len(roles))
+                                    )
+                                )
+                            )
+                        )
+                    ) or (
+                        not target_role_overrides[everyone_role_id]
+                        and not any(
+                            target_role_overrides.get(roles[i].id, False)
+                            for i in range(1, len(roles))
+                        )
                     ):  # will always include @everyone role
                         return TCMDCantRunReason.MISSING_ROLE_PERMISSIONS
                 elif (
                     i == len(tcmd_states) - 1
                 ):  # we're at the fake root command and @everyone role is not configured as an override on any preceding commands
+                    # pretend as if it were set to False
                     target_role_overrides = tcmd_state_role_chainmap  # pick overrides of target command and parent commands
                     if not any(
-                        role.id in target_role_overrides for role in ctx.author.roles
+                        target_role_overrides.get(roles[i].id, False)
+                        for i in range(1, len(roles))
                     ):
                         return TCMDCantRunReason.MISSING_ROLE_PERMISSIONS
 
@@ -458,7 +518,7 @@ class TextCommandManager(BaseCommandCog, name="text-command-manager"):
                 "to setting channel or role-spefic restrictions.\n\n"
                 "To see existing settings, run the `tcm view` command. "
                 "Use `tcm set` to alter text command settings.",
-                color=0xFFD868,
+                color=self.theme_color,
             )
         )
 
@@ -475,7 +535,7 @@ class TextCommandManager(BaseCommandCog, name="text-command-manager"):
 
         main_embed_dict: EmbedDict = {}
         main_embed_dict["title"] = "Text Command State & Permission Settings"
-        main_embed_dict["color"] = 0xFFD868
+        main_embed_dict["color"] = self.theme_color
 
         if not await self.guild_tcmd_states_exists(ctx.guild.id):
             main_embed_dict["description"] = (
@@ -484,9 +544,18 @@ class TextCommandManager(BaseCommandCog, name="text-command-manager"):
             )
             return await ctx.send(embed=discord.Embed.from_dict(main_embed_dict))
 
-        guild_tcmd_state_map = await self.fetch_guild_tcmd_states(ctx.guild.id)
-
         main_embed_dict["fields"] = []
+
+        main_embed_dict["footer"] = {
+            "text": (
+                "\u200b\n\n✅ On\n"
+                "❌ Off\n"
+                "🔁 Permissions synced with parent(s)\n"
+                "🔀 Permissions unsynced with/overriding parent(s)"
+            )
+        }
+
+        guild_tcmd_state_map = await self.fetch_guild_tcmd_states(ctx.guild.id)
 
         if isinstance(tcmd_names, str):
             tcmd_names = (tcmd_names,)
@@ -495,7 +564,7 @@ class TextCommandManager(BaseCommandCog, name="text-command-manager"):
             filtered_states = sorted(
                 (
                     guild_tcmd_state_map[tcmd_name]
-                    for tcmd_name in tcmd_names
+                    for tcmd_name in set(tcmd_names)
                     if tcmd_name in guild_tcmd_state_map
                 ),
                 key=lambda state: state["qualified_name"],
@@ -518,10 +587,18 @@ class TextCommandManager(BaseCommandCog, name="text-command-manager"):
             roles_embed_field: EmbedField = {"name": "", "value": ""}
             channels_embed_field: EmbedField = {"name": "", "value": ""}
 
-            roles_embed_field["name"] = "Role Overrides"
-            roles_embed_field["inline"] = True
+            if tcmd_state["tcmd_uuid"] == ZERO_UUID:
+                roles_embed_field["name"] = "Roles"
+                channels_embed_field["name"] = "Channels"
+            else:
+                roles_embed_field[
+                    "name"
+                ] = f"{'🔀' if 'roles' in tcmd_state else '🔁'} Roles"
+                channels_embed_field[
+                    "name"
+                ] = f"{'🔀' if 'channels' in tcmd_state else '🔁'} Channels"
 
-            channels_embed_field["name"] = "Channel Overrides"
+            roles_embed_field["inline"] = True
             channels_embed_field["inline"] = True
 
             enabled_emoji = "✅" if tcmd_state["enabled"] & 0b01 else "❌"
@@ -530,19 +607,25 @@ class TextCommandManager(BaseCommandCog, name="text-command-manager"):
             enabled_by_parent = True
 
             if tcmd_state["tcmd_uuid"] == ZERO_UUID:
-                main_embed_field["name"] = "Global Settings"
-                main_embed_field["value"] = "All root commands are always enabled."
+                main_embed_field["name"] = "\u200b\nGlobal Settings"
+                main_embed_field["value"] = "..."
             else:
                 enabled_by_parent = not any(
                     not tcmd_state2["enabled"] & 0b10
                     for tcmd_state2 in tcmd_state_hierarchy[1:]
                 )
 
-                main_embed_field["name"] = f"Command `{tcmd_state['qualified_name']}`"
+                main_embed_field["name"] = (
+                    "\u200b\n"
+                    f"`{enabled_emoji}` `{subcommands_enabled_emoji}` "
+                    f"`{tcmd_state['qualified_name']}`"
+                )
 
                 main_embed_field["value"] = (
-                    f"{enabled_emoji} **:** Command is {'enabled' if tcmd_state['enabled'] & 0b01 else 'disabled'}.\n"
-                    f"{subcommands_enabled_emoji} **:** Subcommands are {'enabled' if tcmd_state['enabled'] & 0b10 else 'disabled'}."
+                    "Command: "
+                    + ("  On" if tcmd_state["enabled"] & 0b01 else "Off")
+                    + " | Subcommands: "
+                    + ("On" if tcmd_state["enabled"] & 0b10 else "Off")
                 )
 
                 if not enabled_by_parent:
@@ -581,17 +664,17 @@ class TextCommandManager(BaseCommandCog, name="text-command-manager"):
             channel_sort_lambda = lambda item: channel.position if (channel := ctx.guild.get_channel(item[0])) else -1  # type: ignore
 
             roles_embed_field["value"] = "\n".join(
-                f"{'✅' if override_bool else '❌'} **:** <@&{role_id}>"
+                f"`{'✅' if override_bool else '❌'}`  <@&{role_id}>"
                 if role_id != everyone_role_id
-                else f"{'✅' if override_bool else '❌'} **:** @everyone"
+                else f"`{'✅' if override_bool else '❌'}`  @everyone"
                 for role_id, override_bool in sorted(
                     condensed_role_overrides.items(), key=role_sort_lambda, reverse=True
                 )
             )
             channels_embed_field["value"] = "\n".join(
-                f"{'✅' if override_bool else '❌'} **:** <#{channel_id}> "
+                f"`{'✅' if override_bool else '❌'}`  <#{channel_id}> "
                 if channel_id != all_channels_id
-                else f"{'✅' if override_bool else '❌'} **:** **All Channels**"
+                else f"`{'✅' if override_bool else '❌'}`  **All Channels**"
                 for channel_id, override_bool in sorted(
                     condensed_channel_overrides.items(),
                     key=channel_sort_lambda,
@@ -610,18 +693,16 @@ class TextCommandManager(BaseCommandCog, name="text-command-manager"):
                     f"~~ {ln} ~~" for ln in channels_embed_field["value"].split("\n")
                 )
 
-            roles_embed_field["value"] += "\n\n\u200b"
-            channels_embed_field["value"] += "\n\n\u200b"
-
             main_embed_dict["fields"].extend(
                 (main_embed_field, roles_embed_field, channels_embed_field)
             )
 
         main_embed_dict[
             "description"
-        ] = f"**{len(filtered_states)}** text command configurations found."
+        ] = f"**{len(filtered_states)}** text command configurations found.\n\n"
+        "\n\u200b"
 
-        main_embed_dicts = snakecore.utils.embeds.split_embed_dict(main_embed_dict)
+        main_embed_dicts = snakecore.utils.embeds.split_embed_dict(main_embed_dict)  # type: ignore
         final_embeds: list[discord.Embed] = []
 
         for embed_dict in main_embed_dicts:
@@ -706,7 +787,9 @@ class TextCommandManager(BaseCommandCog, name="text-command-manager"):
                 or isinstance(subcommands_enabled, bool)
             )
         ):
-            raise commands.CommandInvokeError(commands.CommandError("No inputs given."))
+            raise commands.CommandInvokeError(
+                commands.CommandError("No valid inputs given.")
+            )
 
         everyone_role_id = ctx.guild.id
         all_channels_id = ctx.guild.id - 1
@@ -870,9 +953,9 @@ class TextCommandManager(BaseCommandCog, name="text-command-manager"):
 
     @commands.has_guild_permissions(administrator=True)
     @commands.max_concurrency(1, per=commands.BucketType.guild, wait=True)
-    @tcm.command(name="setroot")
+    @tcm.command(name="setglobal")
     @flagconverter_kwargs()
-    async def tcm_setroot(
+    async def tcm_setglobal(
         self,
         ctx: commands.Context[BotT],
         *channel_or_role_overrides: Parens[
@@ -897,6 +980,11 @@ class TextCommandManager(BaseCommandCog, name="text-command-manager"):
         ],
     ):
         assert ctx.guild
+
+        if not channel_or_role_overrides:
+            raise commands.CommandInvokeError(
+                commands.CommandError("No valid inputs given.")
+            )
 
         everyone_role_id = ctx.guild.id
         all_channels_id = ctx.guild.id - 1
@@ -977,8 +1065,8 @@ class TextCommandManager(BaseCommandCog, name="text-command-manager"):
         ctx: commands.Context[BotT],
         tcmd_names: Union[Parens[str, ...], str],
         *,
-        channels: bool = True,
-        roles: bool = True,
+        channels: Optional[bool] = None,
+        roles: Optional[bool] = None,
     ):
         assert ctx.guild
 
@@ -991,11 +1079,18 @@ class TextCommandManager(BaseCommandCog, name="text-command-manager"):
             ):
                 tcmd_state = tcmd_state_map[tcmd_name].copy()
 
-                if "channels" in tcmd_state and channels:
-                    del tcmd_state["channels"]
+                if channels is None and roles is None:
+                    if "channels" in tcmd_state:
+                        del tcmd_state["channels"]
 
-                if "roles" in tcmd_state and roles:
-                    del tcmd_state["roles"]
+                    if "roles" in tcmd_state:
+                        del tcmd_state["roles"]
+                else:
+                    if "channels" in tcmd_state and channels is True:
+                        del tcmd_state["channels"]
+
+                    if "roles" in tcmd_state and roles is True:
+                        del tcmd_state["roles"]
 
                 await self.update_guild_tcmd_states(ctx.guild.id, tcmd_state)
             else:
@@ -1006,25 +1101,36 @@ class TextCommandManager(BaseCommandCog, name="text-command-manager"):
                 )
 
     @commands.has_guild_permissions(administrator=True)
-    @tcm.command(name="clearrootoverrides")
-    async def tcm_clearrootoverrides(
+    @tcm.command(name="clearglobaloverrides")
+    async def tcm_clearglobaloverrides(
         self,
         ctx: commands.Context[BotT],
         *,
-        channels: bool = True,
-        roles: bool = True,
+        channels: Optional[bool] = None,
+        roles: Optional[bool] = None,
     ):
         assert ctx.guild
+
+        everyone_role_id = ctx.guild.id
+        all_channels_id = ctx.guild.id - 1
 
         if await self.guild_tcmd_states_exists(ctx.guild.id) and ZERO_UUID in (
             tcmd_state_map := await self.fetch_guild_tcmd_states(ctx.guild.id)
         ):
             tcmd_state = tcmd_state_map[ZERO_UUID].copy()
-            if "channels" in tcmd_state and channels:
-                del tcmd_state["channels"]
 
-            if "roles" in tcmd_state and roles:
-                del tcmd_state["roles"]
+            if channels is None and roles is None:
+                if "channels" in tcmd_state:
+                    tcmd_state["channels"] = {all_channels_id: True}
+
+                if "roles" in tcmd_state:
+                    tcmd_state["roles"] = {everyone_role_id: True}
+            else:
+                if "channels" in tcmd_state and channels is True:
+                    tcmd_state["channels"] = {all_channels_id: True}
+
+                if "roles" in tcmd_state and roles is True:
+                    tcmd_state["roles"] = {everyone_role_id: True}
 
             await self.update_guild_tcmd_states(ctx.guild.id, tcmd_state)
         else:
@@ -1035,7 +1141,8 @@ class TextCommandManager(BaseCommandCog, name="text-command-manager"):
             )
 
 
-async def setup(bot: BotT):
+@snakecore.commands.decorators.with_config_kwargs
+async def setup(bot: BotT, theme_color: Union[int, discord.Color] = 0):
     db_engine = bot.get_database()
     if not isinstance(db_engine, AsyncEngine):
         raise RuntimeError(
@@ -1068,4 +1175,4 @@ async def setup(bot: BotT):
         extension_data["version"] = __version__
         await bot.update_extension_data(**extension_data)
 
-    await bot.add_cog(TextCommandManager(bot, db_engine))
+    await bot.add_cog(TextCommandManager(bot, db_engine, theme_color=int(theme_color)))
