@@ -155,12 +155,12 @@ class PygameBot(snakecore.commands.Bot):
         if (
             ctx.command is not None
             and (
-                ctx.command.extras.get("response_message_deletion_by_author", False)
-                or ctx.command.extras.get("response_message_deletion_by_author")
+                ctx.command.extras.get("response_message_deletion_reaction", False)
+                or ctx.command.extras.get("response_message_deletion_reaction")
                 is not False
                 and ctx.command.cog is not None
                 and getattr(
-                    ctx.command.cog, "response_message_deletion_by_author", False
+                    ctx.command.cog, "response_message_deletion_reaction", False
                 )
             )
             and (response_message := self.cached_response_messages.get(ctx.message.id))
