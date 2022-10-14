@@ -31,7 +31,7 @@ class EmbedHelpCommand(commands.HelpCommand):
         command_attrs["usage"] = "[name]"
 
         self.theme_color = discord.Color(int(options.get("theme_color", 0)))
-        self.bot_help_message = discord.Color(int(options.get("bot_help_message", "")))
+        self.bot_help_message = options.get("bot_help_message", "")
         super().__init__(**options)
 
     def get_ending_note(self):
