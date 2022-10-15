@@ -4,6 +4,7 @@ import enum
 from hashlib import sha1
 import pickle
 import re
+import time
 from typing import TYPE_CHECKING, Any, Literal, Optional, Union
 from uuid import UUID
 
@@ -31,6 +32,30 @@ if TYPE_CHECKING:
     Parens = tuple
 
 
+ChannelOrRoleOverrides = list[
+    tuple[
+        Union[
+            discord.Role,
+            discord.TextChannel,
+            discord.VoiceChannel,
+            discord.ForumChannel,
+            Literal[
+                "all channels",
+                "All Channels",
+                "All channels",
+                "all Channels",
+                "ALL CHANNELS",
+                "everyone",
+                "@everyone",
+                "Everyone",
+                "EVERYONE",
+            ],
+        ],
+        bool,
+    ]
+]
+
+
 class TCMDCantRunReason(enum.Enum):
     BAD_CONTEXT = enum.auto()
     DISABLED = enum.auto()
@@ -40,6 +65,11 @@ class TCMDCantRunReason(enum.Enum):
 
 
 class TextCommandManager(BaseCommandCog, name="text-command-manager"):
+    """A text command manager to meet all your text
+    command management needs, from enabling/disabling commands
+    and/or their subcommands to setting channel or role-specific permissions
+    and applying mock roles for testing."""
+
     def __init__(self, bot: BotT, db_engine: AsyncEngine, theme_color: int = 0) -> None:
         super().__init__(bot)
         self.db_engine = db_engine
@@ -48,7 +78,10 @@ class TextCommandManager(BaseCommandCog, name="text-command-manager"):
         ] = OrderedDict()
         self.cached_guild_tcmd_state_maps_maxlen = 100
         bot.add_check(self.global_tcmd_check)
-        self.theme_color = theme_color
+        self.theme_color = int(theme_color)
+        self.guild_mock_roles: dict[
+            int, dict[int, tuple[tuple[int, ...], asyncio.Task[None], float, float]]
+        ] = {}
 
     async def global_tcmd_check(self, ctx: commands.Context[BotT]):
         if not (
@@ -150,6 +183,19 @@ class TextCommandManager(BaseCommandCog, name="text-command-manager"):
         everyone_role_id = ctx.guild.id
         all_channels_id = ctx.guild.id - 1
 
+        category_id = ctx.channel.category_id if ctx.channel.category_id else 0
+
+        using_mock_roles = False
+
+        if (
+            ctx.guild.id in self.guild_mock_roles
+            and ctx.author.id in self.guild_mock_roles[ctx.guild.id]
+        ):
+            using_mock_roles = True
+            role_ids, *_ = self.guild_mock_roles[ctx.guild.id][ctx.author.id]
+        else:
+            role_ids = tuple(role.id for role in ctx.author.roles)
+
         guild_tcmd_state_map: dict[
             str, GuildTextCommandState
         ] = await self.fetch_guild_tcmd_states(ctx.guild.id)
@@ -204,13 +250,15 @@ class TextCommandManager(BaseCommandCog, name="text-command-manager"):
                     TCMDCantRunReason.DISABLED_BY_PARENT
                 )  # command is disabled via a parent's subcommand bit
 
-            if is_admin:
+            if (
+                not using_mock_roles
+                and is_admin
+                or using_mock_roles
+                and ctx.command in (self.tcm_mockroles, self.tcm_clearmockroles)
+            ):
                 continue
 
-            channel_overrides = tcmd_state.get("channels")
-            category_id = ctx.channel.category_id if ctx.channel.category_id else 0
-
-            if channel_overrides:
+            if channel_overrides := tcmd_state.get("channels"):
                 if all_channels_id in channel_overrides:
                     target_channel_overrides = (
                         channel_overrides
@@ -269,9 +317,7 @@ class TextCommandManager(BaseCommandCog, name="text-command-manager"):
                     ):
                         return TCMDCantRunReason.MISSING_CHANNEL_PERMISSIONS
 
-            role_overrides = tcmd_state.get("roles")
-            roles = ctx.author.roles
-            if role_overrides:
+            if role_overrides := tcmd_state.get("roles"):
                 if everyone_role_id in role_overrides:
                     target_role_overrides = (
                         role_overrides
@@ -284,16 +330,16 @@ class TextCommandManager(BaseCommandCog, name="text-command-manager"):
                         and not (
                             (
                                 none_disabled := all(
-                                    target_role_overrides.get(roles[i].id, True)
-                                    for i in range(1, len(roles))
+                                    target_role_overrides.get(role_ids[i], True)
+                                    for i in range(1, len(role_ids))
                                 )
                             )
                             or (
                                 not none_disabled
                                 and (
                                     any_enabled := any(
-                                        target_role_overrides.get(roles[i].id, False)
-                                        for i in range(1, len(roles))
+                                        target_role_overrides.get(role_ids[i], False)
+                                        for i in range(1, len(role_ids))
                                     )
                                 )
                             )
@@ -301,8 +347,8 @@ class TextCommandManager(BaseCommandCog, name="text-command-manager"):
                     ) or (
                         not target_role_overrides[everyone_role_id]
                         and not any(
-                            target_role_overrides.get(roles[i].id, False)
-                            for i in range(1, len(roles))
+                            target_role_overrides.get(role_ids[i], False)
+                            for i in range(1, len(role_ids))
                         )
                     ):  # will always include @everyone role
                         return TCMDCantRunReason.MISSING_ROLE_PERMISSIONS
@@ -312,8 +358,8 @@ class TextCommandManager(BaseCommandCog, name="text-command-manager"):
                     # pretend as if it were set to False
                     target_role_overrides = tcmd_state_role_chainmap  # pick overrides of target command and parent commands
                     if not any(
-                        target_role_overrides.get(roles[i].id, False)
-                        for i in range(1, len(roles))
+                        target_role_overrides.get(role_ids[i], False)
+                        for i in range(1, len(role_ids))
                     ):
                         return TCMDCantRunReason.MISSING_ROLE_PERMISSIONS
 
@@ -390,6 +436,12 @@ class TextCommandManager(BaseCommandCog, name="text-command-manager"):
             )
 
         self.cached_guild_tcmd_state_maps[guild_id] = guild_tcmd_state_map
+
+        if (
+            len(self.cached_guild_tcmd_state_maps)
+            > self.cached_guild_tcmd_state_maps_maxlen
+        ):
+            self.cached_guild_tcmd_state_maps.popitem(last=False)
 
         return guild_tcmd_state_map
 
@@ -507,35 +559,148 @@ class TextCommandManager(BaseCommandCog, name="text-command-manager"):
                 dict(guild_id=guild_id),
             )  # delete entry for command and all its subcommands
 
-    @commands.group(invoke_without_command=True)
+    @commands.guild_only()
+    @commands.group(
+        invoke_without_command=True,
+        extras=dict(response_messsage_deletion_reaction=True),
+    )
     async def tcm(self, ctx: commands.Context[BotT]):
-        await ctx.send(
-            embed=discord.Embed(
+        await self.send_embed_paginator_output(
+            ctx,
+            discord.Embed(
                 title="Text Command Manager",
                 description="A text command manager to meet all your text "
                 "command management needs, "
                 "from enabling/disabling commands and/or their subcommands "
-                "to setting channel or role-spefic restrictions.\n\n"
+                "to setting channel or role-specific restrictions.\n\n"
                 "To see existing settings, run the `tcm view` command. "
                 "Use `tcm set` to alter text command settings.",
-                color=self.theme_color,
-            )
+                color=int(self.theme_color),
+            ),
         )
 
-    @tcm.command(name="view")
+    async def _delete_member_mock_roles(
+        self, delay: float, guild_id: int, member_id: int
+    ):
+        try:
+            await asyncio.sleep(delay)
+            if guild_id in self.guild_mock_roles:
+                if member_id in self.guild_mock_roles[guild_id]:
+                    del self.guild_mock_roles[guild_id][member_id]
+
+                if not self.guild_mock_roles[guild_id]:
+                    del self.guild_mock_roles[guild_id]
+        except asyncio.CancelledError:
+            return
+
+    @commands.has_guild_permissions(manage_roles=True)
+    @tcm.command(name="mockroles", extras=dict(response_message_deletion_reaction=True))
+    async def tcm_mockroles(
+        self,
+        ctx: commands.Context[BotT],
+        *roles: discord.Role,
+    ):
+        assert ctx.guild and isinstance(ctx.author, discord.Member)
+
+        if len(roles) > 100:
+            raise commands.CommandInvokeError(
+                commands.CommandError("Cannot set more than 100 mock roles per member.")
+            )
+
+        main_embed = discord.Embed(
+            title="Text Command Mock Roles",
+            description=f"No mock roles found for {ctx.author.mention} .",
+            color=int(self.theme_color),
+        )
+
+        role_ids = task = deletion_delay_secs = timestamp = None
+
+        if (
+            ctx.guild.id in self.guild_mock_roles
+            and ctx.author.id in self.guild_mock_roles[ctx.guild.id]
+        ):
+            role_ids, task, deletion_delay_secs, timestamp = self.guild_mock_roles[
+                ctx.guild.id
+            ][ctx.author.id]
+            if roles:
+                if not task.done():
+                    task.cancel()
+                del self.guild_mock_roles[ctx.guild.id][ctx.author.id]
+
+        if roles:
+            if ctx.guild.id not in self.guild_mock_roles:
+                self.guild_mock_roles[ctx.guild.id] = {}
+
+            if ctx.author.id not in self.guild_mock_roles[ctx.guild.id]:
+                deletion_delay_secs = 300.0
+                task = asyncio.create_task(
+                    self._delete_member_mock_roles(
+                        deletion_delay_secs, ctx.guild.id, ctx.author.id
+                    )
+                )
+                role_ids, task, deletion_delay_secs, timestamp = self.guild_mock_roles[
+                    ctx.guild.id
+                ][ctx.author.id] = (
+                    tuple(role.id for role in roles),
+                    task,
+                    deletion_delay_secs,
+                    time.time(),
+                )
+
+        if role_ids and task and deletion_delay_secs and timestamp:
+            main_embed.description = (
+                f"**Mock roles for {ctx.author.mention} ({len(role_ids)}):**\n\n"
+                + "\n".join(
+                    f"• @everyone (No Roles)"
+                    if role_id == ctx.guild.id
+                    else f"• <@&{role_id}>"
+                    for role_id in role_ids
+                )
+                + f"\n\nThese mock roles will expire **<t:{int(timestamp+deletion_delay_secs)}:R>**."
+            )
+
+        await self.send_embed_paginator_output(ctx, main_embed)
+
+    @commands.has_guild_permissions(manage_roles=True)
+    @tcm.command(name="clearmockroles")
+    async def tcm_clearmockroles(
+        self,
+        ctx: commands.Context[BotT],
+    ):
+        assert ctx.guild and isinstance(ctx.author, discord.Member)
+        if (
+            ctx.guild.id in self.guild_mock_roles
+            and ctx.author.id in self.guild_mock_roles[ctx.guild.id]
+        ):
+            role_ids, task, deletion_delay_secs, timestamp = self.guild_mock_roles[
+                ctx.guild.id
+            ][ctx.author.id]
+            if not task.done():
+                task.cancel()
+            del self.guild_mock_roles[ctx.guild.id][ctx.author.id]
+
+    @commands.guild_only()
+    @tcm.command(
+        name="view",
+        extras=dict(
+            response_message_deletion_reaction=True, invoke_on_message_edit=True
+        ),
+    )
     async def tcm_view(
         self,
         ctx: commands.Context[BotT],
-        tcmd_names: Optional[Union[Parens[str, ...], str]] = None,
+        *names: str,
     ):
         assert ctx.guild and isinstance(ctx.author, discord.Member)
+
+        tcmd_names = names
 
         everyone_role_id = ctx.guild.id
         all_channels_id = ctx.guild.id - 1
 
         main_embed_dict: EmbedDict = {}
         main_embed_dict["title"] = "Text Command State & Permission Settings"
-        main_embed_dict["color"] = self.theme_color
+        main_embed_dict["color"] = int(self.theme_color)
 
         if not await self.guild_tcmd_states_exists(ctx.guild.id):
             main_embed_dict["description"] = (
@@ -720,63 +885,33 @@ class TextCommandManager(BaseCommandCog, name="text-command-manager"):
                 for final_embed_dict in final_embed_dicts
             )
 
-        response_msg = await ctx.send(embed=final_embeds[0])
+        await self.send_embed_paginator_output(ctx, *final_embeds)
 
-        if len(final_embeds) > 1:
-            paginator = snakecore.utils.pagination.EmbedPaginator(
-                await response_msg.edit(content="\u200b", embed=None),
-                *final_embeds,
-                caller=ctx.author,
-                whitelisted_role_ids=(
-                    role.id
-                    for role in ctx.guild.roles
-                    if role.permissions.administrator
-                ),
-                inactivity_timeout=60,
-                theme_color=0xFFD868,
-            )
-
-            self.cached_embed_paginators[response_msg.id] = paginator_tuple = (
-                paginator,
-                asyncio.create_task(paginator.mainloop(ctx.bot)),
-            )
-
-            await paginator_tuple[1]
-
+    @commands.guild_only()
     @commands.max_concurrency(1, per=commands.BucketType.guild, wait=True)
-    @tcm.command(name="set")
+    @tcm.command(
+        name="set",
+        usage="<name/( name ... )> <flags <override: role/channel on|off>... "
+        "[command: on|off] [subcommand: on|off]>",
+    )
     @flagconverter_kwargs()
     async def tcm_set(
         self,
         ctx: commands.Context[BotT],
-        tcmd_names: Union[Parens[str, ...], str],
-        *channel_or_role_overrides: Parens[
-            Union[
-                discord.Role,
-                discord.TextChannel,
-                discord.VoiceChannel,
-                discord.ForumChannel,
-                Literal[
-                    "all channels",
-                    "All Channels",
-                    "All channels",
-                    "all Channels",
-                    "ALL CHANNELS",
-                    "everyone",
-                    "@everyone",
-                    "Everyone",
-                    "EVERYONE",
-                ],
-            ],
-            bool,
-        ],
+        name: Union[Parens[str, ...], str],
+        *,
+        override: ChannelOrRoleOverrides,
         command: Optional[bool] = None,
         subcommands: Optional[bool] = None,
     ):
         assert ctx.guild
 
+        tcmd_names = name
+
         enabled = command
         subcommands_enabled = subcommands
+
+        channel_or_role_overrides = override
 
         if (
             not tcmd_names
@@ -951,35 +1086,19 @@ class TextCommandManager(BaseCommandCog, name="text-command-manager"):
 
         await self.update_guild_tcmd_states(ctx.guild.id, *tcmd_states)
 
-    @commands.has_guild_permissions(administrator=True)
+    @commands.guild_only()
     @commands.max_concurrency(1, per=commands.BucketType.guild, wait=True)
-    @tcm.command(name="setglobal")
+    @tcm.command(name="setglobal", usage="<flags <override: role/channel on|off>... >")
     @flagconverter_kwargs()
     async def tcm_setglobal(
         self,
         ctx: commands.Context[BotT],
-        *channel_or_role_overrides: Parens[
-            Union[
-                discord.Role,
-                discord.TextChannel,
-                discord.VoiceChannel,
-                discord.ForumChannel,
-                Literal[
-                    "all channels",
-                    "All Channels",
-                    "All channels",
-                    "all Channels",
-                    "ALL CHANNELS",
-                    "everyone",
-                    "@everyone",
-                    "Everyone",
-                    "EVERYONE",
-                ],
-            ],
-            bool,
-        ],
+        *,
+        override: ChannelOrRoleOverrides,
     ):
         assert ctx.guild
+
+        channel_or_role_overrides = override
 
         if not channel_or_role_overrides:
             raise commands.CommandInvokeError(
@@ -1020,15 +1139,16 @@ class TextCommandManager(BaseCommandCog, name="text-command-manager"):
 
         await self.update_guild_tcmd_states(ctx.guild.id, tcmd_state)  # type: ignore
 
-    @commands.has_guild_permissions(administrator=True)
-    @tcm.command(name="clear")
-    @flagconverter_kwargs()
+    @commands.guild_only()
+    @tcm.command(name="clear", require_var_positional=True)
     async def tcm_clear(
         self,
         ctx: commands.Context[BotT],
-        tcmd_names: Union[Parens[str, ...], str],
+        *names: str,
     ):
         assert ctx.guild
+
+        tcmd_names = names
 
         if isinstance(tcmd_names, str):
             tcmd_names = (tcmd_names,)
@@ -1047,9 +1167,8 @@ class TextCommandManager(BaseCommandCog, name="text-command-manager"):
                     )
                 )
 
-    @commands.has_guild_permissions(administrator=True)
+    @commands.guild_only()
     @tcm.command(name="clearall")
-    @flagconverter_kwargs()
     async def tcm_clearall(
         self,
         ctx: commands.Context[BotT],
@@ -1057,18 +1176,23 @@ class TextCommandManager(BaseCommandCog, name="text-command-manager"):
         assert ctx.guild
         await self.delete_all_guild_tcmd_states(ctx.guild.id)
 
-    @commands.has_guild_permissions(administrator=True)
-    @tcm.command(name="clearoverrides")
+    @commands.guild_only()
+    @tcm.command(
+        name="clearoverrides",
+        usage="<name/( name ... )> [flags [roles: on|off] [channels: on|off]]",
+    )
     @flagconverter_kwargs()
     async def tcm_clearoverrides(
         self,
         ctx: commands.Context[BotT],
-        tcmd_names: Union[Parens[str, ...], str],
+        name: Union[Parens[str, ...], str],
         *,
-        channels: Optional[bool] = None,
         roles: Optional[bool] = None,
+        channels: Optional[bool] = None,
     ):
         assert ctx.guild
+
+        tcmd_names = name
 
         if isinstance(tcmd_names, str):
             tcmd_names = (tcmd_names,)
@@ -1080,17 +1204,17 @@ class TextCommandManager(BaseCommandCog, name="text-command-manager"):
                 tcmd_state = tcmd_state_map[tcmd_name].copy()
 
                 if channels is None and roles is None:
-                    if "channels" in tcmd_state:
-                        del tcmd_state["channels"]
-
                     if "roles" in tcmd_state:
                         del tcmd_state["roles"]
-                else:
-                    if "channels" in tcmd_state and channels is True:
-                        del tcmd_state["channels"]
 
+                    if "channels" in tcmd_state:
+                        del tcmd_state["channels"]
+                else:
                     if "roles" in tcmd_state and roles is True:
                         del tcmd_state["roles"]
+
+                    if "channels" in tcmd_state and channels is True:
+                        del tcmd_state["channels"]
 
                 await self.update_guild_tcmd_states(ctx.guild.id, tcmd_state)
             else:
@@ -1100,14 +1224,18 @@ class TextCommandManager(BaseCommandCog, name="text-command-manager"):
                     )
                 )
 
-    @commands.has_guild_permissions(administrator=True)
-    @tcm.command(name="clearglobaloverrides")
+    @commands.guild_only()
+    @tcm.command(
+        name="clearglobaloverrides",
+        usage="[flags [roles: on|off] [channels: on|off]]",
+    )
+    @flagconverter_kwargs()
     async def tcm_clearglobaloverrides(
         self,
         ctx: commands.Context[BotT],
         *,
-        channels: Optional[bool] = None,
         roles: Optional[bool] = None,
+        channels: Optional[bool] = None,
     ):
         assert ctx.guild
 
@@ -1120,17 +1248,17 @@ class TextCommandManager(BaseCommandCog, name="text-command-manager"):
             tcmd_state = tcmd_state_map[ZERO_UUID].copy()
 
             if channels is None and roles is None:
-                if "channels" in tcmd_state:
-                    tcmd_state["channels"] = {all_channels_id: True}
-
                 if "roles" in tcmd_state:
                     tcmd_state["roles"] = {everyone_role_id: True}
-            else:
-                if "channels" in tcmd_state and channels is True:
-                    tcmd_state["channels"] = {all_channels_id: True}
 
+                if "channels" in tcmd_state:
+                    tcmd_state["channels"] = {all_channels_id: True}
+            else:
                 if "roles" in tcmd_state and roles is True:
                     tcmd_state["roles"] = {everyone_role_id: True}
+
+                if "channels" in tcmd_state and channels is True:
+                    tcmd_state["channels"] = {all_channels_id: True}
 
             await self.update_guild_tcmd_states(ctx.guild.id, tcmd_state)
         else:
@@ -1142,11 +1270,12 @@ class TextCommandManager(BaseCommandCog, name="text-command-manager"):
 
 
 @snakecore.commands.decorators.with_config_kwargs
-async def setup(bot: BotT, theme_color: Union[int, discord.Color] = 0):
+async def setup(bot: BotT, color: Union[int, discord.Color] = 0):
     db_engine = bot.get_database()
     if not isinstance(db_engine, AsyncEngine):
         raise RuntimeError(
-            "Could not find primary database interface of type 'sqlalchemy.ext.asyncio.AsyncEngine'"
+            "Could not find primary database interface of type "
+            "'sqlalchemy.ext.asyncio.AsyncEngine'"
         )
     elif db_engine.name not in ("sqlite", "postgresql"):
         raise RuntimeError(f"Unsupported database engine: {db_engine.name}")
@@ -1175,4 +1304,4 @@ async def setup(bot: BotT, theme_color: Union[int, discord.Color] = 0):
         extension_data["version"] = __version__
         await bot.update_extension_data(**extension_data)
 
-    await bot.add_cog(TextCommandManager(bot, db_engine, theme_color=int(theme_color)))
+    await bot.add_cog(TextCommandManager(bot, db_engine, theme_color=int(color)))
