@@ -155,12 +155,12 @@ class PygameBot(snakecore.commands.Bot):
         if (
             ctx.command is not None
             and (
-                ctx.command.extras.get("response_message_deletion_by_author", False)
-                or ctx.command.extras.get("response_message_deletion_by_author")
+                ctx.command.extras.get("response_message_deletion_reaction", False)
+                or ctx.command.extras.get("response_message_deletion_reaction")
                 is not False
                 and ctx.command.cog is not None
                 and getattr(
-                    ctx.command.cog, "response_message_deletion_by_author", False
+                    ctx.command.cog, "response_message_deletion_reaction", False
                 )
             )
             and (response_message := self.cached_response_messages.get(ctx.message.id))
@@ -253,7 +253,7 @@ class PygameBot(snakecore.commands.Bot):
 
     async def teardown_hook(self) -> None:
         self.handle_loading_reactions.cancel()
-        if "databases" in self._botconfig:
+        if self._databases:
             await self._close_database_connections()
 
     async def on_ready(self):
@@ -292,7 +292,7 @@ class PygameBot(snakecore.commands.Bot):
         log_exception = False
         has_cause = False
 
-        color = 0xFF0000
+        color = 0x170401
 
         if isinstance(
             exception, commands.CommandNotFound
@@ -321,14 +321,52 @@ class PygameBot(snakecore.commands.Bot):
         elif isinstance(exception, commands.DisabledCommand):
             title = f"Cannot execute command! ({exception.args[0]})"
             description = (
-                f"The specified command has been temporarily disabled, "
-                "while the bot wizards are casting their spells on it!\n"
-                "Please try running the command after the maintenance work "
-                "has finished."
+                f"The specified command has been globally disabled. "
+                "Please stand by as the bot wizards search for "
+                "workarounds and solutions to this issue."
             )
-        elif isinstance(exception, commands.CommandInvokeError):
-            if isinstance(exception.__cause__, (type(None), discord.HTTPException)):
-                title = f"Command `{context.invoked_with}` reported an error:"
+
+        elif isinstance(exception, commands.CheckFailure):
+            title = "Command invocation check(s) failed"
+            if isinstance(
+                exception,
+                (
+                    commands.MissingPermissions,
+                    commands.MissingRole,
+                    commands.MissingAnyRole,
+                    commands.BotMissingPermissions,
+                    commands.BotMissingRole,
+                    commands.BotMissingAnyRole,
+                ),
+            ):
+                title = "You're missing some "
+
+                if isinstance(
+                    exception,
+                    (
+                        commands.BotMissingPermissions,
+                        commands.BotMissingRole,
+                        commands.BotMissingAnyRole,
+                    ),
+                ):
+                    title = "I'm missing some "
+
+                if isinstance(
+                    exception,
+                    (commands.MissingPermissions, commands.BotMissingPermissions),
+                ):
+                    title += "permissions"
+                else:
+                    title += "roles"
+
+        elif isinstance(
+            exception, (commands.CommandInvokeError, commands.ConversionError)
+        ):
+            if isinstance(exception, commands.CommandInvokeError) and (
+                not exception.__cause__
+                or isinstance(exception.__cause__, discord.HTTPException)
+            ):
+                title = f"Command `{context.invoked_with}` reported an error"
                 description = exception.args[0] if exception.args else ""
                 description = description.replace(
                     f"Command raised an exception: {exception.original.__class__.__name__}: ",
@@ -337,7 +375,7 @@ class PygameBot(snakecore.commands.Bot):
                 color = 0x851D08
                 footer_text = exception.__class__.__name__
 
-            else:
+            elif exception.__cause__:
                 log_exception = True
                 has_cause = True
                 title = "Unknown error!"
@@ -345,23 +383,11 @@ class PygameBot(snakecore.commands.Bot):
                     "An unknown error occured while running the "
                     f"{context.command.qualified_name} command!\n"
                     "This is most likely a bug in the bot itself, and our fellow bot wizards will "
-                    f"recast magical spells on it soon!\n\n"
+                    "banish it in no time!\n\n"
                     f"```\n{exception.__cause__.args[0] if exception.__cause__.args else ''}```"
                 )
+                color = 0xFF0000
                 footer_text = exception.__cause__.__class__.__name__
-
-        elif isinstance(exception, commands.ConversionError):
-            log_exception = True
-            has_cause = True
-            title = "Unknown error!"
-            description = (
-                "An unknown error occured while running the "
-                f"{context.command.qualified_name} command!\n"
-                "This is most likely a bug in the bot itself, and our fellow bot wizards will "
-                f"recast magical spells on it soon!\n\n"
-                f"```\n{exception.__cause__.args[0] if exception.__cause__ and exception.__cause__.args else ''}```"
-            )
-            footer_text = exception.__cause__.__class__.__name__
 
         footer_text = f"{footer_text}\n(React with 🗑 to delete this error message in the next 30s)"
 
@@ -370,27 +396,22 @@ class PygameBot(snakecore.commands.Bot):
                 context.message.id
             )
             try:
-                (
-                    (
-                        await snakecore.utils.embeds.replace_embed_at(
-                            target_message,
-                            title=title,
-                            description=description,
-                            color=color,
-                            footer_text=footer_text,
-                        )
+                if target_message is not None:
+                    await snakecore.utils.embeds.replace_embed_at(
+                        target_message,
+                        title=title,
+                        description=description,
+                        color=color,
+                        footer_text=footer_text,
                     )
-                    if target_message is not None
-                    else (
-                        target_message := await snakecore.utils.embeds.send_embed(
-                            context.channel,
-                            title=title,
-                            description=description,
-                            color=color,
-                            footer_text=footer_text,
-                        )
+                else:
+                    target_message = await snakecore.utils.embeds.send_embed(
+                        context.channel,
+                        title=title,
+                        description=description,
+                        color=color,
+                        footer_text=footer_text,
                     )
-                )
             except discord.NotFound:
                 # response message was deleted, send a new message
                 target_message = await snakecore.utils.embeds.send_embed(
@@ -439,25 +460,6 @@ class PygameBot(snakecore.commands.Bot):
             finally:
                 del self._recent_response_error_messages[ctx.message.id]
 
-    def get_database_data(self) -> Optional[dict[str, Union[str, dict, AsyncEngine]]]:
-        """Get the database dictionary for the primary database of this bot,
-        containing the keys "name" for the database name, "engine" for the
-        SQLAlchemy engine and if available, "conect_args" for a dictionary
-        containing the database driver library-specific arguments for their
-        `.connect()` function.
-
-        Returns:
-            Optional[dict]: The dictionary, or None dictionary if nothing was
-              loaded/configured.
-        """
-        if not self._main_database:
-            return None
-
-        db_dict = self._main_database.copy()
-        if "url" in db_dict:
-            del db_dict["url"]
-        return db_dict
-
     def get_database(self) -> Optional[AsyncEngine]:
         """Get the `sqlachemy.ext.asyncio.AsyncEngine` object for the primary
         database of this bot.
@@ -469,15 +471,15 @@ class PygameBot(snakecore.commands.Bot):
 
         return self._main_database.get("engine")  # type: ignore
 
-    def get_databases(
+    def get_databases_data(
         self, *names: str
     ) -> list[dict[str, Union[str, dict, AsyncEngine]]]:
-        """Get the database dictionaries for all the databases of this bot,
-        containing the keys "name" for the database name, "engine" for the
-        SQLAlchemy engine and if available, "conect_args" for a dictionary
-        containing the database driver library-specific arguments for their
-        `.connect()` function. The first dictionary to be returned is always
-        that of the bot's primary database.
+        """Get the database dictionaries for all the currently configured databases,
+        containing the keys "name" for the database name, "engine" for the SQLAlchemy
+        engine and if available, "conect_args" for a dictionary containing the
+        database driver library-specific arguments for their `.connect()` function.
+        The first dictionary to be returned is always that of the bot's primary
+        database.
 
         If string database names are given, only the
         dictionaries of those (if found) will be returned by the bot.
@@ -504,13 +506,13 @@ class PygameBot(snakecore.commands.Bot):
 
         engine: AsyncEngine = self._main_database["engine"]  # type: ignore
         conn: AsyncConnection
-        async with engine.connect() as conn:
+        async with engine.begin() as conn:
             if engine.name == "sqlite":
                 await conn.execute(
                     text(
                         "CREATE TABLE IF NOT EXISTS "
                         "bot_extension_data"
-                        "(name TEXT, version TEXT, table_name_prefix TEXT, data BLOB)"
+                        "(name VARCHAR(1000), version VARCHAR(1000), table_name_prefix VARCHAR(1000), data BLOB)"
                     )
                 )
 
@@ -519,11 +521,9 @@ class PygameBot(snakecore.commands.Bot):
                     text(
                         "CREATE TABLE IF NOT EXISTS "
                         "bot_extension_data"
-                        "(name TEXT, version TEXT, table_name_prefix TEXT, data BYTEA)"
+                        "(name VARCHAR(1000), version VARCHAR(1000), table_name_prefix VARCHAR(1000), data BYTEA)"
                     )
                 )
-
-            await conn.commit()
 
         self._extension_data_storage_is_init = True
 
@@ -532,7 +532,7 @@ class PygameBot(snakecore.commands.Bot):
 
     async def create_extension_data(
         self,
-        extension_name: str,
+        name: str,
         version: str,
         table_name_prefix: str,
         initial_data: Optional[bytes] = None,
@@ -540,11 +540,11 @@ class PygameBot(snakecore.commands.Bot):
 
         if not self._extension_data_storage_is_init:
             raise RuntimeError("Extension data storage was not initialized.")
-        elif not isinstance(extension_name, str):
+        elif not isinstance(name, str):
             raise TypeError(
-                f"argument 'extension_name' must be a fully qualified extension "
+                f"argument 'name' must be a fully qualified extension "
                 "name of type 'str', not "
-                f"'{extension_name.__class__.__name__}'"
+                f"'{name.__class__.__name__}'"
             )
         elif not isinstance(version, str):
             raise TypeError(
@@ -573,10 +573,10 @@ class PygameBot(snakecore.commands.Bot):
                 text(
                     "INSERT INTO bot_extension_data "
                     "(name, version, table_name_prefix, data) "
-                    "VALUES (:extension_name, :version, :table_name_prefix, :initial_data)"
+                    "VALUES (:name, :version, :table_name_prefix, :initial_data)"
                 ),
                 dict(
-                    extension_name=extension_name,
+                    name=name,
                     version=version,
                     table_name_prefix=table_name_prefix,
                     initial_data=initial_data,
@@ -584,16 +584,14 @@ class PygameBot(snakecore.commands.Bot):
             )
             await conn.commit()
 
-    async def read_extension_data(
-        self, extension_name: str
-    ) -> dict[str, Union[str, bytes]]:
+    async def read_extension_data(self, name: str) -> dict[str, Union[str, bytes]]:
         if not self._extension_data_storage_is_init:
             raise RuntimeError("Extension data storage was not initialized.")
 
-        elif not isinstance(extension_name, str):
+        elif not isinstance(name, str):
             raise TypeError(
-                f"argument 'extension_name' must be of type 'str', not "
-                f"'{extension_name.__class__.__name__}'"
+                f"argument 'name' must be of type 'str', not "
+                f"'{name.__class__.__name__}'"
             )
 
         engine: AsyncEngine = self._main_database["engine"]  # type: ignore
@@ -605,32 +603,32 @@ class PygameBot(snakecore.commands.Bot):
         async with engine.connect() as conn:
             result: sqlalchemy.engine.Result = await conn.execute(
                 text("SELECT * FROM bot_extension_data"),
-                dict(extension_name=extension_name),
+                dict(name=name),
             )
 
             row: Any = result.first()
             if row is None:
                 raise LookupError(
                     f"Could not find extension storage data for extension named "
-                    f"'{extension_name}'"
+                    f"'{name}'"
                 )
 
             return dict(
-                extension_name=row.name,
+                name=row.name,
                 version=row.version,
                 table_name_prefix=row.table_name_prefix,
                 data=row.data,
             )
 
-    async def check_extension_data_exists(self, extension_name: str):
+    async def check_extension_data_exists(self, name: str):
         if not self._extension_data_storage_is_init:
             raise RuntimeError("Extension data storage was not initialized.")
 
-        elif not isinstance(extension_name, str):
+        elif not isinstance(name, str):
             raise TypeError(
-                f"argument 'extension_name' must be a fully qualified extension "
+                f"argument 'name' must be a fully qualified extension "
                 "name of type 'str', not "
-                f"'{extension_name.__class__.__name__}'"
+                f"'{name.__class__.__name__}'"
             )
 
         engine: AsyncEngine = self._main_database["engine"]  # type: ignore
@@ -644,9 +642,9 @@ class PygameBot(snakecore.commands.Bot):
                 (
                     await conn.execute(
                         text(
-                            "SELECT EXISTS(SELECT 1 FROM bot_extension_data WHERE name == :extension_name)"
+                            "SELECT EXISTS(SELECT 1 FROM bot_extension_data WHERE name == :name)"
                         ),
-                        dict(extension_name=extension_name),
+                        dict(name=name),
                     )
                 ).first()[0]
             )
@@ -654,7 +652,7 @@ class PygameBot(snakecore.commands.Bot):
 
     async def update_extension_data(
         self,
-        extension_name: str,
+        name: str,
         version: Optional[str] = None,
         table_name_prefix: Optional[str] = None,
         data: Optional[bytes] = None,
@@ -663,11 +661,11 @@ class PygameBot(snakecore.commands.Bot):
         if not self._extension_data_storage_is_init:
             raise RuntimeError("Extension data storage was not initialized.")
 
-        elif not isinstance(extension_name, str):
+        elif not isinstance(name, str):
             raise TypeError(
-                f"argument 'extension_name' must be a fully qualified extension "
+                f"argument 'name' must be a fully qualified extension "
                 "name of type 'str', not "
-                f"'{extension_name.__class__.__name__}'"
+                f"'{name.__class__.__name__}'"
             )
 
         elif version is not None and not isinstance(version, str):
@@ -697,18 +695,18 @@ class PygameBot(snakecore.commands.Bot):
         if engine.name not in ("sqlite", "postgresql"):
             raise RuntimeError(f"Unsupported database dialect '{engine.name}'")
 
-        async with engine.connect() as conn:
+        async with engine.begin() as conn:
             if not (
                 await conn.execute(
                     text(
-                        "SELECT EXISTS(SELECT 1 FROM bot_extension_data WHERE name == :extension_name)"
+                        "SELECT EXISTS(SELECT 1 FROM bot_extension_data WHERE name == :name)"
                     ),
-                    dict(extension_name=extension_name),
+                    dict(name=name),
                 )
             ).first()[0]:
                 raise LookupError(
                     f"Could not find extension storage data for extension named "
-                    f"'{extension_name}'"
+                    f"'{name}'"
                 )
 
             params = {}
@@ -722,27 +720,26 @@ class PygameBot(snakecore.commands.Bot):
 
             target_columns = ", ".join((f"{k} = :{k}" for k in params))
 
-            params["extension_name"] = extension_name
+            params["name"] = name
 
             await conn.execute(
                 text(
-                    "UPDATE bot_extension_data"
+                    "UPDATE bot_extension_data AS bed"
                     + f" SET {target_columns}"
-                    + " FROM bot_extension_data AS bes WHERE bes.name == :extension_name",
+                    + " WHERE bed.name == :name",
                 ),
                 parameters=params,
             )
-            await conn.commit()
 
-    async def delete_extension_data(self, extension_name: str):
+    async def delete_extension_data(self, name: str):
         if not self._extension_data_storage_is_init:
             raise RuntimeError("Extension data storage was not initialized.")
 
-        elif not isinstance(extension_name, str):
+        elif not isinstance(name, str):
             raise TypeError(
-                f"argument 'extension_name' must be a fully qualified extension "
+                f"argument 'name' must be a fully qualified extension "
                 "name of type 'str', not "
-                f"'{extension_name.__class__.__name__}'"
+                f"'{name.__class__.__name__}'"
             )
 
         engine: AsyncEngine = self._main_database["engine"]  # type: ignore
@@ -751,9 +748,8 @@ class PygameBot(snakecore.commands.Bot):
         if engine.name not in ("sqlite", "postgresql"):
             raise RuntimeError(f"Unsupported database dialect '{engine.name}'")
 
-        async with engine.connect() as conn:
+        async with engine.begin() as conn:
             await conn.execute(
-                text("DELETE FROM bot_extension_data WHERE name == :extension_name"),
-                dict(extension_name=extension_name),
+                text("DELETE FROM bot_extension_data WHERE name == :name"),
+                dict(name=name),
             )
-            await conn.commit()

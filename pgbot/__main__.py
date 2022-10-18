@@ -11,7 +11,7 @@ import discord
 from discord.ext import commands
 import snakecore
 
-from . import utils
+from . import constants, utils
 from .bot import (
     PygameBot as Bot,
 )
@@ -40,7 +40,10 @@ DEFAULT_EXTENSIONS: list[dict[str, Any]] = [
     # These can only be excluded through the --ignore-ext' or '--disable-all-exts'
     # CLI options.
     {"name": f"{__package__}.exts.debug_info"},
-    {"name": f"{__package__}.exts.help"},
+    {
+        "name": f"{__package__}.exts.help",
+        "config": {"color": constants.DEFAULT_EMBED_COLOR},
+    },
 ]
 
 
