@@ -1,9 +1,9 @@
-from . import TABLE_NAME_PREFIX
+from . import DB_TABLE_PREFIX
 
 MIGRATIONS = {
     "sqlite": {
         "0.1.0": (
-            f"CREATE TABLE '{TABLE_NAME_PREFIX}guild_tcmd_states' ("
+            f"CREATE TABLE '{DB_TABLE_PREFIX}guild_tcmd_states' ("
             "guild_id INTEGER, "
             "tcmd_uuid UUID, "
             "parent_tcmd_uuid UUID NOT NULL, "
@@ -16,7 +16,7 @@ MIGRATIONS = {
     },
     "postgresql": {
         "0.1.0": (
-            f"CREATE TABLE '{TABLE_NAME_PREFIX}guild_tcmd_states' ("
+            f"CREATE TABLE '{DB_TABLE_PREFIX}guild_tcmd_states' ("
             "guild_id BIGINT NOT NULL, "
             "tcmd_uuid UUID NOT NULL, "
             "parent_tcmd_uuid UUID NOT NULL, "

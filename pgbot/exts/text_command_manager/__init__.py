@@ -20,7 +20,7 @@ from sqlalchemy import text
 
 from ...bot import PygameBot
 from ..base import BaseCommandCog
-from .constants import TABLE_NAME_PREFIX, ZERO_UUID
+from .constants import DB_TABLE_PREFIX, ZERO_UUID
 from ._types import GuildTextCommandState
 from .migrations import MIGRATIONS
 
@@ -156,7 +156,7 @@ class TextCommandManager(BaseCommandCog, name="text-command-manager"):
                 (
                     await conn.execute(
                         text(
-                            f"SELECT EXISTS(SELECT 1 FROM '{TABLE_NAME_PREFIX}guild_tcmd_states' "
+                            f"SELECT EXISTS(SELECT 1 FROM '{DB_TABLE_PREFIX}guild_tcmd_states' "
                             "WHERE guild_id == :guild_id LIMIT 1)"
                         ),
                         dict(guild_id=guild_id),
@@ -412,7 +412,7 @@ class TextCommandManager(BaseCommandCog, name="text-command-manager"):
         async with self.db_engine.connect() as conn:
             result: Result = await conn.execute(
                 text(
-                    f"SELECT * FROM '{TABLE_NAME_PREFIX}guild_tcmd_states' "
+                    f"SELECT * FROM '{DB_TABLE_PREFIX}guild_tcmd_states' "
                     "WHERE guild_id == :guild_id"
                 ),
                 dict(guild_id=guild_id),
@@ -500,7 +500,7 @@ class TextCommandManager(BaseCommandCog, name="text-command-manager"):
             await conn.execute(
                 text(
                     "INSERT INTO "
-                    f"'{TABLE_NAME_PREFIX}guild_tcmd_states' AS guild_tcmd_states "
+                    f"'{DB_TABLE_PREFIX}guild_tcmd_states' AS guild_tcmd_states "
                     f"({', '.join(target_insert_columns)}) "
                     f"VALUES ({', '.join(':'+colname for colname in target_insert_columns)}) "
                     f"ON CONFLICT DO UPDATE SET {target_update_set_columns} "
@@ -532,7 +532,7 @@ class TextCommandManager(BaseCommandCog, name="text-command-manager"):
 
             await conn.execute(
                 text(
-                    f"DELETE FROM '{TABLE_NAME_PREFIX}guild_tcmd_states' "
+                    f"DELETE FROM '{DB_TABLE_PREFIX}guild_tcmd_states' "
                     "AS guild_tcmd_states "
                     "WHERE guild_tcmd_states.guild_id == :guild_id AND "
                     "(guild_tcmd_states.parent_tcmd_uuid == :tcmd_uuid "
@@ -552,7 +552,7 @@ class TextCommandManager(BaseCommandCog, name="text-command-manager"):
         async with self.db_engine.begin() as conn:
             await conn.execute(
                 text(
-                    f"DELETE FROM '{TABLE_NAME_PREFIX}guild_tcmd_states' "
+                    f"DELETE FROM '{DB_TABLE_PREFIX}guild_tcmd_states' "
                     "AS guild_tcmd_states "
                     "WHERE guild_tcmd_states.guild_id == :guild_id"
                 ),
@@ -1285,7 +1285,7 @@ async def setup(bot: BotT, color: Union[int, discord.Color] = 0):
         extension_data = await bot.read_extension_data(__name__)
     except LookupError:
         first_setup = True
-        extension_data = dict(name=__name__, table_name_prefix=TABLE_NAME_PREFIX)
+        extension_data = dict(name=__name__, db_table_prefix=DB_TABLE_PREFIX)
         await bot.create_extension_data(**extension_data, version=__version__)
 
     stored_version = "0.0.0" if first_setup else str(extension_data["version"])
