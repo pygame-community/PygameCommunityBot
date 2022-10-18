@@ -1,48 +1,57 @@
 # PygameBot
-The primary Discord bot powering the Pygame Community Discord server.
+The primary Discord bot powering the Pygame Community Discord server. 
 
 ## Setup
-0. Install Python (`3.9+`). 
-1. Set up a virtual environment using your desired tool (e.g. `virtualenv`, etc.).
+1. Set up a virtual environment using your desired tool (e.g. `virtualenv`, `venv`, etc.).
 2. Install requirements: `python -m pip install -U -r requirements.txt`.
 3. Create all necessary [configuration](#configuration) files.
 4. Launch the application via the [CLI](#cli) using `python -m pgbot` with any needed extra CLI options.
 
+## Customization
+All areas of code marked with `# TODO: ...` are meant to be looked at and potentially modified for a new project (e.g. renaming `TemplateBot` and `Bot-Author` in [`bot/__init__.py`](./bot/__init__.py), [`bot/__main__.py`](./bot/__main__.py) and [`bot/bot.py`](./bot/bot.py)), the rest of the repository and files can be extended as needed. Note however that some modifications may break the CLI, which would require making some changes to it as well.
+
 ## Configuration
-Two files called `botconfig.py` and `launchconfig.py` should be used to provide information required for the bot to run. These files can either be stored in the top level directory or somewhere else if custom paths are passed to the CLI.
+A file called `config.py` should be used to provide information required for the bot to run. This file is meant to be stored locally on host machines without being 'added' to a Git repository. However, this suggestion may be ignored for workflows that don't permit it, and in such cases the files should be removed from the [`.gitignore`](./.gitignore) file. These files can either be stored in the top level directory or somewhere else if custom paths are passed to the CLI.
 
-If having separate configuration files is not desirable, a single `config.py` file can be used to contain the data of both `botconfig.py` and `launchconfig.py` instead.
+For easier overriding of configuration data or local development or testing, a `localconfig.py` file can be created to apply local overrides to the data in `config.py`.
 
-### `botconfig.py`
-This file is meant to hold all essential configuration settings of the bot application, such as credentials and API endpoints. Creating this file is mandatory and all data must be stored within a dictionary called `botconfig`. `"client_id"` and `"token"` within `"authentication"` are mandatory. If using hosting solutions based on ephemeral file systems, credentials stored within the `"authentication"` dictionary like `"client_id"` and `"token"` can be turned into uppercase environment variables prefixed with `AUTH_` (e.g. `AUTH_CLIENT_ID` and `AUTH_TOKEN`) instead. As this file is a Python file, those credentials can be loaded into the `botconfig` dictionary during startup via `os.environ`.
 
-#### Example code for ` botconfig.py` 
+### `config.py`
+This file is meant to hold all essential configuration settings of the bot application, such as credentials and API endpoints. Creating this file is mandatory if `localconfig.py` doesn't exist, all data must be stored within a dictionary called `config`, meaning that it would be accessible as `config.config`. `"token"` within `"authentication"` is mandatory, but `"authentication"` can be expanded as needed to hold more related data. If using hosting solutions based on ephemeral file systems, credentials stored within the `"authentication"` dictionary like `"token"` can be turned into uppercase environment variables prefixed with `AUTH_` (e.g. `AUTH_TOKEN`) instead. As this file is a Python file, those credentials can be loaded into the `config` dictionary during startup via `os.environ`.
+
+For the dictionaries within the `"extensions"` list, the `"name"` and `"package"` keys match the names of the `name` and `package` arguments in the [`discord.ext.commands.Bot.load_extension`](https://discordpy.readthedocs.io/en/latest/ext/commands/api.html#discord.ext.commands.Bot.load_extension) method and the values are meant to be forwarded to it, during startup. The `"config"` key (not to be confused with the `config` dictionary or `config.py`) inside an extension dictionary (only supported with `snakecore`) can be used as a way to provide keyword arguments to extensions while they load, if supported. 
+
+#### Example code for `config.py`
 ```py
-botconfig = {
+config = {
     "authentication": {
-        "client_id": 1234567891011121314,
         "token": "...",
         "...": ...
     },
-    "intents": 0b1100011111111011111101 # https://discord.com/developers/docs/topics/gateway#list-of-intents
+    "intents": 0b1100011111111011111101, # https://discord.com/developers/docs/topics/gateway#list-of-intents
+    "extensions": [
+        {
+        "name": "bot.exts.bundled_extension",
+        "config": {
+            "a": 1,
+            "b": 2
+        }
+    }],
 }
 ```
 
-### `launchconfig.py`
-This file is meant to customize the launching/startup process of the bot application using optional configuration settings. Creating this file is optional but recommended. All data must be stored within a dictionary called `launchconfig`. 
+### `localconfig.py`
+This file is meant to override any data specified in the `config` dictionary inside `config.py`, in order to e.g. locally customize the launching/startup process of the bot application using custom/extra configuration settings. Creating this file is optional. All data must be stored within a dictionary called `config`, meaning that it would be accessible as `localconfig.config`.
 
-For the dictionaries within the `"extensions"` list, the `"name"` and `"package"` keys match the names of the `name` and `package` arguments in the [`discord.ext.commands.Bot.load_extension`](https://discordpy.readthedocs.io/en/latest/ext/commands/api.html#discord.ext.commands.Bot.load_extension) method and the values are meant to be forwarded to it, during startup. `"config"` (only supported with `snakecore`) can be used as a way to provide keyword arguments to extensions while they load, if supported. 
-
-#### Example code for `launchconfig.py` 
+#### Example code for `localconfig.py` 
 ```py
-launchconfig = {
+config = {
     "command_prefix": "!",  # can also be a list of prefixes
     "mention_as_command_prefix": True, # whether mentions may count as command prefixes
     "log_level": "INFO", # omission disables logging entirely
     "extensions": [
         {
-            "name": "bot.exts.local_extension",
-            "package": "bot",
+            "name": "bot.exts.bundled_extension2",
             "config": {
                 "a": 1,
                 "b": 2
@@ -50,7 +59,7 @@ launchconfig = {
         },
         # comment out extensions to disable them or use the `--ignore-extension ext_name` option via the CLI.
         # {
-        #     "name": ".exts.local_extension2",
+        #     "name": ".exts.bundled_extension3",
         #     "package": "bot"
         # },
         {
@@ -70,29 +79,27 @@ launchconfig = {
 ```
 
 ## CLI
-The CLI is used to launch the bot application, whilst also allowing for selective overriding of config specified inside `config.py` or `botconfig.py` and `launchconfig.py` using command line options.
+The CLI is used to launch the bot application, whilst also allowing for selective overriding of the `config` dictionary specified inside `config.py` or `localconfig.py` using command line options.
 
 ```
-Usage: python -m pgbot [OPTIONS]
+Usage: python -m pgbot [OPTIONS] COMMAND [ARGS]...
 
   Launch this Discord bot application.
 
 Options:
   --config, --config-path PATH    A path to the 'config.py' file to use for
-                                  both configuring bot credentials and
-                                  launching. This is resolved before '--
-                                  botconfig-path' and '--launchconfig-path'.
+                                  configuration. credentials and launching.
                                   Failure will occur silently for an
                                   invalid/non-existing path.  [default:
                                   ./config.py]
-  --botconfig, --botconfig-path PATH
-                                  A path to the 'botconfig.py' file to use for
-                                  configuring bot credentials.  [default:
-                                  ./botconfig.py]
-  --launchconfig, --launchconfig-path PATH
-                                  A path to the 'launchconfig.py' file to use
-                                  for configuring bot launching.  [default:
-                                  ./launchconfig.py]
+  --localconfig, --localconfig-path PATH
+                                  A path to the optional 'localconfig.py' file
+                                  to use for locally overriding 'config.py'.
+                                  Failure will occur silently if this file
+                                  could cannot be found/read successfully,
+                                  except when 'config.py' is not provided, in
+                                  which case an errorwill occur.  [default:
+                                  ./localconfig.py]
   --intents TEXT                  The integer of bot intents as bitwise flags
                                   to be used by the bot instead of
                                   discord.py's defaults
