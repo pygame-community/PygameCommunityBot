@@ -159,5 +159,4 @@ desktop.ini
 
 # Discord bot configuration files
 config.py
-botconfig.py
-launchconfig.py
+localconfig.py

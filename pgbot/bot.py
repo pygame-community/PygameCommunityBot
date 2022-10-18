@@ -26,8 +26,7 @@ _logger = logging.getLogger(__name__)
 class PygameBot(snakecore.commands.Bot):
     def __init__(self, *args, **kwargs) -> None:
         super().__init__(*args, **kwargs)
-        self._botconfig: dict = {}
-        self._launchconfig: dict = {}
+        self._config: dict = {}
         self.loading_emoji = "🔄"
 
         self._loading_reaction_queue: asyncio.Queue = UNSET
@@ -205,14 +204,14 @@ class PygameBot(snakecore.commands.Bot):
         self._databases = {
             db_dict["name"]: db_dict
             for db_dict in await utils.load_databases(
-                self._launchconfig["databases"], raise_exceptions=False, logger=_logger
+                self._config["databases"], raise_exceptions=False, logger=_logger
             )
             if isinstance(db_dict["name"], str)
         }
 
-        failures = len(self._launchconfig["databases"]) - len(self._databases.keys())
+        failures = len(self._config["databases"]) - len(self._databases.keys())
 
-        if failures == len(self._launchconfig["databases"]):
+        if failures == len(self._config["databases"]):
             _logger.warning(
                 f"Could not establish a connection to any supported database"
             )
@@ -227,11 +226,11 @@ class PygameBot(snakecore.commands.Bot):
 
     async def setup_hook(self) -> None:
         self._loading_reaction_queue = asyncio.Queue()
-        if "databases" in self._launchconfig:
+        if "databases" in self._config:
             await self._create_database_connections()
             await self._init_extension_data_storage()
 
-        for ext_dict in self._launchconfig["extensions"]:
+        for ext_dict in self._config["extensions"]:
             try:
                 await self.load_extension_with_config(
                     ext_dict["name"],
