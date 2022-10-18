@@ -512,7 +512,7 @@ class PygameBot(snakecore.commands.Bot):
                     text(
                         "CREATE TABLE IF NOT EXISTS "
                         "bot_extension_data"
-                        "(name VARCHAR(1000), version VARCHAR(1000), table_name_prefix VARCHAR(1000), data BLOB)"
+                        "(name VARCHAR(1000), version VARCHAR(1000), db_table_prefix VARCHAR(1000), data BLOB)"
                     )
                 )
 
@@ -521,7 +521,7 @@ class PygameBot(snakecore.commands.Bot):
                     text(
                         "CREATE TABLE IF NOT EXISTS "
                         "bot_extension_data"
-                        "(name VARCHAR(1000), version VARCHAR(1000), table_name_prefix VARCHAR(1000), data BYTEA)"
+                        "(name VARCHAR(1000), version VARCHAR(1000), db_table_prefix VARCHAR(1000), data BYTEA)"
                     )
                 )
 
@@ -534,7 +534,7 @@ class PygameBot(snakecore.commands.Bot):
         self,
         name: str,
         version: str,
-        table_name_prefix: str,
+        db_table_prefix: str,
         initial_data: Optional[bytes] = None,
     ):
 
@@ -551,10 +551,10 @@ class PygameBot(snakecore.commands.Bot):
                 f"argument 'version' must be of type 'str', not "
                 f"'{version.__class__.__name__}'"
             )
-        elif not isinstance(table_name_prefix, str):
+        elif not isinstance(db_table_prefix, str):
             raise TypeError(
-                f"argument 'table_name_prefix' must be of type 'str', not "
-                f"'{table_name_prefix.__class__.__name__}'"
+                f"argument 'db_table_prefix' must be of type 'str', not "
+                f"'{db_table_prefix.__class__.__name__}'"
             )
         elif initial_data is not None and not isinstance(initial_data, bytes):
             raise TypeError(
@@ -572,13 +572,13 @@ class PygameBot(snakecore.commands.Bot):
             await conn.execute(
                 text(
                     "INSERT INTO bot_extension_data "
-                    "(name, version, table_name_prefix, data) "
-                    "VALUES (:name, :version, :table_name_prefix, :initial_data)"
+                    "(name, version, db_table_prefix, data) "
+                    "VALUES (:name, :version, :db_table_prefix, :initial_data)"
                 ),
                 dict(
                     name=name,
                     version=version,
-                    table_name_prefix=table_name_prefix,
+                    db_table_prefix=db_table_prefix,
                     initial_data=initial_data,
                 ),
             )
@@ -616,7 +616,7 @@ class PygameBot(snakecore.commands.Bot):
             return dict(
                 name=row.name,
                 version=row.version,
-                table_name_prefix=row.table_name_prefix,
+                db_table_prefix=row.db_table_prefix,
                 data=row.data,
             )
 
@@ -654,7 +654,7 @@ class PygameBot(snakecore.commands.Bot):
         self,
         name: str,
         version: Optional[str] = None,
-        table_name_prefix: Optional[str] = None,
+        db_table_prefix: Optional[str] = None,
         data: Optional[bytes] = None,
     ):
 
@@ -673,10 +673,10 @@ class PygameBot(snakecore.commands.Bot):
                 f"argument 'version' must be of type 'str', not "
                 f"'{version.__class__.__name__}'"
             )
-        elif table_name_prefix is not None and not isinstance(table_name_prefix, str):
+        elif db_table_prefix is not None and not isinstance(db_table_prefix, str):
             raise TypeError(
-                f"argument 'table_name_prefix' must be of type 'str', not "
-                f"'{table_name_prefix.__class__.__name__}'"
+                f"argument 'db_table_prefix' must be of type 'str', not "
+                f"'{db_table_prefix.__class__.__name__}'"
             )
         elif data is not None and not isinstance(data, bytes):
             raise TypeError(
@@ -684,9 +684,9 @@ class PygameBot(snakecore.commands.Bot):
                 f"not '{data.__class__.__name__}'"
             )
 
-        if not any((version, table_name_prefix, data)):
+        if not any((version, db_table_prefix, data)):
             raise TypeError(
-                f"'version', 'table_name_prefix' and 'data' cannot all be 'None'"
+                f"'version', 'db_table_prefix' and 'data' cannot all be 'None'"
             )
 
         engine: AsyncEngine = self._main_database["engine"]  # type: ignore
@@ -712,8 +712,8 @@ class PygameBot(snakecore.commands.Bot):
             params = {}
             params |= dict(version=version) if version is not None else {}
             params |= (
-                dict(table_name_prefix=table_name_prefix)
-                if table_name_prefix is not None
+                dict(db_table_prefix=db_table_prefix)
+                if db_table_prefix is not None
                 else {}
             )
             params |= dict(data=data) if data is not None else {}
