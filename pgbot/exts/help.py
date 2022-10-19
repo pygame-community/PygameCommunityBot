@@ -49,7 +49,7 @@ class EmbedHelpCommand(commands.HelpCommand):
             )
             if escape_markdown
             else f"{command.qualified_name} {command.signature}"
-        )
+        ).strip()
 
     async def send_bot_help(
         self, mapping: Mapping[Optional[commands.Cog], list[commands.Command]]
@@ -77,11 +77,13 @@ class EmbedHelpCommand(commands.HelpCommand):
             name = "No Category" if cog is None else cog.qualified_name
             filtered = await self.filter_commands(cmds, sort=True)
             if filtered:
-                value = "\n".join(self.get_command_signature(c) for c in cmds)
+                value = "\u2002".join(
+                    f"`{self.get_command_signature(c)}`" for c in cmds
+                )
                 if cog and cog.description:
                     value = f"{cog.description}\n**Commands**\n{value}"
 
-                embed_dict["fields"].append(dict(name=name, value=value, inline=False))
+                embed_dict["fields"].append(dict(name=name, value=value, inline=True))
 
         embed_dict["footer"] = dict(text=self.get_ending_note())
 
@@ -109,8 +111,8 @@ class EmbedHelpCommand(commands.HelpCommand):
         embed_dict["fields"].extend(
             (
                 dict(
-                    name=f"•  `{self.get_command_signature(command, escape_markdown=False).strip()}`",
-                    value=command.short_doc or "...",
+                    name=f"`{self.get_command_signature(command, escape_markdown=False)}`",
+                    value=command.short_doc or "\u200b",
                     inline=False,
                 )
                 for command in filtered
@@ -138,9 +140,7 @@ class EmbedHelpCommand(commands.HelpCommand):
         embed_dict["description"] = ""
 
         if (
-            signature_str := self.get_command_signature(
-                group, escape_markdown=False
-            ).strip()
+            signature_str := self.get_command_signature(group, escape_markdown=False)
         ) != group.qualified_name:  # ignore empty signatures
             embed_dict["description"] = f"```\n{signature_str}```\n"
 
@@ -156,8 +156,8 @@ class EmbedHelpCommand(commands.HelpCommand):
             embed_dict["fields"].extend(
                 (
                     dict(
-                        name=f"•  `{self.get_command_signature(command, escape_markdown=False).strip()}`",
-                        value=command.short_doc or "...",
+                        name=f"`{self.get_command_signature(command, escape_markdown=False)}`",
+                        value=command.short_doc or "\u200b",
                         inline=False,
                     )
                     for command in filtered
