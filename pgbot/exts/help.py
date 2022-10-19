@@ -81,7 +81,7 @@ class EmbedHelpCommand(commands.HelpCommand):
                     f"`{self.get_command_signature(c)}`" for c in cmds
                 )
                 if cog and cog.description:
-                    value = f"{cog.description}\n**Commands**\n{value}"
+                    value = f"{cog.description}\n\n**Commands**\n{value}"
 
                 embed_dict["fields"].append(dict(name=name, value=value, inline=True))
 
@@ -124,7 +124,14 @@ class EmbedHelpCommand(commands.HelpCommand):
         await self.send_embed_paginator_output(
             self.context,
             *(
-                discord.Embed.from_dict(dct | start_embed_dict)
+                discord.Embed.from_dict(
+                    dct
+                    | dict(
+                        title=start_embed_dict["title"],
+                        color=start_embed_dict["color"],
+                        footer=start_embed_dict["footer"],
+                    )
+                )
                 for dct in snakecore.utils.embeds.split_embed_dict(embed_dict)
             ),
         )
