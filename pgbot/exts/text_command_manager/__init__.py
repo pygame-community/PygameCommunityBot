@@ -165,13 +165,13 @@ class TextCommandManager(BaseCommandCog, name="text-command-manager"):
             )
 
     async def tcmd_cannot_run_reason(
-        self, ctx: commands.Context[BotT]
+        self, ctx: commands.Context[BotT], command: Optional[commands.Command] = None
     ) -> Optional[TCMDCantRunReason]:
         if not (
             ctx.guild
             and isinstance(ctx.author, discord.Member)
             and isinstance(ctx.channel, discord.abc.GuildChannel)
-            and ctx.command
+            and (command or ctx.command)
         ):
             return TCMDCantRunReason.BAD_CONTEXT
         elif not (
@@ -186,6 +186,8 @@ class TextCommandManager(BaseCommandCog, name="text-command-manager"):
         category_id = ctx.channel.category_id if ctx.channel.category_id else 0
 
         using_mock_roles = False
+
+        command = command or ctx.command
 
         if (
             ctx.guild.id in self.guild_mock_roles
@@ -203,7 +205,7 @@ class TextCommandManager(BaseCommandCog, name="text-command-manager"):
         is_admin = ctx.author.guild_permissions.administrator
 
         tcmd_states: list[GuildTextCommandState] = []
-        for i, tcmd_obj in enumerate((ctx.command, *ctx.command.parents)):
+        for i, tcmd_obj in enumerate((command, *command.parents)):
             tcmd_uuid = tcmd_obj.extras.get("uuid")
             if tcmd_uuid is not None:
                 try:
@@ -254,7 +256,7 @@ class TextCommandManager(BaseCommandCog, name="text-command-manager"):
                 not using_mock_roles
                 and is_admin
                 or using_mock_roles
-                and ctx.command in (self.tcm_mockroles, self.tcm_clearmockroles)
+                and command in (self.tcm_mockroles, self.tcm_clearmockroles)
             ):
                 continue
 
@@ -365,8 +367,10 @@ class TextCommandManager(BaseCommandCog, name="text-command-manager"):
 
         return None
 
-    async def tcmd_can_run(self, ctx: commands.Context[BotT]) -> bool:
-        return not await self.tcmd_cannot_run_reason(ctx)
+    async def tcmd_can_run(
+        self, ctx: commands.Context[BotT], command: Optional[commands.Command] = None
+    ) -> bool:
+        return not await self.tcmd_cannot_run_reason(ctx, command=command)
 
     def create_guild_root_tcmd_state(self, guild_id: int) -> GuildTextCommandState:
         return {
@@ -565,6 +569,13 @@ class TextCommandManager(BaseCommandCog, name="text-command-manager"):
         extras=dict(response_messsage_deletion_reaction=True),
     )
     async def tcm(self, ctx: commands.Context[BotT]):
+        """A text command manager to meet all your text
+        command management needs,
+        from enabling/disabling commands and/or their subcommands
+        to setting channel or role-specific restrictions.
+        To see existing settings, run the `tcm view` command.
+        Use `tcm set` to alter text command settings.
+        """
         await self.send_embed_paginator_output(
             ctx,
             discord.Embed(
@@ -598,14 +609,46 @@ class TextCommandManager(BaseCommandCog, name="text-command-manager"):
     async def tcm_mockroles(
         self,
         ctx: commands.Context[BotT],
-        *roles: discord.Role,
+        *roles: Union[
+            discord.Role, Literal["everyone", "@everyone", "Everyone", "EVERYONE"]
+        ],
     ):
+        """Apply one or more ephemeral mock roles to yourself, to be used for testing
+        text command permissions. Only 100 mock roles can be set at a time. You can't set mock
+        roles that are higher than your current highest role. Mock roles automatically disappear
+        after 5 minutes.
+
+        **Options:**
+
+            [roles...]
+            > A role or sequence of roles to apply as mock roles. If omitted, an embed of currently
+            set mock roles will be sent.
+        """
         assert ctx.guild and isinstance(ctx.author, discord.Member)
 
         if len(roles) > 100:
             raise commands.CommandInvokeError(
                 commands.CommandError("Cannot set more than 100 mock roles per member.")
             )
+
+        role_list: list[discord.Role] = []
+        highest_role_position = max(
+            ctx.author.roles, key=lambda role: role.position
+        ).position
+
+        for role in roles:
+            if isinstance(role, str) and role.lower() in ("everyone", "@everyone"):
+                role = ctx.guild.get_role(ctx.guild.id)
+
+            if isinstance(role, discord.Role):
+                if role.position > highest_role_position:
+                    raise commands.CommandInvokeError(
+                        commands.CommandError(
+                            "Cannot set any mock roles higher than your highest role."
+                        )
+                    )
+
+                role_list.append(role)
 
         main_embed = discord.Embed(
             title="Text Command Mock Roles",
@@ -622,12 +665,12 @@ class TextCommandManager(BaseCommandCog, name="text-command-manager"):
             role_ids, task, deletion_delay_secs, timestamp = self.guild_mock_roles[
                 ctx.guild.id
             ][ctx.author.id]
-            if roles:
+            if role_list:
                 if not task.done():
                     task.cancel()
                 del self.guild_mock_roles[ctx.guild.id][ctx.author.id]
 
-        if roles:
+        if role_list:
             if ctx.guild.id not in self.guild_mock_roles:
                 self.guild_mock_roles[ctx.guild.id] = {}
 
@@ -641,7 +684,7 @@ class TextCommandManager(BaseCommandCog, name="text-command-manager"):
                 role_ids, task, deletion_delay_secs, timestamp = self.guild_mock_roles[
                     ctx.guild.id
                 ][ctx.author.id] = (
-                    tuple(role.id for role in roles),
+                    tuple(role.id for role in role_list),
                     task,
                     deletion_delay_secs,
                     time.time(),
@@ -667,6 +710,7 @@ class TextCommandManager(BaseCommandCog, name="text-command-manager"):
         self,
         ctx: commands.Context[BotT],
     ):
+        """Clear any mock roles that you have previously set."""
         assert ctx.guild and isinstance(ctx.author, discord.Member)
         if (
             ctx.guild.id in self.guild_mock_roles
@@ -691,6 +735,13 @@ class TextCommandManager(BaseCommandCog, name="text-command-manager"):
         ctx: commands.Context[BotT],
         *names: str,
     ):
+        """View the settings of all configured text commands or those specified by full name.
+
+        **Options:**
+
+        **[names...]**
+        > The full command name or a sequence of full command names whose settings should be shown.
+        """
         assert ctx.guild and isinstance(ctx.author, discord.Member)
 
         tcmd_names = names
@@ -786,7 +837,10 @@ class TextCommandManager(BaseCommandCog, name="text-command-manager"):
                     f"`{tcmd_state['qualified_name']}`"
                 )
 
-                main_embed_field["value"] = (
+                if ctx.bot.is_owner(ctx.author):
+                    main_embed_field["value"] = f"UUID: `{tcmd_state['tcmd_uuid']}`"
+
+                main_embed_field["value"] += (
                     "Command: "
                     + ("  On" if tcmd_state["enabled"] & 0b01 else "Off")
                     + " | Subcommands: "
@@ -891,7 +945,7 @@ class TextCommandManager(BaseCommandCog, name="text-command-manager"):
     @commands.max_concurrency(1, per=commands.BucketType.guild, wait=True)
     @tcm.command(
         name="set",
-        usage="<name/( name ... )> <flags <override: role/channel on|off>... "
+        usage="<name/( name ... )> <flags [override: role/channel on|off]... "
         "[command: on|off] [subcommand: on|off]>",
     )
     @flagconverter_kwargs()
@@ -904,6 +958,35 @@ class TextCommandManager(BaseCommandCog, name="text-command-manager"):
         command: Optional[bool] = None,
         subcommands: Optional[bool] = None,
     ):
+        """Add or replace settings for the specified text commands.
+
+        **Options:**
+
+            **`<name/( name ... )>`**
+            > The full command name or a parenthesized sequence of full command names to alter the settings of.
+
+            **`<flags ... >`**
+                ...
+                • `[override: role/channel on|off]...`
+                > A flag for specifying a role or channel to override, followed by 'on' or 'off' to allow or deny command execution for the specified command(s).
+                > If specified, any previous overrides are overwritten.
+                > Can be specified multiple times.
+
+                • `[command: on|off]...`
+                > A flag for enabling or disabling the execution of the specified command(s).
+
+                • `[subcommands: on|off]...`
+                > A flag for enabling or recursively disabling the execution of any subcommands of the specified command(s).
+
+        **Examples:**
+        tcm set ( "kick" "ban" "purge" )
+        override: "everyone" off
+        override: @Moderator on
+
+        tcm set "economy" override: "everyone" off override: @Level 5 on
+        tcm set "catbomb" command: off
+        tcm set "warnings" subcommands: off
+        """
         assert ctx.guild
 
         tcmd_names = name
@@ -1096,6 +1179,23 @@ class TextCommandManager(BaseCommandCog, name="text-command-manager"):
         *,
         override: ChannelOrRoleOverrides,
     ):
+        """Add or replace global settings that may be used or overridden by text commands.
+        This can be used to globally enable/disable all text commands for specific roles or channels.
+
+        **Options:**
+
+            **`<flags ... >`**
+                ...
+                • `<override: role/channel on|off>...`
+                > A flag for specifying a role or channel to override, followed by 'on' or 'off' to allow or deny command execution.
+                > If specified, any previous overrides are overwritten.
+                > Can be specified multiple times.
+
+        **Examples:**
+        tcm setglobal
+        override: "All Channels" off
+        override: #bot-playground on
+        """
         assert ctx.guild
 
         channel_or_role_overrides = override
@@ -1146,6 +1246,13 @@ class TextCommandManager(BaseCommandCog, name="text-command-manager"):
         ctx: commands.Context[BotT],
         *names: str,
     ):
+        """Clear the settings configured for the specified text commands.
+
+        **Options:**
+
+            **`<names...>`:**
+            > The full command name or a sequence of full command names whose settings should be cleared.
+        """
         assert ctx.guild
 
         tcmd_names = names
@@ -1173,13 +1280,14 @@ class TextCommandManager(BaseCommandCog, name="text-command-manager"):
         self,
         ctx: commands.Context[BotT],
     ):
+        """Clear the settings of all configured commands."""
         assert ctx.guild
         await self.delete_all_guild_tcmd_states(ctx.guild.id)
 
     @commands.guild_only()
     @tcm.command(
         name="clearoverrides",
-        usage="<name/( name ... )> [flags [roles: on|off] [channels: on|off]]",
+        usage="<name/( name ... )> [flags [roles: yes|no] [channels: yes|no]]",
     )
     @flagconverter_kwargs()
     async def tcm_clearoverrides(
@@ -1190,6 +1298,27 @@ class TextCommandManager(BaseCommandCog, name="text-command-manager"):
         roles: Optional[bool] = None,
         channels: Optional[bool] = None,
     ):
+        """Clear any channel and/or role overrides for the specified text commands.
+
+        **Options:**
+
+            **`<name/( name ... )>`**
+            > The full command name or a parenthesized sequence of full command names to clear overrides of.
+
+            **`[flags ... ]`**'
+                If 'roles:' nor 'channels:' are specified, both will count as 'yes'.
+
+                • `[roles: yes|no]...`
+                > A flag for choosing whether role overrides should be cleared.
+                > Omission counts as 'no'.
+
+                • `[channels: yes|no]...`
+                > A flag for choosing whether channel overrides should be cleared.
+                > Omission counts as 'no'.
+
+        **Examples:**
+        tcm clearoverrides ( "economy" "8ball" ) roles: yes
+        """
         assert ctx.guild
 
         tcmd_names = name
@@ -1237,6 +1366,27 @@ class TextCommandManager(BaseCommandCog, name="text-command-manager"):
         roles: Optional[bool] = None,
         channels: Optional[bool] = None,
     ):
+        """Clear any channel and/or role overrides for the specified text commands.
+
+        **Options:**
+
+            **`<name/( name ... )>`**
+            > The full command name or a parenthesized sequence of full command names to clear overrides of.
+
+            **`[flags ... ]`**'
+                If 'roles:' nor 'channels:' are specified, both will count as 'yes'.
+
+                • `[roles: yes|no]...`
+                > A flag for choosing whether role overrides should be cleared.
+                > Omission counts as 'no'.
+
+                • `[channels: yes|no]...`
+                > A flag for choosing whether channel overrides should be cleared.
+                > Omission counts as 'no'.
+
+        **Examples:**
+        tcm clearoverrides channels: yes
+        """
         assert ctx.guild
 
         everyone_role_id = ctx.guild.id
