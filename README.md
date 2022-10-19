@@ -7,9 +7,6 @@ The primary Discord bot powering the Pygame Community Discord server.
 3. Create all necessary [configuration](#configuration) files.
 4. Launch the application via the [CLI](#cli) using `python -m pgbot` with any needed extra CLI options.
 
-## Customization
-All areas of code marked with `# TODO: ...` are meant to be looked at and potentially modified for a new project (e.g. renaming `TemplateBot` and `Bot-Author` in [`bot/__init__.py`](./bot/__init__.py), [`bot/__main__.py`](./bot/__main__.py) and [`bot/bot.py`](./bot/bot.py)), the rest of the repository and files can be extended as needed. Note however that some modifications may break the CLI, which would require making some changes to it as well.
-
 ## Configuration
 A file called `config.py` should be used to provide information required for the bot to run. This file is meant to be stored locally on host machines without being 'added' to a Git repository. However, this suggestion may be ignored for workflows that don't permit it, and in such cases the files should be removed from the [`.gitignore`](./.gitignore) file. These files can either be stored in the top level directory or somewhere else if custom paths are passed to the CLI.
 
