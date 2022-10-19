@@ -64,31 +64,33 @@ class EmbedHelpCommand(commands.HelpCommand):
 
         embed_dict = start_embed_dict.copy()
 
-        if mapping:
-            embed_dict["fields"] = []
-            embed_dict["fields"].append(
-                dict(
-                    name="Categories: "
-                    f"{len(mapping)-1 if None in mapping else len(mapping)}",
-                    value="\u200b",
+        if self.context.guild:
+            if mapping:
+                embed_dict["fields"] = []
+                embed_dict["fields"].append(
+                    dict(
+                        name="Categories: "
+                        f"{len(mapping)-1 if None in mapping else len(mapping)}",
+                        value="\u200b",
+                    )
                 )
-            )
-        for cog, cmds in mapping.items():
-            name = "No Category" if cog is None else cog.qualified_name
-            filtered = await self.filter_commands(cmds, sort=True)
-            if filtered:
-                value = "\u2002".join(
-                    f"`{self.get_command_signature(c)}`" for c in cmds
-                )
-                if cog and cog.description:
-                    value = f"{cog.description}\n\n**Commands**\n{value}"
+            for cog, cmds in mapping.items():
+                name = "No Category" if cog is None else cog.qualified_name
+                filtered = await self.filter_commands(cmds, sort=True)
+                if filtered:
+                    value = "\u2002".join(
+                        f"`{self.get_command_signature(c)}`" for c in cmds
+                    )
+                    if cog and cog.description:
+                        value = f"{cog.description}\n\n**Commands**\n{value}"
 
-                embed_dict["fields"].append(dict(name=name, value=value, inline=True))
+                    embed_dict["fields"].append(
+                        dict(name=name, value=value, inline=True)
+                    )
 
-        embed_dict["footer"] = dict(text=self.get_ending_note())
+            embed_dict["footer"] = dict(text=self.get_ending_note())
 
-        await self.send_embed_paginator_output(
-            self.context,
+        await self.send_paginated_embeds(
             *(
                 discord.Embed.from_dict(dct | start_embed_dict)
                 for dct in snakecore.utils.embeds.split_embed_dict(embed_dict)
@@ -96,6 +98,9 @@ class EmbedHelpCommand(commands.HelpCommand):
         )
 
     async def send_cog_help(self, cog: commands.Cog):
+        if not self.context.guild:
+            return
+
         start_embed_dict = {}
         start_embed_dict["title"] = f"`{cog.qualified_name}` Commands"
         start_embed_dict["color"] = int(self.theme_color)
@@ -121,8 +126,7 @@ class EmbedHelpCommand(commands.HelpCommand):
 
         embed_dict["footer"] = dict(text=self.get_ending_note())
 
-        await self.send_embed_paginator_output(
-            self.context,
+        await self.send_paginated_embeds(
             *(
                 discord.Embed.from_dict(
                     dct
@@ -137,6 +141,9 @@ class EmbedHelpCommand(commands.HelpCommand):
         )
 
     async def send_group_help(self, group: commands.Group):
+        if not self.context.guild:
+            return
+
         start_embed_dict = {}
         start_embed_dict["title"] = f"Help for `{group.qualified_name}`"
         start_embed_dict["color"] = int(self.theme_color)
@@ -173,8 +180,7 @@ class EmbedHelpCommand(commands.HelpCommand):
 
         embed_dict["footer"] = dict(text=self.get_ending_note())
 
-        await self.send_embed_paginator_output(
-            self.context,
+        await self.send_paginated_embeds(
             *(
                 discord.Embed.from_dict(dct | start_embed_dict)
                 for dct in snakecore.utils.embeds.split_embed_dict(embed_dict)
@@ -186,12 +192,20 @@ class EmbedHelpCommand(commands.HelpCommand):
     # If you want to make regular command help look different then override it
     send_command_help = send_group_help  # type: ignore
 
-    async def send_embed_paginator_output(
-        self, ctx: commands.Context, *embeds: discord.Embed
-    ):
-        assert isinstance(
-            ctx.author, discord.Member
-        )  # this shouldn't normally be false
+    async def send_error_message(self, error: str, /) -> None:
+        return await self.send_paginated_embeds(
+            discord.Embed(
+                title="Something went wrong",
+                description=error,
+                color=int(self.theme_color),
+            )
+        )
+
+    async def send_paginated_embeds(self, *embeds: discord.Embed):
+        ctx = self.context
+
+        # this shouldn't normally be false
+        assert isinstance(ctx.author, discord.Member)
 
         paginator = None
         cog = self.cog
@@ -202,6 +216,8 @@ class EmbedHelpCommand(commands.HelpCommand):
 
         if not embeds:
             return
+
+        destination = self.get_destination()
 
         if (
             response_message := cog.cached_response_messages.get(ctx.message.id)
@@ -216,7 +232,8 @@ class EmbedHelpCommand(commands.HelpCommand):
                         await paginator_tuple[0].stop()
 
                 if len(embeds) == 1:
-                    return await response_message.edit(embed=embeds[0])
+                    await response_message.edit(embed=embeds[0])
+                    return
 
                 paginator = snakecore.utils.pagination.EmbedPaginator(
                     (
@@ -234,11 +251,11 @@ class EmbedHelpCommand(commands.HelpCommand):
                 if len(embeds) == 1:
                     cog.cached_response_messages[
                         ctx.message.id
-                    ] = await ctx.channel.send(embed=embeds[0])
+                    ] = await destination.send(embed=embeds[0])
                     return
 
                 paginator = snakecore.utils.pagination.EmbedPaginator(
-                    (response_message := await ctx.channel.send(content="\u200b")),
+                    (response_message := await destination.send(content="\u200b")),
                     *embeds,
                     caller=ctx.author,
                     inactivity_timeout=60,
@@ -246,13 +263,13 @@ class EmbedHelpCommand(commands.HelpCommand):
                 )
         else:
             if len(embeds) == 1:
-                cog.cached_response_messages[ctx.message.id] = await ctx.channel.send(
+                cog.cached_response_messages[ctx.message.id] = await destination.send(
                     embed=embeds[0]
                 )
                 return
 
             paginator = snakecore.utils.pagination.EmbedPaginator(
-                (response_message := await ctx.channel.send(content="\u200b")),
+                (response_message := await destination.send(content="\u200b")),
                 *embeds,
                 caller=ctx.author,
                 inactivity_timeout=60,

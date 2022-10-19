@@ -173,7 +173,7 @@ class PygameBot(snakecore.commands.Bot):
                         response_message,
                         ctx.author,
                         emoji="🗑",
-                        timeout=30,
+                        timeout=60,
                     )
                 )
             )
