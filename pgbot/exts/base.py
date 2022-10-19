@@ -102,7 +102,7 @@ class BaseCommandCog(commands.Cog):
                 if paginator_tuple[0].is_running():  # type: ignore
                     paginator_tuple[1].cancel()  # type: ignore
 
-    async def send_embed_paginator_output(
+    async def send_paginated_embeds(
         self, ctx: commands.Context[BotT], *embeds: discord.Embed
     ):
         assert isinstance(
@@ -126,7 +126,8 @@ class BaseCommandCog(commands.Cog):
                         await paginator_tuple[0].stop()
 
                 if len(embeds) == 1:
-                    return await response_message.edit(embed=embeds[0])
+                    await response_message.edit(embed=embeds[0])
+                    return
 
                 paginator = snakecore.utils.pagination.EmbedPaginator(
                     (
