@@ -1280,7 +1280,7 @@ class TextCommandManager(BaseCommandCog, name="text-command-manager"):
         self,
         ctx: commands.Context[BotT],
     ):
-        """Clear the settings of all configured commands."""
+        """Clear the settings of all configured commands, including any global settings."""
         assert ctx.guild
         await self.delete_all_guild_tcmd_states(ctx.guild.id)
 
@@ -1366,12 +1366,9 @@ class TextCommandManager(BaseCommandCog, name="text-command-manager"):
         roles: Optional[bool] = None,
         channels: Optional[bool] = None,
     ):
-        """Clear any channel and/or role overrides for the specified text commands.
+        """Clear any global channel and/or role overrides that may be used or overridden by text commands.
 
         **Options:**
-
-            **`<name/( name ... )>`**
-            > The full command name or a parenthesized sequence of full command names to clear overrides of.
 
             **`[flags ... ]`**'
                 If 'roles:' nor 'channels:' are specified, both will count as 'yes'.
@@ -1385,7 +1382,7 @@ class TextCommandManager(BaseCommandCog, name="text-command-manager"):
                 > Omission counts as 'no'.
 
         **Examples:**
-        tcm clearoverrides channels: yes
+        tcm clearglobalroverrides channels: yes
         """
         assert ctx.guild
 
