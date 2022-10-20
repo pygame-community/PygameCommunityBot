@@ -1,4 +1,4 @@
-# PygameCommunityBot
+# Pygame Community Bot
 The primary Discord bot powering the Pygame Community Discord server. 
 
 ## Setup
