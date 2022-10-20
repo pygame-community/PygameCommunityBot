@@ -14,6 +14,7 @@ import sqlalchemy.exc
 from sqlalchemy import text
 import discord
 from discord.ext import commands, tasks
+from discord.ext.commands.view import StringView
 import snakecore
 from snakecore.constants import UNSET
 from snakecore.utils.pagination import EmbedPaginator
@@ -98,27 +99,60 @@ class PygameBot(snakecore.commands.Bot):
             if not invoke_task.done():
                 await invoke_task
 
+    @staticmethod
+    def _find_invoked_subcommand(ctx: commands.Context):
+        if not ctx.valid:
+            return None
+
+        if ctx.invoked_subcommand:
+            return ctx.invoked_subcommand
+
+        command = ctx.command
+        if (
+            isinstance(command, commands.Group) and command.invoke_without_command
+        ):  # try to find a subcommand being invoked
+            view = StringView(ctx.view.buffer)
+            view.index = ctx.view.index
+            view.end = ctx.view.end
+            view.previous = ctx.view.previous
+
+            while isinstance(command, commands.Group):
+                view.skip_ws()
+                trigger = view.get_word()
+
+                if trigger and trigger in command.all_commands:
+                    command = command.all_commands[trigger]
+                else:
+                    break
+
+            return None if command is ctx.command else command
+        else:
+            return None
+
     async def on_message_edit(self, old: discord.Message, new: discord.Message) -> None:
         if new.author.bot:
             return
 
         if (time.time() - (new.edited_at or new.created_at).timestamp()) < 120:
+            ctx = await self.get_context(new)
+
+            if not (ctx.command and ctx.valid):
+                return
+
+            command = self._find_invoked_subcommand(ctx) or ctx.command
+
             if (
-                (ctx := await self.get_context(new)).valid
-                and ctx.command is not None
-                and (
-                    ctx.command.extras.get("invoke_on_message_edit", False)
-                    or ctx.command.extras.get("invoke_on_message_edit") is not False
-                    and ctx.command.cog is not None
-                    and getattr(ctx.command.cog, "invoke_on_message_edit", False)
-                )
+                command.extras.get("invoke_on_message_edit", False)
+                or command.extras.get("invoke_on_message_edit") is not False
+                and command.cog is not None
+                and getattr(command.cog, "invoke_on_message_edit", False)
             ):
                 await self.process_commands(new, ctx=ctx)
 
     async def bot_before_invoke(self, ctx: commands.Context):
         if (
-            ctx.command is not None
-            and ctx.command.extras.get("reference_message_is_argument", False)
+            (command := ctx.invoked_subcommand or ctx.command) is not None
+            and command.extras.get("reference_message_is_argument", False)
             and ctx.message.reference is not None
             and isinstance(ctx.message.reference.resolved, discord.Message)
         ):
@@ -152,15 +186,12 @@ class PygameBot(snakecore.commands.Bot):
                 paginator_list[1].cancel()  # type: ignore
 
         if (
-            ctx.command is not None
+            (command := ctx.invoked_subcommand or ctx.command) is not None
             and (
-                ctx.command.extras.get("response_message_deletion_reaction", False)
-                or ctx.command.extras.get("response_message_deletion_reaction")
-                is not False
-                and ctx.command.cog is not None
-                and getattr(
-                    ctx.command.cog, "response_message_deletion_reaction", False
-                )
+                command.extras.get("response_message_deletion_reaction", False)
+                or command.extras.get("response_message_deletion_reaction") is not False
+                and command.cog is not None
+                and getattr(command.cog, "response_message_deletion_reaction", False)
             )
             and (response_message := self.cached_response_messages.get(ctx.message.id))
             is not None
