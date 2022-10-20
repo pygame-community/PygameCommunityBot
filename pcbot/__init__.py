@@ -2,9 +2,9 @@
 """
 
 from . import constants
-from .bot import PygameBot
+from .bot import PygameCommunityBot
 
-__title__ = "PygameBot"
+__title__ = "PygameCommunityBot"
 __author__ = "pygame-community"
 __license__ = "MIT"
 __copyright__ = "Copyright 2022-present pygame-community"

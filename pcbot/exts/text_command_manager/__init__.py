@@ -18,7 +18,7 @@ from sqlalchemy.ext.asyncio import AsyncEngine, AsyncConnection
 from sqlalchemy.engine import Result
 from sqlalchemy import text
 
-from ...bot import PygameBot
+from ...bot import PygameCommunityBot
 from ..base import BaseCommandCog
 from .constants import DB_TABLE_PREFIX, ZERO_UUID
 from ._types import GuildTextCommandState
@@ -26,7 +26,7 @@ from .migrations import MIGRATIONS
 
 __version__ = "0.1.0"
 
-BotT = PygameBot
+BotT = PygameCommunityBot
 
 if TYPE_CHECKING:
     Parens = tuple

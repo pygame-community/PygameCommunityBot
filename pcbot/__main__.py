@@ -14,7 +14,7 @@ import snakecore
 
 from . import constants, utils
 from .bot import (
-    PygameBot as Bot,
+    PygameCommunityBot as Bot,
 )
 
 try:
