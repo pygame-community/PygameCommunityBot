@@ -3,7 +3,7 @@ The primary Discord bot powering the Pygame Community Discord server.
 
 ## Setup
 1. Set up a virtual environment using your desired tool (e.g. `virtualenv`, `venv`, etc.).
-2. Install requirements: `python -m pip install -U -r requirements.txt`.
+2. Install requirements: `python -m pip install -U -r requirements.txt [-r requirements-dev.txt]`.
 3. Create all necessary [configuration](#configuration) files.
 4. Launch the application via the [CLI](#cli) using `python -m pcbot` with any needed extra CLI options.
 
