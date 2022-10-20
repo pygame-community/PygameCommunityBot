@@ -24,7 +24,7 @@ from . import utils
 _logger = logging.getLogger(__name__)
 
 
-class PygameBot(snakecore.commands.Bot):
+class PygameCommunityBot(snakecore.commands.Bot):
     def __init__(self, *args, **kwargs) -> None:
         super().__init__(*args, **kwargs)
         self._config: dict = {}
@@ -225,8 +225,8 @@ class PygameBot(snakecore.commands.Bot):
         origin: Union[discord.Message, discord.Interaction],
         /,
         *,
-        cls: Type[commands.Context["PygameBot"]] = discord.utils.MISSING,
-    ) -> commands.Context["PygameBot"]:
+        cls: Type[commands.Context["PygameCommunityBot"]] = discord.utils.MISSING,
+    ) -> commands.Context["PygameCommunityBot"]:
         new_ctx = await super().get_context(origin, cls=cls)
         setattr(new_ctx, "created_at", datetime.datetime.now(datetime.timezone.utc))
         return new_ctx
@@ -296,7 +296,9 @@ class PygameBot(snakecore.commands.Bot):
             handle_loading_reactions.start()
 
     async def on_command_error(
-        self, context: commands.Context["PygameBot"], exception: commands.CommandError
+        self,
+        context: commands.Context["PygameCommunityBot"],
+        exception: commands.CommandError,
     ) -> None:
 
         send_error_message = True

@@ -1,11 +1,11 @@
-# PygameBot
+# PygameCommunityBot
 The primary Discord bot powering the Pygame Community Discord server. 
 
 ## Setup
 1. Set up a virtual environment using your desired tool (e.g. `virtualenv`, `venv`, etc.).
 2. Install requirements: `python -m pip install -U -r requirements.txt`.
 3. Create all necessary [configuration](#configuration) files.
-4. Launch the application via the [CLI](#cli) using `python -m pgbot` with any needed extra CLI options.
+4. Launch the application via the [CLI](#cli) using `python -m pcbot` with any needed extra CLI options.
 
 ## Configuration
 A file called `config.py` should be used to provide information required for the bot to run. This file is meant to be stored locally on host machines without being 'added' to a Git repository. However, this suggestion may be ignored for workflows that don't permit it, and in such cases the files should be removed from the [`.gitignore`](./.gitignore) file. These files can either be stored in the top level directory or somewhere else if custom paths are passed to the CLI.
@@ -79,7 +79,7 @@ config = {
 The CLI is used to launch the bot application, whilst also allowing for selective overriding of the `config` dictionary specified inside `config.py` or `localconfig.py` using command line options.
 
 ```
-Usage: python -m pgbot [OPTIONS] COMMAND [ARGS]...
+Usage: python -m pcbot [OPTIONS] COMMAND [ARGS]...
 
   Launch this Discord bot application.
 

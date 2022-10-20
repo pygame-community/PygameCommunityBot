@@ -5,11 +5,11 @@ import discord
 from discord.ext import commands
 import snakecore
 
-from pgbot import constants, PygameBot, __version__ as bot_version
+from pcbot import constants, PygameCommunityBot, __version__ as bot_version
 
 from .base import BaseCommandCog
 
-BotT = PygameBot
+BotT = PygameCommunityBot
 
 
 class DebugInfo(BaseCommandCog, name="debug-info"):
