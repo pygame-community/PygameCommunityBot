@@ -8,10 +8,14 @@ from discord.ext import commands
 import snakecore
 from snakecore.utils.pagination import EmbedPaginator
 
+from .. import __version__
+
 BotT = Union[snakecore.commands.Bot, snakecore.commands.AutoShardedBot]
 
 
 class BaseCommandCog(commands.Cog):
+    __version__ = __version__
+
     def __init__(self, bot: BotT, theme_color: Union[int, discord.Color] = 0) -> None:
         super().__init__()
         self.bot = bot
