@@ -28,7 +28,7 @@ config = {
     "intents": 0b1100011111111011111101, # https://discord.com/developers/docs/topics/gateway#list-of-intents
     "extensions": [
         {
-        "name": "bot.exts.bundled_extension",
+        "name": "pcbot.exts.bundled_extension",
         "config": {
             "a": 1,
             "b": 2
@@ -48,7 +48,7 @@ config = {
     "log_level": "INFO", # omission disables logging entirely
     "extensions": [
         {
-            "name": "bot.exts.bundled_extension2",
+            "name": "pcbot.exts.bundled_extension2",
             "config": {
                 "a": 1,
                 "b": 2
@@ -57,7 +57,7 @@ config = {
         # comment out extensions to disable them or use the `--ignore-extension ext_name` option via the CLI.
         # {
         #     "name": ".exts.bundled_extension3",
-        #     "package": "bot"
+        #     "package": "pcbot"
         # },
         {
             "name": "global_extension" # globally installed Python packages can be loaded as extensions
