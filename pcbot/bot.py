@@ -142,8 +142,8 @@ class PygameCommunityBot(snakecore.commands.Bot):
             command = self._find_invoked_subcommand(ctx) or ctx.command
 
             if (
-                command.extras.get("invoke_on_message_edit", False)
-                or command.extras.get("invoke_on_message_edit") is not False
+                (flag_value := command.extras.get("invoke_on_message_edit", False))
+                or flag_value is not False
                 and command.cog is not None
                 and getattr(command.cog, "invoke_on_message_edit", False)
             ):
@@ -188,8 +188,12 @@ class PygameCommunityBot(snakecore.commands.Bot):
         if (
             (command := ctx.invoked_subcommand or ctx.command) is not None
             and (
-                command.extras.get("response_message_deletion_reaction", False)
-                or command.extras.get("response_message_deletion_reaction") is not False
+                (
+                    flag_value := command.extras.get(
+                        "response_message_deletion_reaction", False
+                    )
+                )
+                or flag_value is not False
                 and command.cog is not None
                 and getattr(command.cog, "response_message_deletion_reaction", False)
             )
@@ -421,7 +425,17 @@ class PygameCommunityBot(snakecore.commands.Bot):
                 color = 0xFF0000
                 footer_text = exception.__cause__.__class__.__name__
 
-        footer_text = f"{footer_text}\n(React with 🗑 to delete this error message in the next 30s)"
+        if (
+            (
+                flag_value := command.extras.get(
+                    "response_message_deletion_reaction", False
+                )
+            )
+            or flag_value is not False
+            and command.cog is not None
+            and getattr(command.cog, "response_message_deletion_reaction", False)
+        ):
+            footer_text = f"{footer_text}\n(React with 🗑 to delete this error message in the next 30s)"
 
         if send_error_message:
             target_message = self._recent_response_error_messages.get(
