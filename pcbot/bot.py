@@ -185,8 +185,10 @@ class PygameCommunityBot(snakecore.commands.Bot):
             if paginator_list is not None and paginator_list[0].is_running():  # type: ignore
                 paginator_list[1].cancel()  # type: ignore
 
+        command = ctx.invoked_subcommand or ctx.command
+
         if (
-            (command := ctx.invoked_subcommand or ctx.command) is not None
+            command
             and (
                 (
                     flag_value := command.extras.get(
@@ -212,6 +214,17 @@ class PygameCommunityBot(snakecore.commands.Bot):
                     )
                 )
             )
+
+        if command and (
+            (flag_value := command.extras.get("delete_invocation_message", False))
+            or flag_value is not False
+            and command.cog is not None
+            and getattr(command.cog, "delete_invocation_message", False)
+        ):
+            try:
+                await ctx.message.delete()
+            except discord.NotFound:
+                pass
 
     @tasks.loop(reconnect=False)
     async def handle_loading_reactions(self):
