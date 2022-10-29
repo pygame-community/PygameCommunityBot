@@ -1,7 +1,6 @@
 import asyncio
 from collections import OrderedDict
-import time
-from typing import MutableMapping, Union
+from typing import Optional, Sequence, Union
 
 import discord
 from discord.ext import commands
@@ -75,8 +74,8 @@ class BaseCommandCog(commands.Cog):
             ):
                 _, response_message = self.cached_response_messages.popitem(last=False)
                 paginator_tuple = self.cached_embed_paginators.get(response_message.id)
-                if paginator_tuple is not None and paginator_tuple[0].is_running():
-                    paginator_tuple[1].cancel()
+                if paginator_tuple is not None and paginator_tuple[0].is_running():  # type: ignore
+                    paginator_tuple[1].cancel()  # type: ignore
 
         elif not self._global_cached_response_messages:
             for _ in range(
@@ -103,11 +102,86 @@ class BaseCommandCog(commands.Cog):
                 )
             ):
                 _, paginator_tuple = self.cached_embed_paginators.popitem(last=False)
-                if paginator_tuple[0].is_running():
-                    paginator_tuple[1].cancel()
+                if paginator_tuple[0].is_running():  # type: ignore
+                    paginator_tuple[1].cancel()  # type: ignore
+
+    async def edit_or_send_response(
+        self,
+        ctx: commands.Context[BotT],
+        content: Optional[str] = discord.utils.MISSING,
+        *,
+        tts: bool = discord.utils.MISSING,
+        embed: Optional[discord.Embed] = discord.utils.MISSING,
+        embeds: Optional[Sequence[discord.Embed]] = discord.utils.MISSING,
+        attachments: Sequence[
+            Union[discord.Attachment, discord.File]
+        ] = discord.utils.MISSING,
+        file: Optional[discord.File] = discord.utils.MISSING,
+        files: Optional[Sequence[discord.File]] = discord.utils.MISSING,
+        stickers: Optional[
+            Sequence[Union[discord.GuildSticker, discord.StickerItem]]
+        ] = None,
+        delete_after: Optional[float] = None,
+        nonce: Optional[Union[str, int]] = None,
+        allowed_mentions: Optional[discord.AllowedMentions] = discord.utils.MISSING,
+        reference: Optional[
+            Union[discord.Message, discord.MessageReference, discord.PartialMessage]
+        ] = None,
+        mention_author: Optional[bool] = None,
+        view: Optional[discord.ui.View] = discord.utils.MISSING,
+        suppress_embeds: bool = False,
+        suppress: bool = False,
+        destination: Optional[discord.abc.Messageable] = None,
+    ) -> discord.Message:  # type: ignore
+
+        suppress_embeds = suppress or suppress_embeds
+        destination = destination or ctx.channel
+
+        send = False
+        if (
+            response_message := self.cached_response_messages.get(ctx.message.id)
+        ) is not None:
+            try:
+                return await response_message.edit(
+                    content=content,
+                    embed=embed,
+                    embeds=embeds,
+                    attachments=attachments,
+                    delete_after=delete_after,
+                    allowed_mentions=allowed_mentions,
+                    suppress=suppress_embeds,
+                    view=view,
+                )  # type: ignore
+            except discord.NotFound:
+                send = True
+        else:
+            send = True
+
+        if send:
+            return await destination.send(
+                content=None if content is discord.utils.MISSING else content,
+                tts=None if tts is discord.utils.MISSING else tts,
+                embed=None if embed is discord.utils.MISSING else embed,
+                embeds=None if embeds is discord.utils.MISSING else embeds,
+                file=None if file is discord.utils.MISSING else file,
+                files=None if files is discord.utils.MISSING else files,
+                stickers=stickers,
+                delete_after=delete_after,
+                nonce=nonce,
+                allowed_mentions=None
+                if allowed_mentions is discord.utils.MISSING
+                else allowed_mentions,
+                reference=reference,
+                mention_author=mention_author,
+                view=None if view is discord.utils.MISSING else view,
+                suppress_embeds=suppress_embeds,
+            )  # type: ignore
 
     async def send_paginated_embeds(
-        self, ctx: commands.Context[BotT], *embeds: discord.Embed
+        self,
+        ctx: commands.Context[BotT],
+        *embeds: discord.Embed,
+        destination: Optional[discord.abc.Messageable] = None,
     ):
         assert isinstance(
             ctx.author, discord.Member
@@ -116,6 +190,8 @@ class BaseCommandCog(commands.Cog):
 
         if not embeds:
             return
+
+        destination = destination or ctx.channel
 
         if (
             response_message := self.cached_response_messages.get(ctx.message.id)
@@ -149,11 +225,11 @@ class BaseCommandCog(commands.Cog):
                 if len(embeds) == 1:
                     self.cached_response_messages[
                         ctx.message.id
-                    ] = await ctx.channel.send(embed=embeds[0])
+                    ] = await destination.send(embed=embeds[0])
                     return
 
                 paginator = snakecore.utils.pagination.EmbedPaginator(
-                    (response_message := await ctx.channel.send(content="\u200b")),
+                    (response_message := await destination.send(content="\u200b")),
                     *embeds,
                     caller=ctx.author,
                     inactivity_timeout=60,
@@ -161,13 +237,13 @@ class BaseCommandCog(commands.Cog):
                 )
         else:
             if len(embeds) == 1:
-                self.cached_response_messages[ctx.message.id] = await ctx.channel.send(
+                self.cached_response_messages[ctx.message.id] = await destination.send(
                     embed=embeds[0]
                 )
                 return
 
             paginator = snakecore.utils.pagination.EmbedPaginator(
-                (response_message := await ctx.channel.send(content="\u200b")),
+                (response_message := await destination.send(content="\u200b")),
                 *embeds,
                 caller=ctx.author,
                 inactivity_timeout=60,
