@@ -142,8 +142,8 @@ class PygameCommunityBot(snakecore.commands.Bot):
             command = self._find_invoked_subcommand(ctx) or ctx.command
 
             if (
-                (flag_value := command.extras.get("invoke_on_message_edit", False))
-                or flag_value is not False
+                (modifier_flag := command.extras.get("invoke_on_message_edit", False))
+                or modifier_flag is not False
                 and command.cog is not None
                 and getattr(command.cog, "invoke_on_message_edit", False)
             ):
@@ -152,16 +152,33 @@ class PygameCommunityBot(snakecore.commands.Bot):
     async def bot_before_invoke(self, ctx: commands.Context):
         if (
             (command := ctx.invoked_subcommand or ctx.command) is not None
-            and command.extras.get("reference_message_is_argument", False)
-            and ctx.message.reference is not None
-            and isinstance(ctx.message.reference.resolved, discord.Message)
+            and (
+                (
+                    modifier_flag := command.extras.get(
+                        "inject_reference_as_argument", False
+                    )
+                )
+                or modifier_flag is not False
+                and command.cog is not None
+                and getattr(command.cog, "inject_reference_as_argument", False)
+            )
+            and (reference := ctx.message.reference)
+            and reference.message_id
+            and not isinstance(reference.resolved, discord.DeletedReferencedMessage)
         ):
-            if ctx.args and isinstance(
-                ctx.args[0], commands.Cog
-            ):  # command was defined inside cog
-                ctx.args.insert(2, ctx.message.reference.resolved)
+            try:
+                message = reference.resolved or await ctx.fetch_message(
+                    reference.message_id
+                )
+            except discord.NotFound:
+                pass
             else:
-                ctx.args.insert(1, ctx.message.reference.resolved)
+                if ctx.args and isinstance(
+                    ctx.args[0], commands.Cog
+                ):  # command was defined inside cog
+                    ctx.args.insert(2, message)
+                else:
+                    ctx.args.insert(1, message)
 
     async def bot_after_invoke(self, ctx: commands.Context):
         if (
@@ -191,13 +208,13 @@ class PygameCommunityBot(snakecore.commands.Bot):
             command
             and (
                 (
-                    flag_value := command.extras.get(
-                        "response_message_deletion_reaction", False
+                    modifier_flag := command.extras.get(
+                        "response_deletion_with_reaction", False
                     )
                 )
-                or flag_value is not False
+                or modifier_flag is not False
                 and command.cog is not None
-                and getattr(command.cog, "response_message_deletion_reaction", False)
+                and getattr(command.cog, "response_deletion_with_reaction", False)
             )
             and (response_message := self.cached_response_messages.get(ctx.message.id))
             is not None

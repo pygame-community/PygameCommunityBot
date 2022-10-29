@@ -565,7 +565,7 @@ class TextCommandManager(BaseCommandCog, name="text-command-manager"):
     @commands.guild_only()
     @commands.group(
         invoke_without_command=True,
-        extras=dict(response_messsage_deletion_reaction=True),
+        extras=dict(response_deletion_with_reaction=True),
     )
     async def tcm(self, ctx: commands.Context[BotT]):
         """A text command manager to meet all your text
@@ -604,7 +604,7 @@ class TextCommandManager(BaseCommandCog, name="text-command-manager"):
             return
 
     @commands.has_guild_permissions(manage_roles=True)
-    @tcm.command(name="mockroles", extras=dict(response_message_deletion_reaction=True))
+    @tcm.command(name="mockroles", extras=dict(response_deletion_with_reaction=True))
     async def tcm_mockroles(
         self,
         ctx: commands.Context[BotT],
@@ -725,9 +725,7 @@ class TextCommandManager(BaseCommandCog, name="text-command-manager"):
     @commands.guild_only()
     @tcm.command(
         name="view",
-        extras=dict(
-            response_message_deletion_reaction=True, invoke_on_message_edit=True
-        ),
+        extras=dict(response_deletion_with_reaction=True, invoke_on_message_edit=True),
     )
     async def tcm_view(
         self,
