@@ -14,7 +14,7 @@ class EmbedHelpCommand(commands.HelpCommand):
     # Based on https://gist.github.com/Rapptz/31a346ed1eb545ddeb0d451d81a60b3b
     default_command_extras = {
         "invoke_on_message_edit": True,
-        "response_message_deletion_reaction": True,
+        "response_deletion_with_reaction": True,
     }
 
     def __init__(self, **options: Any) -> None:

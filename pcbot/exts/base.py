@@ -75,8 +75,8 @@ class BaseCommandCog(commands.Cog):
             ):
                 _, response_message = self.cached_response_messages.popitem(last=False)
                 paginator_tuple = self.cached_embed_paginators.get(response_message.id)
-                if paginator_tuple is not None and paginator_tuple[0].is_running():  # type: ignore
-                    paginator_tuple[1].cancel()  # type: ignore
+                if paginator_tuple is not None and paginator_tuple[0].is_running():
+                    paginator_tuple[1].cancel()
 
         elif not self._global_cached_response_messages:
             for _ in range(
@@ -103,8 +103,8 @@ class BaseCommandCog(commands.Cog):
                 )
             ):
                 _, paginator_tuple = self.cached_embed_paginators.popitem(last=False)
-                if paginator_tuple[0].is_running():  # type: ignore
-                    paginator_tuple[1].cancel()  # type: ignore
+                if paginator_tuple[0].is_running():
+                    paginator_tuple[1].cancel()
 
     async def send_paginated_embeds(
         self, ctx: commands.Context[BotT], *embeds: discord.Embed
