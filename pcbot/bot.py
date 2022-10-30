@@ -155,12 +155,12 @@ class PygameCommunityBot(snakecore.commands.Bot):
             and (
                 (
                     modifier_flag := command.extras.get(
-                        "inject_reference_as_argument", False
+                        "inject_reference_as_first_argument", False
                     )
                 )
                 or modifier_flag is not False
                 and command.cog is not None
-                and getattr(command.cog, "inject_reference_as_argument", False)
+                and getattr(command.cog, "inject_reference_as_first_argument", False)
             )
             and (reference := ctx.message.reference)
             and reference.message_id
@@ -176,9 +176,11 @@ class PygameCommunityBot(snakecore.commands.Bot):
                 if ctx.args and isinstance(
                     ctx.args[0], commands.Cog
                 ):  # command was defined inside cog
-                    ctx.args.insert(2, message)
+                    if len(ctx.args) > 2 and ctx.args[2] is None:
+                        ctx.args[2] = message
                 else:
-                    ctx.args.insert(1, message)
+                    if len(ctx.args) > 1 and ctx.args[1] is None:
+                        ctx.args[1] = message
 
     async def bot_after_invoke(self, ctx: commands.Context):
         if (
@@ -231,17 +233,6 @@ class PygameCommunityBot(snakecore.commands.Bot):
                     )
                 )
             )
-
-        if command and (
-            (flag_value := command.extras.get("delete_invocation_message", False))
-            or flag_value is not False
-            and command.cog is not None
-            and getattr(command.cog, "delete_invocation_message", False)
-        ):
-            try:
-                await ctx.message.delete()
-            except discord.NotFound:
-                pass
 
     @tasks.loop(reconnect=False)
     async def handle_loading_reactions(self):
@@ -520,14 +511,23 @@ class PygameCommunityBot(snakecore.commands.Bot):
                 main_exception = exception.__cause__
 
             _logger.error(
-                "An unhandled exception occured in command %s",
-                context.invoked_with
-                if context.invoked_with
-                else context.command.qualified_name,
+                "An unhandled exception occured in command '%s'",
+                context.command.qualified_name,
                 exc_info=main_exception,
             )
 
     async def on_command_completion(self, ctx: commands.Context):
+        if (command := ctx.command) and (
+            (flag_value := command.extras.get("delete_invocation", False))
+            or flag_value is not False
+            and command.cog is not None
+            and getattr(command.cog, "delete_invocation", False)
+        ):
+            try:
+                await ctx.message.delete()
+            except discord.NotFound:
+                pass
+
         if ctx.message.id in self._recent_response_error_messages:
             try:
                 await self._recent_response_error_messages[ctx.message.id].delete()
