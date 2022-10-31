@@ -96,7 +96,7 @@ async def start_bot(bot: Bot) -> None:
 
 
 async def close_bot(bot: Bot) -> None:
-    print("Closing bot...")
+    print("\nClosing bot...")
     await bot.close()
     await snakecore.quit()
 

@@ -14,6 +14,7 @@ import sqlalchemy.exc
 import sqlalchemy.ext.asyncio
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncEngine, AsyncConnection
 
+from ._types import _DatabaseDict, _InputDatabaseDict
 
 def import_module_from_path(module_name: str, file_path: str) -> types.ModuleType:
     abs_file_path = os.path.abspath(file_path)
@@ -34,10 +35,10 @@ def import_module_from_path(module_name: str, file_path: str) -> types.ModuleTyp
 
 
 async def load_databases(
-    db_info_data: Sequence[dict[str, Union[str, dict[str, Any]]]],
+    db_info_data: Sequence[_InputDatabaseDict],
     raise_exceptions: bool = True,
     logger: Optional[Logger] = None,
-) -> list[dict[str, Union[str, dict, AsyncEngine]]]:
+) -> list[_DatabaseDict]:
     dbs = []
 
     for db_info_dict in db_info_data:
@@ -52,7 +53,7 @@ async def load_databases(
 
             engine = create_async_engine(db_info_dict["url"], **engine_kwargs)
 
-            async with engine.connect() as conn:
+            async with engine.connect():  # test if connection is possible
                 pass
 
         except sqlalchemy.exc.SQLAlchemyError as exc:
@@ -86,7 +87,7 @@ async def load_databases(
 
 
 async def unload_databases(
-    dbs: Iterable[dict[str, Union[str, dict, AsyncEngine]]],
+    dbs: Iterable[_DatabaseDict],
     raise_exceptions: bool = True,
     logger: Optional[Logger] = None,
 ):
