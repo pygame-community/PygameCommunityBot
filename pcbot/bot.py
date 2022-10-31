@@ -192,6 +192,7 @@ class PygameCommunityBot(snakecore.commands.Bot):
                         ctx.args[1] = message
 
     async def bot_after_invoke(self, ctx: commands.Context):
+        assert ctx.command
         if (
             any(
                 reaction.emoji == self.loading_emoji
@@ -215,21 +216,30 @@ class PygameCommunityBot(snakecore.commands.Bot):
 
         command = ctx.invoked_subcommand or ctx.command
 
-        if (
-            command
-            and (
-                (
-                    modifier_flag := command.extras.get(
-                        "response_deletion_with_reaction", False
-                    )
-                )
-                or modifier_flag is not False
+        if not ctx.command_failed:
+            if (
+                (flag_value := command.extras.get("delete_invocation", False))
+                or flag_value is not False
                 and command.cog is not None
-                and getattr(command.cog, "response_deletion_with_reaction", False)
+                and getattr(command.cog, "delete_invocation", False)
+            ):
+                try:
+                    await ctx.message.delete()
+                except discord.NotFound:
+                    pass
+
+        if (
+            (
+                modifier_flag := command.extras.get(
+                    "response_deletion_with_reaction", False
+                )
             )
-            and (response_message := self.cached_response_messages.get(ctx.message.id))
-            is not None
-        ):
+            or modifier_flag is not False
+            and command.cog is not None
+            and getattr(command.cog, "response_deletion_with_reaction", False)
+        ) and (
+            response_message := self.cached_response_messages.get(ctx.message.id)
+        ) is not None:
 
             snakecore.utils.hold_task(
                 asyncio.create_task(
@@ -526,17 +536,6 @@ class PygameCommunityBot(snakecore.commands.Bot):
             )
 
     async def on_command_completion(self, ctx: commands.Context):
-        if (command := ctx.command) and (
-            (flag_value := command.extras.get("delete_invocation", False))
-            or flag_value is not False
-            and command.cog is not None
-            and getattr(command.cog, "delete_invocation", False)
-        ):
-            try:
-                await ctx.message.delete()
-            except discord.NotFound:
-                pass
-
         if ctx.message.id in self._recent_response_error_messages:
             try:
                 await self._recent_response_error_messages[ctx.message.id].delete()
