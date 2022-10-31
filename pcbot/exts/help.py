@@ -5,9 +5,12 @@ import discord
 from discord.ext import commands
 import snakecore
 
-from .base import BaseCommandCog
+from ..bot import PygameCommunityBot
 
-BotT = Union[snakecore.commands.Bot, snakecore.commands.AutoShardedBot]
+from .base import BaseCommandCog
+from .text_command_manager import TextCommandManager
+
+BotT = PygameCommunityBot
 
 
 class EmbedHelpCommand(commands.HelpCommand):
@@ -32,6 +35,7 @@ class EmbedHelpCommand(commands.HelpCommand):
 
         self.theme_color = discord.Color(int(options.get("theme_color", 0)))
         self.bot_help_message = options.get("bot_help_message", "")
+        self.context: commands.Context[PygameCommunityBot]
         super().__init__(**options)
 
     def get_ending_note(self):
@@ -74,12 +78,21 @@ class EmbedHelpCommand(commands.HelpCommand):
                         value="\u200b",
                     )
                 )
+            text_command_manager: TextCommandManager = self.context.bot.get_cog("text-command-manager")  # type: ignore
+
             for cog, cmds in mapping.items():
                 name = "No Category" if cog is None else cog.qualified_name
-                filtered = await self.filter_commands(cmds, sort=True)
+                if text_command_manager:
+                    filtered = [
+                        cmd
+                        for cmd in await self.filter_commands(cmds, sort=True)
+                        if await text_command_manager.tcmd_can_run(self.context, cmd)
+                    ]
+                else:
+                    filtered = await self.filter_commands(cmds, sort=True)
                 if filtered:
                     value = "\u2002".join(
-                        f"`{self.get_command_signature(c)}`" for c in cmds
+                        f"`{self.get_command_signature(c)}`" for c in filtered
                     )
                     if cog and cog.description:
                         value = f"{cog.description}\n\n**Commands**\n{value}"
@@ -108,7 +121,17 @@ class EmbedHelpCommand(commands.HelpCommand):
         if cog.description:
             embed_dict["description"] = cog.description
 
-        filtered = await self.filter_commands(cog.get_commands(), sort=True)
+        text_command_manager: TextCommandManager = self.context.bot.get_cog("text-command-manager")  # type: ignore
+
+        if text_command_manager:
+            filtered = [
+                cmd
+                for cmd in await self.filter_commands(cog.get_commands(), sort=True)
+                if await text_command_manager.tcmd_can_run(self.context, cmd)
+            ]
+        else:
+            filtered = await self.filter_commands(cog.get_commands(), sort=True)
+
         embed_dict["fields"] = []
         embed_dict["fields"].append(
             dict(name=f"Subcommands: {len(filtered)}", value="\u200b")
@@ -161,8 +184,20 @@ class EmbedHelpCommand(commands.HelpCommand):
         if group.help:
             embed_dict["description"] += group.help
 
+        text_command_manager: TextCommandManager = self.context.bot.get_cog("text-command-manager")  # type: ignore
+        if text_command_manager:
+            if not await text_command_manager.tcmd_can_run(self.context, group):
+                return
+
         if isinstance(group, commands.Group):
-            filtered = await self.filter_commands(group.commands, sort=True)
+            if text_command_manager:
+                filtered = [
+                    cmd
+                    for cmd in await self.filter_commands(group.commands, sort=True)
+                    if await text_command_manager.tcmd_can_run(self.context, cmd)
+                ]
+            else:
+                filtered = await self.filter_commands(group.commands, sort=True)
             embed_dict["fields"] = []
             embed_dict["fields"].append(
                 dict(name=f"Subcommands: {len(filtered)}", value="\u200b")
