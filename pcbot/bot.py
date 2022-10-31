@@ -149,6 +149,15 @@ class PygameCommunityBot(snakecore.commands.Bot):
             ):
                 await self.process_commands(new, ctx=ctx)
 
+    async def on_raw_message_delete(self, payload: discord.RawMessageDeleteEvent):
+        if response_error_message := self._recent_response_error_messages.get(
+            payload.message_id
+        ):
+            try:
+                await response_error_message.delete()
+            except discord.NotFound:
+                pass
+
     async def bot_before_invoke(self, ctx: commands.Context):
         if (
             (command := ctx.invoked_subcommand or ctx.command) is not None
