@@ -755,7 +755,9 @@ class TextCommandManager(BaseCommandCog, name="text-command-manager"):
                 "No text command data found "
                 "for this guild. Run the `tcm set` command to add configuration data."
             )
-            return await ctx.send(embed=discord.Embed.from_dict(main_embed_dict))
+            return await self.send_paginated_embeds(
+                ctx, discord.Embed.from_dict(main_embed_dict)
+            )
 
         main_embed_dict["fields"] = []
 
