@@ -11,6 +11,7 @@ from uuid import UUID
 import discord
 from discord.types.embed import Embed as EmbedDict, EmbedField
 from discord.ext import commands
+from packaging.version import Version
 import snakecore
 from snakecore.commands.converters import Parens
 from snakecore.commands.decorators import flagconverter_kwargs
@@ -1436,24 +1437,26 @@ async def setup(bot: BotT, color: Union[int, discord.Color] = 0):
 
     first_setup = False
     try:
-        extension_data = await bot.read_extension_data(__name__)
+        extension_data = await bot.read_extension_data(__package__)
     except LookupError:
         first_setup = True
         extension_data = dict(name=__name__, db_table_prefix=DB_TABLE_PREFIX)
         await bot.create_extension_data(**extension_data, version=__version__)
 
-    stored_version = "0.0.0" if first_setup else str(extension_data["version"])
-    if stored_version > __version__:
+    extension_version = Version(__version__)
+    stored_version = Version("0.0.0" if first_setup else str(extension_data["version"]))
+    if stored_version > extension_version:
         raise RuntimeError(
-            f'Extension data is incompatible: Stored data version "{stored_version}" exceeds extension version "{__version__}"'
+            f'Extension data is incompatible: Stored data version "{stored_version}"'
+            f' exceeds extension version "{extension_version}"'
         )
 
-    elif stored_version < __version__:
+    elif stored_version < extension_version:
         conn: AsyncConnection
         async with db_engine.begin() as conn:
-            for vi in sorted(MIGRATIONS[db_engine.name].keys()):
+            for vi in sorted(map(Version, MIGRATIONS[db_engine.name])):
                 if vi > stored_version:
-                    await conn.execute(text(MIGRATIONS[db_engine.name][vi]))
+                    await conn.execute(text(MIGRATIONS[db_engine.name][f"{vi}"]))
 
         extension_data["version"] = __version__
         await bot.update_extension_data(**extension_data)

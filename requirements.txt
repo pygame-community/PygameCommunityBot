@@ -1,5 +1,6 @@
 click~=8.1
 discord.py~=2.0
+packaging>=21,<22
 snakecore @ git+https://github.com/pygame-community/snakecore.git#egg=snakecore-0.1.2a
 sqlalchemy[asyncio]~=1.4
 uvloop; sys_platform != "win32" # https://github.com/MagicStack/uvloop/issues/14
