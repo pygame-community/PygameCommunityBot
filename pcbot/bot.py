@@ -20,9 +20,9 @@ from snakecore.constants import UNSET
 from snakecore.utils.pagination import EmbedPaginator
 
 from . import utils
+from ._types import _DatabaseDict
 
 _logger = logging.getLogger(__name__)
-
 
 class PygameCommunityBot(snakecore.commands.Bot):
     def __init__(self, *args, **kwargs) -> None:
@@ -46,8 +46,8 @@ class PygameCommunityBot(snakecore.commands.Bot):
 
         self._cached_embed_paginators_maxsize = 1000
 
-        self._main_database: dict[str, Union[str, dict, AsyncEngine]] = {}
-        self._databases: dict[str, dict[str, Union[str, dict, AsyncEngine]]] = {}
+        self._main_database: _DatabaseDict = {}  # type: ignore
+        self._databases: dict[str, _DatabaseDict] = {}
         self._extension_data_storage_is_init = False
 
         self.before_invoke(self.bot_before_invoke)
@@ -276,7 +276,7 @@ class PygameCommunityBot(snakecore.commands.Bot):
         return new_ctx
 
     async def _create_database_connections(self) -> None:
-        self._databases = {
+        self._databases = {  # type: ignore
             db_dict["name"]: db_dict
             for db_dict in await utils.load_databases(
                 self._config["databases"], raise_exceptions=False, logger=_logger
@@ -545,7 +545,7 @@ class PygameCommunityBot(snakecore.commands.Bot):
                 del self._recent_response_error_messages[ctx.message.id]
 
     def get_database(self) -> Optional[AsyncEngine]:
-        """Get the `sqlachemy.ext.asyncio.AsyncEngine` object for the primary
+        """Get an `sqlachemy.ext.asyncio.AsyncEngine` object for the primary
         database of this bot.
 
         Returns:
@@ -553,7 +553,7 @@ class PygameCommunityBot(snakecore.commands.Bot):
               loaded/configured.
         """
 
-        return self._main_database.get("engine")  # type: ignore
+        return self._main_database.get("engine")
 
     def get_databases_data(
         self, *names: str
@@ -588,7 +588,7 @@ class PygameCommunityBot(snakecore.commands.Bot):
         if not self._main_database:
             return
 
-        engine: AsyncEngine = self._main_database["engine"]  # type: ignore
+        engine: AsyncEngine = self._main_database["engine"]
         conn: AsyncConnection
         async with engine.begin() as conn:
             if engine.name == "sqlite":
@@ -652,7 +652,7 @@ class PygameCommunityBot(snakecore.commands.Bot):
         if engine.name not in ("sqlite", "postgresql"):
             raise RuntimeError(f"Unsupported database dialect '{engine.name}'")
 
-        async with engine.connect() as conn:
+        async with engine.begin() as conn:
             await conn.execute(
                 text(
                     "INSERT INTO bot_extension_data "
@@ -666,7 +666,6 @@ class PygameCommunityBot(snakecore.commands.Bot):
                     initial_data=initial_data,
                 ),
             )
-            await conn.commit()
 
     async def read_extension_data(self, name: str) -> dict[str, Union[str, bytes]]:
         if not self._extension_data_storage_is_init:
@@ -678,7 +677,7 @@ class PygameCommunityBot(snakecore.commands.Bot):
                 f"'{name.__class__.__name__}'"
             )
 
-        engine: AsyncEngine = self._main_database["engine"]  # type: ignore
+        engine: AsyncEngine = self._main_database["engine"]
         conn: AsyncConnection
 
         if engine.name not in ("sqlite", "postgresql"):
@@ -715,7 +714,7 @@ class PygameCommunityBot(snakecore.commands.Bot):
                 f"'{name.__class__.__name__}'"
             )
 
-        engine: AsyncEngine = self._main_database["engine"]  # type: ignore
+        engine: AsyncEngine = self._main_database["engine"]
         conn: AsyncConnection
 
         if engine.name not in ("sqlite", "postgresql"):
@@ -773,7 +772,7 @@ class PygameCommunityBot(snakecore.commands.Bot):
                 f"'version', 'db_table_prefix' and 'data' cannot all be 'None'"
             )
 
-        engine: AsyncEngine = self._main_database["engine"]  # type: ignore
+        engine: AsyncEngine = self._main_database["engine"]
         conn: AsyncConnection
 
         if engine.name not in ("sqlite", "postgresql"):
@@ -826,7 +825,7 @@ class PygameCommunityBot(snakecore.commands.Bot):
                 f"'{name.__class__.__name__}'"
             )
 
-        engine: AsyncEngine = self._main_database["engine"]  # type: ignore
+        engine: AsyncEngine = self._main_database["engine"]
         conn: AsyncConnection
 
         if engine.name not in ("sqlite", "postgresql"):
