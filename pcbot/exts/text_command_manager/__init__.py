@@ -953,7 +953,7 @@ class TextCommandManager(BaseCommandCog, name="text-command-manager"):
         ctx: commands.Context[BotT],
         name: Union[Parens[str, ...], str],
         *,
-        override: ChannelOrRoleOverrides,
+        override: Optional[ChannelOrRoleOverrides] = None,
         command: Optional[bool] = None,
         subcommands: Optional[bool] = None,
     ):
@@ -993,7 +993,7 @@ class TextCommandManager(BaseCommandCog, name="text-command-manager"):
         enabled = command
         subcommands_enabled = subcommands
 
-        channel_or_role_overrides = override
+        channel_or_role_overrides = override or []
 
         if (
             not tcmd_names
@@ -1076,6 +1076,14 @@ class TextCommandManager(BaseCommandCog, name="text-command-manager"):
                         )
                     )
             else:
+                if tcmd_obj.cog is self and not (
+                    command is None and subcommands is None
+                ):
+                    raise commands.CommandInvokeError(
+                        commands.CommandError(
+                            f"Cannot enable/disable `tcm` command or any of its subcommands."
+                        )
+                    )
                 if guild_tcmd_states_exists:
                     tcmd_state_map = await self.fetch_guild_tcmd_states(ctx.guild.id)
                 else:
