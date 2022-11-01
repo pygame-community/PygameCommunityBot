@@ -24,6 +24,7 @@ from ._types import _DatabaseDict
 
 _logger = logging.getLogger(__name__)
 
+
 class PygameCommunityBot(snakecore.commands.Bot):
     def __init__(self, *args, **kwargs) -> None:
         super().__init__(*args, **kwargs)
@@ -187,9 +188,13 @@ class PygameCommunityBot(snakecore.commands.Bot):
                 ):  # command was defined inside cog
                     if len(ctx.args) > 2 and ctx.args[2] is None:
                         ctx.args[2] = message
+                    else:
+                        ctx.args.insert(2, message)
                 else:
                     if len(ctx.args) > 1 and ctx.args[1] is None:
                         ctx.args[1] = message
+                    else:
+                        ctx.args.insert(1, message)
 
     async def bot_after_invoke(self, ctx: commands.Context):
         assert ctx.command
