@@ -105,7 +105,7 @@ class BaseCommandCog(commands.Cog):
                 if paginator_tuple[0].is_running():  # type: ignore
                     paginator_tuple[1].cancel()  # type: ignore
 
-    async def edit_or_send_response(
+    async def send_or_edit_response(
         self,
         ctx: commands.Context[BotT],
         content: Optional[str] = discord.utils.MISSING,
@@ -158,7 +158,9 @@ class BaseCommandCog(commands.Cog):
             send = True
 
         if send:
-            return await destination.send(
+            self.cached_response_messages[
+                ctx.message.id
+            ] = response_message = await destination.send(
                 content=None if content is discord.utils.MISSING else content,
                 tts=None if tts is discord.utils.MISSING else tts,
                 embed=None if embed is discord.utils.MISSING else embed,
@@ -176,6 +178,8 @@ class BaseCommandCog(commands.Cog):
                 view=None if view is discord.utils.MISSING else view,
                 suppress_embeds=suppress_embeds,
             )  # type: ignore
+
+            return response_message
 
     async def send_paginated_embeds(
         self,
