@@ -1,6 +1,11 @@
+black~=22.6
 click~=8.1
 discord.py~=2.0
+numpy~=1.23
 packaging>=21,<22
+psutil>=5.7.3
+pygame~=2.1
+pygame_gui>=0.5.7
 snakecore @ git+https://github.com/pygame-community/snakecore.git#egg=snakecore-0.1.2a
 sqlalchemy[asyncio]~=1.4
 uvloop; sys_platform != "win32" # https://github.com/MagicStack/uvloop/issues/14
