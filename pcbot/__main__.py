@@ -42,6 +42,10 @@ DEFAULT_EXTENSIONS: list[dict[str, Any]] = [
     # CLI options.
     {"name": f"{__package__}.exts.debug_info"},
     {
+        "name": f"{__package__}.exts.docs_pre",
+        "config": {"color": constants.DEFAULT_EMBED_COLOR},
+    },
+    {
         "name": f"{__package__}.exts.help",
         "config": {"color": constants.DEFAULT_EMBED_COLOR},
     },
