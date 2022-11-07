@@ -186,7 +186,7 @@ class DocsPre(BaseCommandCog, name="docs-pre"):
 
             if text:
                 embeds.append(
-                    snakecore.utils.embeds.create_embed(
+                    discord.Embed(
                         title=f"Documentation for `{name}`",
                         description=header + snakecore.utils.code_block(text),
                         color=int(self.theme_color),
@@ -268,8 +268,10 @@ class DocsPre(BaseCommandCog, name="docs-pre"):
 
         main_embeds.extend(embeds)
 
-        callers = [msg_invoker]
-        if ctx.message.reference and ctx.message.reference.message_id:
+        members = [msg_invoker]
+        if (
+            ctx.message.reference and ctx.message.reference.message_id
+        ):  # allow reference author to also control EmbedPaginator
             try:
                 reference_msg_author = (
                     ctx.message.reference.cached_message
@@ -283,9 +285,9 @@ class DocsPre(BaseCommandCog, name="docs-pre"):
                 pass
             else:
                 if isinstance(reference_msg_author, discord.Member):
-                    callers.append(reference_msg_author)
+                    members.append(reference_msg_author)
 
-        await self.send_paginated_embeds(ctx, callers, *main_embeds)
+        await self.send_paginated_response_embeds(ctx, *main_embeds, member=members)
 
     @commands.guild_only()
     @commands.command(
@@ -294,91 +296,6 @@ class DocsPre(BaseCommandCog, name="docs-pre"):
     async def doc(self, ctx: commands.Context[BotT], query: str):
         assert isinstance(ctx.author, discord.Member)
         await self.put_doc(ctx, query, ctx.author)
-
-    async def send_paginated_embeds(
-        self,
-        ctx: commands.Context[BotT],
-        caller: Optional[Union[discord.Member, Sequence[discord.Member]]] = None,
-        *embeds: discord.Embed,
-        destination: Optional[discord.abc.Messageable] = None,
-    ):
-        assert isinstance(
-            ctx.author, discord.Member
-        )  # this shouldn't normally be false
-        paginator = None
-
-        if not embeds:
-            return
-
-        destination = destination or ctx.channel
-
-        if (
-            response_message := self.cached_response_messages.get(ctx.message.id)
-        ) is not None:
-            try:
-                if (
-                    paginator_tuple := self.cached_embed_paginators.get(
-                        response_message.id
-                    )
-                ) is not None:
-                    if paginator_tuple[0].is_running():
-                        await paginator_tuple[0].stop()
-
-                if len(embeds) == 1:
-                    await response_message.edit(embed=embeds[0])
-                    return
-
-                paginator = snakecore.utils.pagination.EmbedPaginator(
-                    (
-                        response_message := await response_message.edit(
-                            content="\u200b", embed=None
-                        )
-                    ),
-                    *embeds,
-                    caller=ctx.author,
-                    inactivity_timeout=60,
-                    theme_color=int(self.theme_color),
-                )
-            except discord.NotFound:
-
-                if len(embeds) == 1:
-                    self.cached_response_messages[
-                        ctx.message.id
-                    ] = await destination.send(embed=embeds[0])
-                    return
-
-                paginator = snakecore.utils.pagination.EmbedPaginator(
-                    (response_message := await destination.send(content="\u200b")),
-                    *embeds,
-                    caller=ctx.author,
-                    inactivity_timeout=60,
-                    theme_color=int(self.theme_color),
-                )
-        else:
-            if len(embeds) == 1:
-                self.cached_response_messages[ctx.message.id] = await destination.send(
-                    embed=embeds[0]
-                )
-                return
-
-            paginator = snakecore.utils.pagination.EmbedPaginator(
-                (response_message := await destination.send(content="\u200b")),
-                *embeds,
-                caller=caller or ctx.author,
-                inactivity_timeout=60,
-                theme_color=int(self.theme_color),
-            )
-
-        paginator_tuple = (
-            paginator,
-            asyncio.create_task(
-                paginator.mainloop(client=ctx.bot),
-                name=f"embed_paginator({response_message.jump_url})",
-            ),
-        )
-
-        self.cached_response_messages[ctx.message.id] = response_message
-        self.cached_embed_paginators[response_message.id] = paginator_tuple
 
 
 @snakecore.commands.decorators.with_config_kwargs

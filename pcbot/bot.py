@@ -471,14 +471,10 @@ class PygameCommunityBot(snakecore.commands.Bot):
                 footer_text = exception.__cause__.__class__.__name__
 
         if (
-            (
-                flag_value := command.extras.get(
-                    "response_message_deletion_reaction", False
-                )
-            )
+            (flag_value := command.extras.get("response_deletion_with_reaction", False))
             or flag_value is not False
             and command.cog is not None
-            and getattr(command.cog, "response_message_deletion_reaction", False)
+            and getattr(command.cog, "response_deletion_with_reaction", False)
         ):
             footer_text = f"{footer_text}\n(React with 🗑 to delete this error message in the next 30s)"
 
@@ -488,29 +484,23 @@ class PygameCommunityBot(snakecore.commands.Bot):
             )
             try:
                 if target_message is not None:
-                    await snakecore.utils.embeds.replace_embed_at(
-                        target_message,
-                        title=title,
-                        description=description,
-                        color=color,
-                        footer_text=footer_text,
+                    await target_message.edit(
+                        embed=discord.Embed(
+                            title=title, description=description, color=color
+                        ).set_footer(text=footer_text),
                     )
                 else:
-                    target_message = await snakecore.utils.embeds.send_embed(
-                        context.channel,
-                        title=title,
-                        description=description,
-                        color=color,
-                        footer_text=footer_text,
+                    target_message = await context.send(
+                        embed=discord.Embed(
+                            title=title, description=description, color=color
+                        ).set_footer(text=footer_text)
                     )
             except discord.NotFound:
                 # response message was deleted, send a new message
-                target_message = await snakecore.utils.embeds.send_embed(
-                    context.channel,
-                    title=title,
-                    description=description,
-                    color=color,
-                    footer_text=footer_text,
+                target_message = await context.send(
+                    embed=discord.Embed(
+                        title=title, description=description, color=color
+                    ).set_footer(text=footer_text)
                 )
 
             self._recent_response_error_messages[
