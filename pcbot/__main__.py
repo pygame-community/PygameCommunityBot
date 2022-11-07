@@ -489,7 +489,7 @@ def main(
         config["extensions"] = final_extensions
 
     # pass configuration data to bot instance
-    bot = Bot(final_prefix, intents=discord.Intents(config["intents"]))  # type: ignore
+    bot = Bot(final_prefix, intents=discord.Intents(config["intents"]), strip_after_prefix=True)  # type: ignore
 
     bot._config = config
 

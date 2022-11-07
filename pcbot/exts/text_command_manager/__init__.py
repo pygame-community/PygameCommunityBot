@@ -576,7 +576,7 @@ class TextCommandManager(BaseCommandCog, name="text-command-manager"):
         To see existing settings, run the `tcm view` command.
         Use `tcm set` to alter text command settings.
         """
-        await self.send_paginated_embeds(
+        await self.send_paginated_response_embeds(
             ctx,
             discord.Embed(
                 title="Text Command Manager",
@@ -702,7 +702,7 @@ class TextCommandManager(BaseCommandCog, name="text-command-manager"):
                 + f"\n\nThese mock roles will expire **<t:{int(timestamp+deletion_delay_secs)}:R>**."
             )
 
-        await self.send_paginated_embeds(ctx, main_embed)
+        await self.send_paginated_response_embeds(ctx, main_embed)
 
     @commands.has_guild_permissions(manage_roles=True)
     @tcm.command(name="clearmockroles")
@@ -756,7 +756,7 @@ class TextCommandManager(BaseCommandCog, name="text-command-manager"):
                 "No text command data found "
                 "for this guild. Run the `tcm set` command to add configuration data."
             )
-            return await self.send_paginated_embeds(
+            return await self.send_paginated_response_embeds(
                 ctx, discord.Embed.from_dict(main_embed_dict)
             )
 
@@ -939,7 +939,7 @@ class TextCommandManager(BaseCommandCog, name="text-command-manager"):
                 for final_embed_dict in final_embed_dicts
             )
 
-        await self.send_paginated_embeds(ctx, *final_embeds)
+        await self.send_paginated_response_embeds(ctx, *final_embeds)
 
     @commands.guild_only()
     @commands.max_concurrency(1, per=commands.BucketType.guild, wait=True)
