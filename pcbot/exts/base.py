@@ -9,7 +9,7 @@ from snakecore.utils.pagination import EmbedPaginator
 
 from .. import __version__
 
-BotT = Union[snakecore.commands.Bot, snakecore.commands.AutoShardedBot]
+BotT = Union[commands.Bot, commands.AutoShardedBot]
 
 
 class BaseCommandCog(commands.Cog):
@@ -181,15 +181,26 @@ class BaseCommandCog(commands.Cog):
 
             return response_message
 
-    async def send_paginated_embeds(
+    async def send_paginated_response_embeds(
         self,
         ctx: commands.Context[BotT],
         *embeds: discord.Embed,
-        destination: Optional[discord.abc.Messageable] = None,
+        member: Optional[Union[discord.Member, Sequence[discord.Member]]] = None,
+        inactivity_timeout: Optional[int] = 60,
+        destination: Optional[
+            Union[discord.TextChannel, discord.VoiceChannel, discord.Thread]
+        ] = None,
     ):
-        assert isinstance(
-            ctx.author, discord.Member
-        )  # this shouldn't normally be false
+
+        if not ctx.guild:
+            raise ValueError(
+                "invocation context 'ctx' must have a '.guild' associated with it."
+            )
+
+        assert isinstance(ctx.author, discord.Member) and isinstance(
+            ctx.channel, (discord.TextChannel, discord.VoiceChannel, discord.Thread)
+        )
+        # this shouldn't normally be false
         paginator = None
 
         if not embeds:
@@ -220,7 +231,7 @@ class BaseCommandCog(commands.Cog):
                         )
                     ),
                     *embeds,
-                    caller=ctx.author,
+                    member=member or ctx.author,
                     inactivity_timeout=60,
                     theme_color=int(self.theme_color),
                 )
@@ -235,7 +246,7 @@ class BaseCommandCog(commands.Cog):
                 paginator = snakecore.utils.pagination.EmbedPaginator(
                     (response_message := await destination.send(content="\u200b")),
                     *embeds,
-                    caller=ctx.author,
+                    member=member or ctx.author,
                     inactivity_timeout=60,
                     theme_color=int(self.theme_color),
                 )
@@ -249,8 +260,10 @@ class BaseCommandCog(commands.Cog):
             paginator = snakecore.utils.pagination.EmbedPaginator(
                 (response_message := await destination.send(content="\u200b")),
                 *embeds,
-                caller=ctx.author,
-                inactivity_timeout=60,
+                member=member or ctx.author,
+                inactivity_timeout=inactivity_timeout
+                if inactivity_timeout is not None
+                else 60,
                 theme_color=int(self.theme_color),
             )
 
