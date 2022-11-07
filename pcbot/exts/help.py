@@ -103,7 +103,7 @@ class EmbedHelpCommand(commands.HelpCommand):
 
             embed_dict["footer"] = dict(text=self.get_ending_note())
 
-        await self.send_paginated_embeds(
+        await self.send_paginated_response_embeds(
             *(
                 discord.Embed.from_dict(dct | start_embed_dict)
                 for dct in snakecore.utils.embeds.split_embed_dict(embed_dict)
@@ -149,7 +149,7 @@ class EmbedHelpCommand(commands.HelpCommand):
 
         embed_dict["footer"] = dict(text=self.get_ending_note())
 
-        await self.send_paginated_embeds(
+        await self.send_paginated_response_embeds(
             *(
                 discord.Embed.from_dict(
                     dct
@@ -215,7 +215,7 @@ class EmbedHelpCommand(commands.HelpCommand):
 
         embed_dict["footer"] = dict(text=self.get_ending_note())
 
-        await self.send_paginated_embeds(
+        await self.send_paginated_response_embeds(
             *(
                 discord.Embed.from_dict(dct | start_embed_dict)
                 for dct in snakecore.utils.embeds.split_embed_dict(embed_dict)
@@ -228,7 +228,7 @@ class EmbedHelpCommand(commands.HelpCommand):
     send_command_help = send_group_help  # type: ignore
 
     async def send_error_message(self, error: str, /) -> None:
-        return await self.send_paginated_embeds(
+        return await self.send_paginated_response_embeds(
             discord.Embed(
                 title="Something went wrong",
                 description=error,
@@ -236,7 +236,7 @@ class EmbedHelpCommand(commands.HelpCommand):
             )
         )
 
-    async def send_paginated_embeds(self, *embeds: discord.Embed):
+    async def send_paginated_response_embeds(self, *embeds: discord.Embed):
         ctx = self.context
 
         # this shouldn't normally be false
@@ -277,7 +277,7 @@ class EmbedHelpCommand(commands.HelpCommand):
                         )
                     ),
                     *embeds,
-                    caller=ctx.author,
+                    member=ctx.author,
                     inactivity_timeout=60,
                     theme_color=int(self.theme_color),
                 )
@@ -292,7 +292,7 @@ class EmbedHelpCommand(commands.HelpCommand):
                 paginator = snakecore.utils.pagination.EmbedPaginator(
                     (response_message := await destination.send(content="\u200b")),
                     *embeds,
-                    caller=ctx.author,
+                    member=ctx.author,
                     inactivity_timeout=60,
                     theme_color=int(self.theme_color),
                 )
@@ -306,7 +306,7 @@ class EmbedHelpCommand(commands.HelpCommand):
             paginator = snakecore.utils.pagination.EmbedPaginator(
                 (response_message := await destination.send(content="\u200b")),
                 *embeds,
-                caller=ctx.author,
+                member=ctx.author,
                 inactivity_timeout=60,
                 theme_color=int(self.theme_color),
             )
