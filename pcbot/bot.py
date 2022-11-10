@@ -680,7 +680,7 @@ class PygameCommunityBot(snakecore.commands.Bot):
 
         async with engine.connect() as conn:
             result: sqlalchemy.engine.Result = await conn.execute(
-                text("SELECT * FROM bot_extension_data"),
+                text("SELECT * FROM bot_extension_data WHERE name == :name"),
                 dict(name=name),
             )
 

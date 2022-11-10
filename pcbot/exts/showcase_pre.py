@@ -14,6 +14,7 @@ BotT = Union[snakecore.commands.Bot, snakecore.commands.AutoShardedBot]
 SHOWCASE_ENTRIES_CHANNEL = 772507247540437032
 ENTRIES_DISCUSSION_CHANNEL = 780351772514058291
 
+
 class ShowcasePre(BaseCommandCog, name="showcase-pre"):
     def __init__(self, bot: BotT, theme_color: Union[int, discord.Color] = 0) -> None:
         super().__init__(bot, theme_color=theme_color)
