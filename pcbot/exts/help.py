@@ -5,16 +5,19 @@ import discord
 from discord.ext import commands
 import snakecore
 
-from .base import BaseCommandCog
+from ..bot import PygameCommunityBot
 
-BotT = Union[snakecore.commands.Bot, snakecore.commands.AutoShardedBot]
+from .base import BaseCommandCog
+from .text_command_manager import TextCommandManager
+
+BotT = PygameCommunityBot
 
 
 class EmbedHelpCommand(commands.HelpCommand):
     # Based on https://gist.github.com/Rapptz/31a346ed1eb545ddeb0d451d81a60b3b
     default_command_extras = {
         "invoke_on_message_edit": True,
-        "response_message_deletion_reaction": True,
+        "response_deletion_with_reaction": True,
     }
 
     def __init__(self, **options: Any) -> None:
@@ -32,6 +35,7 @@ class EmbedHelpCommand(commands.HelpCommand):
 
         self.theme_color = discord.Color(int(options.get("theme_color", 0)))
         self.bot_help_message = options.get("bot_help_message", "")
+        self.context: commands.Context[PygameCommunityBot]
         super().__init__(**options)
 
     def get_ending_note(self):
@@ -74,12 +78,21 @@ class EmbedHelpCommand(commands.HelpCommand):
                         value="\u200b",
                     )
                 )
+            text_command_manager: TextCommandManager = self.context.bot.get_cog("text-command-manager")  # type: ignore
+
             for cog, cmds in mapping.items():
                 name = "No Category" if cog is None else cog.qualified_name
-                filtered = await self.filter_commands(cmds, sort=True)
+                if text_command_manager:
+                    filtered = [
+                        cmd
+                        for cmd in await self.filter_commands(cmds, sort=True)
+                        if await text_command_manager.tcmd_can_run(self.context, cmd)
+                    ]
+                else:
+                    filtered = await self.filter_commands(cmds, sort=True)
                 if filtered:
                     value = "\u2002".join(
-                        f"`{self.get_command_signature(c)}`" for c in cmds
+                        f"`{self.get_command_signature(c)}`" for c in filtered
                     )
                     if cog and cog.description:
                         value = f"{cog.description}\n\n**Commands**\n{value}"
@@ -90,7 +103,7 @@ class EmbedHelpCommand(commands.HelpCommand):
 
             embed_dict["footer"] = dict(text=self.get_ending_note())
 
-        await self.send_paginated_embeds(
+        await self.send_paginated_response_embeds(
             *(
                 discord.Embed.from_dict(dct | start_embed_dict)
                 for dct in snakecore.utils.embeds.split_embed_dict(embed_dict)
@@ -108,7 +121,17 @@ class EmbedHelpCommand(commands.HelpCommand):
         if cog.description:
             embed_dict["description"] = cog.description
 
-        filtered = await self.filter_commands(cog.get_commands(), sort=True)
+        text_command_manager: TextCommandManager = self.context.bot.get_cog("text-command-manager")  # type: ignore
+
+        if text_command_manager:
+            filtered = [
+                cmd
+                for cmd in await self.filter_commands(cog.get_commands(), sort=True)
+                if await text_command_manager.tcmd_can_run(self.context, cmd)
+            ]
+        else:
+            filtered = await self.filter_commands(cog.get_commands(), sort=True)
+
         embed_dict["fields"] = []
         embed_dict["fields"].append(
             dict(name=f"Subcommands: {len(filtered)}", value="\u200b")
@@ -126,7 +149,7 @@ class EmbedHelpCommand(commands.HelpCommand):
 
         embed_dict["footer"] = dict(text=self.get_ending_note())
 
-        await self.send_paginated_embeds(
+        await self.send_paginated_response_embeds(
             *(
                 discord.Embed.from_dict(
                     dct
@@ -161,8 +184,20 @@ class EmbedHelpCommand(commands.HelpCommand):
         if group.help:
             embed_dict["description"] += group.help
 
+        text_command_manager: TextCommandManager = self.context.bot.get_cog("text-command-manager")  # type: ignore
+        if text_command_manager:
+            if not await text_command_manager.tcmd_can_run(self.context, group):
+                return
+
         if isinstance(group, commands.Group):
-            filtered = await self.filter_commands(group.commands, sort=True)
+            if text_command_manager:
+                filtered = [
+                    cmd
+                    for cmd in await self.filter_commands(group.commands, sort=True)
+                    if await text_command_manager.tcmd_can_run(self.context, cmd)
+                ]
+            else:
+                filtered = await self.filter_commands(group.commands, sort=True)
             embed_dict["fields"] = []
             embed_dict["fields"].append(
                 dict(name=f"Subcommands: {len(filtered)}", value="\u200b")
@@ -180,7 +215,7 @@ class EmbedHelpCommand(commands.HelpCommand):
 
         embed_dict["footer"] = dict(text=self.get_ending_note())
 
-        await self.send_paginated_embeds(
+        await self.send_paginated_response_embeds(
             *(
                 discord.Embed.from_dict(dct | start_embed_dict)
                 for dct in snakecore.utils.embeds.split_embed_dict(embed_dict)
@@ -193,7 +228,7 @@ class EmbedHelpCommand(commands.HelpCommand):
     send_command_help = send_group_help  # type: ignore
 
     async def send_error_message(self, error: str, /) -> None:
-        return await self.send_paginated_embeds(
+        return await self.send_paginated_response_embeds(
             discord.Embed(
                 title="Something went wrong",
                 description=error,
@@ -201,7 +236,7 @@ class EmbedHelpCommand(commands.HelpCommand):
             )
         )
 
-    async def send_paginated_embeds(self, *embeds: discord.Embed):
+    async def send_paginated_response_embeds(self, *embeds: discord.Embed):
         ctx = self.context
 
         # this shouldn't normally be false
@@ -242,7 +277,7 @@ class EmbedHelpCommand(commands.HelpCommand):
                         )
                     ),
                     *embeds,
-                    caller=ctx.author,
+                    member=ctx.author,
                     inactivity_timeout=60,
                     theme_color=int(self.theme_color),
                 )
@@ -257,7 +292,7 @@ class EmbedHelpCommand(commands.HelpCommand):
                 paginator = snakecore.utils.pagination.EmbedPaginator(
                     (response_message := await destination.send(content="\u200b")),
                     *embeds,
-                    caller=ctx.author,
+                    member=ctx.author,
                     inactivity_timeout=60,
                     theme_color=int(self.theme_color),
                 )
@@ -271,7 +306,7 @@ class EmbedHelpCommand(commands.HelpCommand):
             paginator = snakecore.utils.pagination.EmbedPaginator(
                 (response_message := await destination.send(content="\u200b")),
                 *embeds,
-                caller=ctx.author,
+                member=ctx.author,
                 inactivity_timeout=60,
                 theme_color=int(self.theme_color),
             )

@@ -95,7 +95,7 @@ Options:
                                   Failure will occur silently if this file
                                   could cannot be found/read successfully,
                                   except when 'config.py' is not provided, in
-                                  which case an errorwill occur.  [default:
+                                  which case an error will occur.  [default:
                                   ./localconfig.py]
   --intents TEXT                  The integer of bot intents as bitwise flags
                                   to be used by the bot instead of

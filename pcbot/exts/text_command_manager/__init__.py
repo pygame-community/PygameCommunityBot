@@ -11,6 +11,7 @@ from uuid import UUID
 import discord
 from discord.types.embed import Embed as EmbedDict, EmbedField
 from discord.ext import commands
+from packaging.version import Version
 import snakecore
 from snakecore.commands.converters import Parens
 from snakecore.commands.decorators import flagconverter_kwargs
@@ -565,7 +566,7 @@ class TextCommandManager(BaseCommandCog, name="text-command-manager"):
     @commands.guild_only()
     @commands.group(
         invoke_without_command=True,
-        extras=dict(response_messsage_deletion_reaction=True),
+        extras=dict(response_deletion_with_reaction=True),
     )
     async def tcm(self, ctx: commands.Context[BotT]):
         """A text command manager to meet all your text
@@ -575,7 +576,7 @@ class TextCommandManager(BaseCommandCog, name="text-command-manager"):
         To see existing settings, run the `tcm view` command.
         Use `tcm set` to alter text command settings.
         """
-        await self.send_paginated_embeds(
+        await self.send_paginated_response_embeds(
             ctx,
             discord.Embed(
                 title="Text Command Manager",
@@ -604,7 +605,7 @@ class TextCommandManager(BaseCommandCog, name="text-command-manager"):
             return
 
     @commands.has_guild_permissions(manage_roles=True)
-    @tcm.command(name="mockroles", extras=dict(response_message_deletion_reaction=True))
+    @tcm.command(name="mockroles", extras=dict(response_deletion_with_reaction=True))
     async def tcm_mockroles(
         self,
         ctx: commands.Context[BotT],
@@ -701,7 +702,7 @@ class TextCommandManager(BaseCommandCog, name="text-command-manager"):
                 + f"\n\nThese mock roles will expire **<t:{int(timestamp+deletion_delay_secs)}:R>**."
             )
 
-        await self.send_paginated_embeds(ctx, main_embed)
+        await self.send_paginated_response_embeds(ctx, main_embed)
 
     @commands.has_guild_permissions(manage_roles=True)
     @tcm.command(name="clearmockroles")
@@ -725,9 +726,7 @@ class TextCommandManager(BaseCommandCog, name="text-command-manager"):
     @commands.guild_only()
     @tcm.command(
         name="view",
-        extras=dict(
-            response_message_deletion_reaction=True, invoke_on_message_edit=True
-        ),
+        extras=dict(response_deletion_with_reaction=True, invoke_on_message_edit=True),
     )
     async def tcm_view(
         self,
@@ -757,7 +756,9 @@ class TextCommandManager(BaseCommandCog, name="text-command-manager"):
                 "No text command data found "
                 "for this guild. Run the `tcm set` command to add configuration data."
             )
-            return await ctx.send(embed=discord.Embed.from_dict(main_embed_dict))
+            return await self.send_paginated_response_embeds(
+                ctx, discord.Embed.from_dict(main_embed_dict)
+            )
 
         main_embed_dict["fields"] = []
 
@@ -938,7 +939,7 @@ class TextCommandManager(BaseCommandCog, name="text-command-manager"):
                 for final_embed_dict in final_embed_dicts
             )
 
-        await self.send_paginated_embeds(ctx, *final_embeds)
+        await self.send_paginated_response_embeds(ctx, *final_embeds)
 
     @commands.guild_only()
     @commands.max_concurrency(1, per=commands.BucketType.guild, wait=True)
@@ -953,7 +954,7 @@ class TextCommandManager(BaseCommandCog, name="text-command-manager"):
         ctx: commands.Context[BotT],
         name: Union[Parens[str, ...], str],
         *,
-        override: ChannelOrRoleOverrides,
+        override: Optional[ChannelOrRoleOverrides] = None,
         command: Optional[bool] = None,
         subcommands: Optional[bool] = None,
     ):
@@ -993,7 +994,7 @@ class TextCommandManager(BaseCommandCog, name="text-command-manager"):
         enabled = command
         subcommands_enabled = subcommands
 
-        channel_or_role_overrides = override
+        channel_or_role_overrides = override or []
 
         if (
             not tcmd_names
@@ -1076,6 +1077,14 @@ class TextCommandManager(BaseCommandCog, name="text-command-manager"):
                         )
                     )
             else:
+                if tcmd_obj.cog is self and not (
+                    command is None and subcommands is None
+                ):
+                    raise commands.CommandInvokeError(
+                        commands.CommandError(
+                            f"Cannot enable/disable `tcm` command or any of its subcommands."
+                        )
+                    )
                 if guild_tcmd_states_exists:
                     tcmd_state_map = await self.fetch_guild_tcmd_states(ctx.guild.id)
                 else:
@@ -1428,24 +1437,26 @@ async def setup(bot: BotT, color: Union[int, discord.Color] = 0):
 
     first_setup = False
     try:
-        extension_data = await bot.read_extension_data(__name__)
+        extension_data = await bot.read_extension_data(__package__)
     except LookupError:
         first_setup = True
         extension_data = dict(name=__name__, db_table_prefix=DB_TABLE_PREFIX)
         await bot.create_extension_data(**extension_data, version=__version__)
 
-    stored_version = "0.0.0" if first_setup else str(extension_data["version"])
-    if stored_version > __version__:
+    extension_version = Version(__version__)
+    stored_version = Version("0.0.0" if first_setup else str(extension_data["version"]))
+    if stored_version > extension_version:
         raise RuntimeError(
-            f'Extension data is incompatible: Stored data version "{stored_version}" exceeds extension version "{__version__}"'
+            f'Extension data is incompatible: Stored data version "{stored_version}"'
+            f' exceeds extension version "{extension_version}"'
         )
 
-    elif stored_version < __version__:
+    elif stored_version < extension_version:
         conn: AsyncConnection
         async with db_engine.begin() as conn:
-            for vi in sorted(MIGRATIONS[db_engine.name].keys()):
+            for vi in sorted(map(Version, MIGRATIONS[db_engine.name])):
                 if vi > stored_version:
-                    await conn.execute(text(MIGRATIONS[db_engine.name][vi]))
+                    await conn.execute(text(MIGRATIONS[db_engine.name][f"{vi}"]))
 
         extension_data["version"] = __version__
         await bot.update_extension_data(**extension_data)

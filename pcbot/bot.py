@@ -20,6 +20,7 @@ from snakecore.constants import UNSET
 from snakecore.utils.pagination import EmbedPaginator
 
 from . import utils
+from ._types import _DatabaseDict
 
 _logger = logging.getLogger(__name__)
 
@@ -46,8 +47,8 @@ class PygameCommunityBot(snakecore.commands.Bot):
 
         self._cached_embed_paginators_maxsize = 1000
 
-        self._main_database: dict[str, Union[str, dict, AsyncEngine]] = {}
-        self._databases: dict[str, dict[str, Union[str, dict, AsyncEngine]]] = {}
+        self._main_database: _DatabaseDict = {}  # type: ignore
+        self._databases: dict[str, _DatabaseDict] = {}
         self._extension_data_storage_is_init = False
 
         self.before_invoke(self.bot_before_invoke)
@@ -142,28 +143,61 @@ class PygameCommunityBot(snakecore.commands.Bot):
             command = self._find_invoked_subcommand(ctx) or ctx.command
 
             if (
-                command.extras.get("invoke_on_message_edit", False)
-                or command.extras.get("invoke_on_message_edit") is not False
+                (modifier_flag := command.extras.get("invoke_on_message_edit", False))
+                or modifier_flag is not False
                 and command.cog is not None
                 and getattr(command.cog, "invoke_on_message_edit", False)
             ):
                 await self.process_commands(new, ctx=ctx)
 
+    async def on_raw_message_delete(self, payload: discord.RawMessageDeleteEvent):
+        if response_error_message := self._recent_response_error_messages.get(
+            payload.message_id
+        ):
+            try:
+                await response_error_message.delete()
+            except discord.NotFound:
+                pass
+
     async def bot_before_invoke(self, ctx: commands.Context):
         if (
             (command := ctx.invoked_subcommand or ctx.command) is not None
-            and command.extras.get("reference_message_is_argument", False)
-            and ctx.message.reference is not None
-            and isinstance(ctx.message.reference.resolved, discord.Message)
+            and (
+                (
+                    modifier_flag := command.extras.get(
+                        "inject_reference_as_first_argument", False
+                    )
+                )
+                or modifier_flag is not False
+                and command.cog is not None
+                and getattr(command.cog, "inject_reference_as_first_argument", False)
+            )
+            and (reference := ctx.message.reference)
+            and reference.message_id
+            and not isinstance(reference.resolved, discord.DeletedReferencedMessage)
         ):
-            if ctx.args and isinstance(
-                ctx.args[0], commands.Cog
-            ):  # command was defined inside cog
-                ctx.args.insert(2, ctx.message.reference.resolved)
+            try:
+                message = reference.resolved or await ctx.fetch_message(
+                    reference.message_id
+                )
+            except discord.NotFound:
+                pass
             else:
-                ctx.args.insert(1, ctx.message.reference.resolved)
+                if ctx.args and isinstance(
+                    ctx.args[0], commands.Cog
+                ):  # command was defined inside cog
+                    if len(ctx.args) > 2 and ctx.args[2] is None:
+                        ctx.args[2] = message
+                    else:
+                        ctx.args.insert(2, message)
+                else:
+                    if len(ctx.args) > 1 and ctx.args[1] is None:
+                        ctx.args[1] = message
+                    else:
+                        ctx.args.insert(1, message)
 
     async def bot_after_invoke(self, ctx: commands.Context):
+        assert ctx.command
         if (
             any(
                 reaction.emoji == self.loading_emoji
@@ -185,17 +219,32 @@ class PygameCommunityBot(snakecore.commands.Bot):
             if paginator_list is not None and paginator_list[0].is_running():  # type: ignore
                 paginator_list[1].cancel()  # type: ignore
 
-        if (
-            (command := ctx.invoked_subcommand or ctx.command) is not None
-            and (
-                command.extras.get("response_message_deletion_reaction", False)
-                or command.extras.get("response_message_deletion_reaction") is not False
+        command = ctx.invoked_subcommand or ctx.command
+
+        if not ctx.command_failed:
+            if (
+                (flag_value := command.extras.get("delete_invocation", False))
+                or flag_value is not False
                 and command.cog is not None
-                and getattr(command.cog, "response_message_deletion_reaction", False)
+                and getattr(command.cog, "delete_invocation", False)
+            ):
+                try:
+                    await ctx.message.delete()
+                except discord.NotFound:
+                    pass
+
+        if (
+            (
+                modifier_flag := command.extras.get(
+                    "response_deletion_with_reaction", False
+                )
             )
-            and (response_message := self.cached_response_messages.get(ctx.message.id))
-            is not None
-        ):
+            or modifier_flag is not False
+            and command.cog is not None
+            and getattr(command.cog, "response_deletion_with_reaction", False)
+        ) and (
+            response_message := self.cached_response_messages.get(ctx.message.id)
+        ) is not None:
 
             snakecore.utils.hold_task(
                 asyncio.create_task(
@@ -232,7 +281,7 @@ class PygameCommunityBot(snakecore.commands.Bot):
         return new_ctx
 
     async def _create_database_connections(self) -> None:
-        self._databases = {
+        self._databases = {  # type: ignore
             db_dict["name"]: db_dict
             for db_dict in await utils.load_databases(
                 self._config["databases"], raise_exceptions=False, logger=_logger
@@ -421,7 +470,13 @@ class PygameCommunityBot(snakecore.commands.Bot):
                 color = 0xFF0000
                 footer_text = exception.__cause__.__class__.__name__
 
-        footer_text = f"{footer_text}\n(React with 🗑 to delete this error message in the next 30s)"
+        if (
+            (flag_value := command.extras.get("response_deletion_with_reaction", False))
+            or flag_value is not False
+            and command.cog is not None
+            and getattr(command.cog, "response_deletion_with_reaction", False)
+        ):
+            footer_text = f"{footer_text}\n(React with 🗑 to delete this error message in the next 30s)"
 
         if send_error_message:
             target_message = self._recent_response_error_messages.get(
@@ -429,29 +484,23 @@ class PygameCommunityBot(snakecore.commands.Bot):
             )
             try:
                 if target_message is not None:
-                    await snakecore.utils.embeds.replace_embed_at(
-                        target_message,
-                        title=title,
-                        description=description,
-                        color=color,
-                        footer_text=footer_text,
+                    await target_message.edit(
+                        embed=discord.Embed(
+                            title=title, description=description, color=color
+                        ).set_footer(text=footer_text),
                     )
                 else:
-                    target_message = await snakecore.utils.embeds.send_embed(
-                        context.channel,
-                        title=title,
-                        description=description,
-                        color=color,
-                        footer_text=footer_text,
+                    target_message = await context.send(
+                        embed=discord.Embed(
+                            title=title, description=description, color=color
+                        ).set_footer(text=footer_text)
                     )
             except discord.NotFound:
                 # response message was deleted, send a new message
-                target_message = await snakecore.utils.embeds.send_embed(
-                    context.channel,
-                    title=title,
-                    description=description,
-                    color=color,
-                    footer_text=footer_text,
+                target_message = await context.send(
+                    embed=discord.Embed(
+                        title=title, description=description, color=color
+                    ).set_footer(text=footer_text)
                 )
 
             self._recent_response_error_messages[
@@ -476,10 +525,8 @@ class PygameCommunityBot(snakecore.commands.Bot):
                 main_exception = exception.__cause__
 
             _logger.error(
-                "An unhandled exception occured in command %s",
-                context.invoked_with
-                if context.invoked_with
-                else context.command.qualified_name,
+                "An unhandled exception occured in command '%s'",
+                context.command.qualified_name,
                 exc_info=main_exception,
             )
 
@@ -493,7 +540,7 @@ class PygameCommunityBot(snakecore.commands.Bot):
                 del self._recent_response_error_messages[ctx.message.id]
 
     def get_database(self) -> Optional[AsyncEngine]:
-        """Get the `sqlachemy.ext.asyncio.AsyncEngine` object for the primary
+        """Get an `sqlachemy.ext.asyncio.AsyncEngine` object for the primary
         database of this bot.
 
         Returns:
@@ -501,7 +548,7 @@ class PygameCommunityBot(snakecore.commands.Bot):
               loaded/configured.
         """
 
-        return self._main_database.get("engine")  # type: ignore
+        return self._main_database.get("engine")
 
     def get_databases_data(
         self, *names: str
@@ -536,7 +583,7 @@ class PygameCommunityBot(snakecore.commands.Bot):
         if not self._main_database:
             return
 
-        engine: AsyncEngine = self._main_database["engine"]  # type: ignore
+        engine: AsyncEngine = self._main_database["engine"]
         conn: AsyncConnection
         async with engine.begin() as conn:
             if engine.name == "sqlite":
@@ -600,7 +647,7 @@ class PygameCommunityBot(snakecore.commands.Bot):
         if engine.name not in ("sqlite", "postgresql"):
             raise RuntimeError(f"Unsupported database dialect '{engine.name}'")
 
-        async with engine.connect() as conn:
+        async with engine.begin() as conn:
             await conn.execute(
                 text(
                     "INSERT INTO bot_extension_data "
@@ -614,7 +661,6 @@ class PygameCommunityBot(snakecore.commands.Bot):
                     initial_data=initial_data,
                 ),
             )
-            await conn.commit()
 
     async def read_extension_data(self, name: str) -> dict[str, Union[str, bytes]]:
         if not self._extension_data_storage_is_init:
@@ -626,7 +672,7 @@ class PygameCommunityBot(snakecore.commands.Bot):
                 f"'{name.__class__.__name__}'"
             )
 
-        engine: AsyncEngine = self._main_database["engine"]  # type: ignore
+        engine: AsyncEngine = self._main_database["engine"]
         conn: AsyncConnection
 
         if engine.name not in ("sqlite", "postgresql"):
@@ -634,7 +680,7 @@ class PygameCommunityBot(snakecore.commands.Bot):
 
         async with engine.connect() as conn:
             result: sqlalchemy.engine.Result = await conn.execute(
-                text("SELECT * FROM bot_extension_data"),
+                text("SELECT * FROM bot_extension_data WHERE name == :name"),
                 dict(name=name),
             )
 
@@ -663,7 +709,7 @@ class PygameCommunityBot(snakecore.commands.Bot):
                 f"'{name.__class__.__name__}'"
             )
 
-        engine: AsyncEngine = self._main_database["engine"]  # type: ignore
+        engine: AsyncEngine = self._main_database["engine"]
         conn: AsyncConnection
 
         if engine.name not in ("sqlite", "postgresql"):
@@ -721,7 +767,7 @@ class PygameCommunityBot(snakecore.commands.Bot):
                 f"'version', 'db_table_prefix' and 'data' cannot all be 'None'"
             )
 
-        engine: AsyncEngine = self._main_database["engine"]  # type: ignore
+        engine: AsyncEngine = self._main_database["engine"]
         conn: AsyncConnection
 
         if engine.name not in ("sqlite", "postgresql"):
@@ -774,7 +820,7 @@ class PygameCommunityBot(snakecore.commands.Bot):
                 f"'{name.__class__.__name__}'"
             )
 
-        engine: AsyncEngine = self._main_database["engine"]  # type: ignore
+        engine: AsyncEngine = self._main_database["engine"]
         conn: AsyncConnection
 
         if engine.name not in ("sqlite", "postgresql"):

@@ -42,6 +42,10 @@ DEFAULT_EXTENSIONS: list[dict[str, Any]] = [
     # CLI options.
     {"name": f"{__package__}.exts.debug_info"},
     {
+        "name": f"{__package__}.exts.docs_pre",
+        "config": {"color": constants.DEFAULT_EMBED_COLOR},
+    },
+    {
         "name": f"{__package__}.exts.help",
         "config": {"color": constants.DEFAULT_EMBED_COLOR},
     },
@@ -96,7 +100,7 @@ async def start_bot(bot: Bot) -> None:
 
 
 async def close_bot(bot: Bot) -> None:
-    print("Closing bot...")
+    print("\nClosing bot...")
     await bot.close()
     await snakecore.quit()
 
@@ -485,7 +489,7 @@ def main(
         config["extensions"] = final_extensions
 
     # pass configuration data to bot instance
-    bot = Bot(final_prefix, intents=discord.Intents(config["intents"]))  # type: ignore
+    bot = Bot(final_prefix, intents=discord.Intents(config["intents"]), strip_after_prefix=True)  # type: ignore
 
     bot._config = config
 
