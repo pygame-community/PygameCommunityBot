@@ -143,7 +143,7 @@ class PygameCommunityBot(snakecore.commands.Bot):
             command = self._find_invoked_subcommand(ctx) or ctx.command
 
             if (
-                (modifier_flag := command.extras.get("invoke_on_message_edit", False))
+                (modifier_flag := command.extras.get("invoke_on_message_edit"))
                 or modifier_flag is not False
                 and command.cog is not None
                 and getattr(command.cog, "invoke_on_message_edit", False)
@@ -165,7 +165,7 @@ class PygameCommunityBot(snakecore.commands.Bot):
             and (
                 (
                     modifier_flag := command.extras.get(
-                        "inject_reference_as_first_argument", False
+                        "inject_reference_as_first_argument"
                     )
                 )
                 or modifier_flag is not False
@@ -234,11 +234,7 @@ class PygameCommunityBot(snakecore.commands.Bot):
                     pass
 
         if (
-            (
-                modifier_flag := command.extras.get(
-                    "response_deletion_with_reaction", False
-                )
-            )
+            (modifier_flag := command.extras.get("response_deletion_with_reaction"))
             or modifier_flag is not False
             and command.cog is not None
             and getattr(command.cog, "response_deletion_with_reaction", False)
