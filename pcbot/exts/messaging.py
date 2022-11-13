@@ -9,7 +9,7 @@ import discord
 from discord.ext import commands
 import snakecore
 from snakecore.commands.decorators import flagconverter_kwargs
-from snakecore.commands.converters import CodeBlock, String
+from snakecore.commands.converters import CodeBlock, String, Parens
 
 from .base import BaseCommandCog
 
@@ -480,7 +480,9 @@ class Messaging(BaseCommandCog, name="messaging"):
         c: Optional[String] = None,
         text: Optional[String] = None,
         content: Optional[String] = None,
-        embeds: Optional[tuple[CodeBlock, ...]] = None,
+        embeds: tuple[
+            Union[CodeBlock, discord.Message, Parens[discord.Message, int]], ...
+        ],
         remove_content: bool = False,
         remove_embeds: bool = False,
         remove_all_attachments: bool = False,
@@ -526,39 +528,112 @@ class Messaging(BaseCommandCog, name="messaging"):
                 )
             )
 
+        former_embeds = message.embeds
         parsed_embeds = []
         files = []
         old_attachments = [] if remove_old_attachments else message.attachments
 
         if embeds:
-            for i, code_block in enumerate(embeds):
-                if code_block.language in ("json", None):
-                    try:
-                        embed_dict = json.loads(code_block.code)
-                    except Exception as jerr:
+            for i, code_block_or_msg in enumerate(embeds):
+                if isinstance((code_block := code_block_or_msg), CodeBlock):
+                    if code_block.language in ("json", None):
+                        try:
+                            embed_dict = json.loads(code_block.code)
+                        except Exception as jerr:
+                            raise commands.CommandInvokeError(
+                                commands.CommandError(
+                                    "Error while parsing JSON code block "
+                                    f"{i}: {jerr.__class__.__name__}: {jerr.args[0]}"
+                                )
+                            )
+                    elif code_block.language in ("py", "python"):
+                        try:
+                            embed_dict = literal_eval(code_block.code)
+                        except Exception as perr:
+                            raise commands.CommandInvokeError(
+                                commands.CommandError(
+                                    "Error while parsing Python dict code block "
+                                    f"{i}: {perr.__class__.__name__}: {perr.args[0]}"
+                                )
+                            )
+
+                    else:
                         raise commands.CommandInvokeError(
                             commands.CommandError(
-                                "Error while parsing JSON code block "
-                                f"{i}: {jerr.__class__.__name__}: {jerr.args[0]}"
+                                f"Unsupported code block language: {code_block.language}"
                             )
                         )
-                elif code_block.language in ("py", "python"):
-                    try:
-                        embed_dict = literal_eval(code_block.code)
-                    except Exception as perr:
+                elif isinstance(
+                    (embed_msg := code_block_or_msg), (discord.Message, tuple)
+                ):
+                    attachment_index = 0
+                    if isinstance(embed_msg, tuple):
+                        embed_msg, attachment_index = (
+                            embed_msg[0],
+                            embed_msg[1],
+                        )
+
+                    if not (embed_msg_attachments := embed_msg.attachments):
                         raise commands.CommandInvokeError(
                             commands.CommandError(
-                                "Error while parsing Python dict code block "
-                                f"{i}: {perr.__class__.__name__}: {perr.args[0]}"
+                                f"Error with `embeds` argument {i}: Messages "
+                                "speficied for flag `embeds` must have at least one "
+                                "attachment as `.txt`, `.py` file containing a Python "
+                                "dictionary, or a `.json` file containing embed data. "
+                                "It must be less than 10KB in size.",
                             )
                         )
 
-                else:
-                    raise commands.CommandInvokeError(
-                        commands.CommandError(
-                            f"Unsupported code block language: {code_block.language}"
+                    embed_attachment = embed_msg_attachments[
+                        min(attachment_index, len(embed_msg_attachments))
+                    ]
+
+                    if not (
+                        embed_attachment.content_type
+                        and embed_attachment.content_type.startswith(
+                            ("text", "application/json")
                         )
-                    )
+                        and embed_attachment.size < 10240
+                    ):
+                        raise commands.CommandInvokeError(
+                            commands.CommandError(
+                                f"Error with `embeds` argument {i}: Messages "
+                                "speficied for flag `embeds` must have at least one "
+                                "attachment as `.txt`, `.py` file containing a Python "
+                                "dictionary, or a `.json` file containing embed data. "
+                                "It must be less than 10KB in size.",
+                            )
+                        )
+
+                    embed_data = (await embed_attachment.read()).decode("utf-8")
+
+                    if (
+                        embed_attachment.content_type.startswith(
+                            ("application/json", "text")
+                        )
+                        and "x-python" not in embed_attachment.content_type
+                    ):
+                        try:
+                            embed_dict = json.loads(embed_data)
+                        except Exception as jerr:
+                            raise commands.CommandInvokeError(
+                                commands.CommandError(
+                                    "Error while parsing embed JSON from attachment: "
+                                    f"{i}: {jerr.__class__.__name__}: {jerr.args[0]}"
+                                )
+                            )
+                    else:
+                        try:
+                            embed_dict = literal_eval(embed_data)
+                        except Exception as perr:
+                            raise commands.CommandInvokeError(
+                                commands.CommandError(
+                                    "Error while parsing Python embed dict from attachment: "
+                                    f"{i}: {perr.__class__.__name__}: {perr.args[0]}"
+                                )
+                            )
+                else:
+                    continue
 
                 parsed_embeds.append(discord.Embed.from_dict(embed_dict))
 
@@ -571,6 +646,13 @@ class Messaging(BaseCommandCog, name="messaging"):
                         )
                     )
                 files.append(await att.to_file(use_cached=True))
+
+        parsed_embeds = [
+            embed or former_embeds[i]
+            for i, embed in enumerate(parsed_embeds)
+            if embed or i < len(former_embeds)
+        ]
+        # filter out empty embeds, which can act as placeholders for former embeds
 
         await message.edit(
             content=content
@@ -615,7 +697,8 @@ class Messaging(BaseCommandCog, name="messaging"):
         ctx: commands.Context[BotT],
         *msgs: discord.Message,
         to: Optional[MessageableGuildChannel] = None,
-        as_attachment: bool = False,
+        content: bool = True,
+        content_attachment: bool = False,
         attachments: bool = True,
         embeds: bool = True,
         info: bool = False,
@@ -711,13 +794,13 @@ class Messaging(BaseCommandCog, name="messaging"):
                 )
 
                 content_file = None
-                if as_attachment or len(msg.content) > 2000:
+                if content_attachment or len(msg.content) > 2000:
                     with io.BytesIO(msg.content.encode("utf-8")) as fobj:
                         content_file = discord.File(fobj, "messagedata.txt")
 
                 await destination.send(embed=info_embed, file=content_file)  # type: ignore
 
-            elif as_attachment:
+            elif content_attachment:
                 with io.BytesIO(msg.content.encode("utf-8")) as fobj:
                     await destination.send(
                         file=discord.File(fobj, "messagedata.txt"),
@@ -729,7 +812,7 @@ class Messaging(BaseCommandCog, name="messaging"):
                             )
                         ),
                     )
-            else:
+            elif content:
                 if len(msg.content) > 2000 or len(escaped_msg_content) > 2000:
                     with io.BytesIO(msg.content.encode("utf-8")) as fobj:
                         await destination.send(
@@ -769,13 +852,7 @@ class Messaging(BaseCommandCog, name="messaging"):
             if embeds and msg.embeds:
                 embed_data_fobjs = []
                 for embed in msg.embeds:
-                    embed_data_fobj = io.StringIO()
-                    snakecore.utils.embeds.export_embed_data(
-                        embed.to_dict(),  # type: ignore
-                        fp=embed_data_fobj,
-                        indent=4,
-                        as_json=True,
-                    )
+                    embed_data_fobj = io.StringIO(json.dumps(embed.to_dict(), indent=4))
                     embed_data_fobj.seek(0)
                     embed_data_fobjs.append(embed_data_fobj)
 
