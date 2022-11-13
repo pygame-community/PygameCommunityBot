@@ -15,9 +15,6 @@ BotT = PygameCommunityBot
 class DebugInfo(BaseCommandCog, name="debug-info"):
     invoke_on_message_edit: bool = True
 
-    def __init__(self, bot: BotT) -> None:
-        super().__init__(bot)
-
     @commands.command()
     async def version(self, ctx: commands.Context[BotT]):
         await ctx.send(
@@ -40,19 +37,7 @@ class DebugInfo(BaseCommandCog, name="debug-info"):
             color=constants.DEFAULT_EMBED_COLOR,
         )
 
-        response_message = self.cached_response_messages.get(ctx.message.id)
-
-        if response_message is not None:
-            try:
-                response_message = await response_message.edit(embed=response_embed)
-            except discord.NotFound:
-                self.cached_response_messages[
-                    ctx.message.id
-                ] = response_message = await ctx.send(embed=response_embed)
-        else:
-            self.cached_response_messages[
-                ctx.message.id
-            ] = response_message = await ctx.send(embed=response_embed)
+        response_message = await self.send_or_edit_response(ctx, embed=response_embed)
 
         timedelta = (response_message.edited_at or response_message.created_at) - (  # type: ignore
             ctx.message.edited_at or ctx.message.created_at
