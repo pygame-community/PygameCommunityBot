@@ -138,9 +138,7 @@ class BaseCommandCog(commands.Cog):
         destination = destination or ctx.channel
 
         send = False
-        if (
-            response_message := self.cached_response_messages.get(ctx.message.id)
-        ) is not None:
+        if response_message := self.cached_response_messages.get(ctx.message.id):
             try:
                 return await response_message.edit(
                     content=content,
