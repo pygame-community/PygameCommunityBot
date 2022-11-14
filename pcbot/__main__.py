@@ -58,7 +58,6 @@ DEFAULT_EXTENSIONS: list[dict[str, Any]] = [
     },
 ]
 
-
 DEFAULT_CONFIG: dict[str, Any] = {
     "intents": discord.Intents.default().value,
     "command_prefix": "!",
