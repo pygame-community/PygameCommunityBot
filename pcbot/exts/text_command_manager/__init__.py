@@ -22,7 +22,7 @@ from sqlalchemy import text
 from ... import __version__
 from ...bot import PygameCommunityBot
 from ..base import BaseCommandCog
-from .constants import DB_TABLE_PREFIX, ZERO_UUID
+from .constants import DB_TABLE_PREFIX, ZERO_UUID, UUID_PATTERN
 from ._types import GuildTextCommandState
 from .migrations import MIGRATIONS
 
@@ -790,7 +790,7 @@ class TextCommandManager(BaseCommandCog, name="text-command-manager"):
                 (
                     state
                     for k, state in guild_tcmd_state_map.items()
-                    if re.match(constants.UUID_PATTERN, k)
+                    if re.match(UUID_PATTERN, k)
                 ),
                 key=lambda state: state["qualified_name"],
             )
@@ -837,8 +837,8 @@ class TextCommandManager(BaseCommandCog, name="text-command-manager"):
                     f"`{tcmd_state['qualified_name']}`"
                 )
 
-                if ctx.bot.is_owner(ctx.author):
-                    main_embed_field["value"] = f"UUID: `{tcmd_state['tcmd_uuid']}`"
+                if await ctx.bot.is_owner(ctx.author):
+                    main_embed_field["value"] = f"UUID: `{tcmd_state['tcmd_uuid']}`\n"
 
                 main_embed_field["value"] += (
                     "Command: "
@@ -954,7 +954,7 @@ class TextCommandManager(BaseCommandCog, name="text-command-manager"):
         ctx: commands.Context[BotT],
         name: Union[Parens[str, ...], str],
         *,
-        override: Optional[ChannelOrRoleOverrides] = None,
+        override: ChannelOrRoleOverrides,
         command: Optional[bool] = None,
         subcommands: Optional[bool] = None,
     ):
