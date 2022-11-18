@@ -1,6 +1,7 @@
 from __future__ import annotations
 import asyncio
 import datetime
+import itertools
 import pickle
 import re
 import time
@@ -219,7 +220,7 @@ class HelpForumsPre(BaseCommandCog, name="helpforums-pre"):
             and msg.channel.parent_id in HELP_FORUM_CHANNEL_IDS.values()
             and msg.id == msg.channel.id  # OP deleted starter message
         ):
-            await self._help_thread_deletion_checks(msg.channel)
+            await self.help_thread_deletion_checks(msg.channel)
 
     @commands.Cog.listener()
     async def on_thread_create(self, thread: discord.Thread):
@@ -703,15 +704,8 @@ class HelpForumsPre(BaseCommandCog, name="helpforums-pre"):
             self.bot.get_channel(fid) or (await self.bot.fetch_channel(fid))
             for fid in HELP_FORUM_CHANNEL_IDS.values()
         ]:
-            if not isinstance(forum_channel, discord.ForumChannel):
-                return
-
             now_ts = time.time()
-            for _, help_thread in {
-                thread.id: thread
-                for thread in forum_channel.threads
-                + [thr async for thr in forum_channel.archived_threads(limit=20)]
-            }.items():
+            for help_thread in itertools.chain(forum_channel.threads, [thr async for thr in forum_channel.archived_threads(limit=20)]):  # type: ignore
                 try:
                     if not help_thread.created_at:
                         continue
@@ -795,41 +789,22 @@ class HelpForumsPre(BaseCommandCog, name="helpforums-pre"):
             self.bot.get_channel(fid) or (await self.bot.fetch_channel(fid))
             for fid in HELP_FORUM_CHANNEL_IDS.values()
         ]:
-            if not isinstance(forum_channel, discord.ForumChannel):
-                return
-
-            for help_thread in forum_channel.threads:
+            for help_thread in itertools.chain(
+                forum_channel.threads,  # type: ignore
+                [thr async for thr in forum_channel.archived_threads(limit=20)],  # type: ignore
+            ):
                 try:
-                    try:
-                        starter_message = (
-                            help_thread.starter_message
-                            or await help_thread.fetch_message(help_thread.id)
-                        )
-                    except discord.NotFound:
-                        pass
-                    else:
-                        continue  # starter message still exists, skip
-
-                    member_msg_count = 0
-                    async for thread_message in help_thread.history(
-                        limit=max(help_thread.message_count, 60)
-                    ):
-                        if (
-                            not thread_message.author.bot
-                            and thread_message.type is discord.MessageType.default
-                        ):
-                            member_msg_count += 1
-                            if member_msg_count > 29:
-                                break
-
-                    if member_msg_count < 30:
-                        snakecore.utils.hold_task(
-                            asyncio.create_task(
-                                self._help_thread_deletion_checks(help_thread)
-                            )
-                        )
-                except discord.HTTPException:
+                    starter_message = (
+                        help_thread.starter_message
+                        or await help_thread.fetch_message(help_thread.id)
+                    )
+                except discord.NotFound:
                     pass
+                else:
+                    continue  # starter message still exists, skip
+                snakecore.utils.hold_task(
+                    asyncio.create_task(self.help_thread_deletion_checks(help_thread))
+                )
 
     @tasks.loop(hours=1, reconnect=True)
     async def force_help_thread_archive_after_timeout(self):
@@ -895,32 +870,37 @@ class HelpForumsPre(BaseCommandCog, name="helpforums-pre"):
                     pass
 
     @staticmethod
-    async def _help_thread_deletion_checks(thread: discord.Thread):
+    async def help_thread_deletion_checks(thread: discord.Thread):
         member_msg_count = 0
-        async for thread_message in thread.history(limit=max(thread.message_count, 60)):
-            if (
-                not thread_message.author.bot
-                and thread_message.type == discord.MessageType.default
+        try:
+            async for thread_message in thread.history(
+                limit=max(thread.message_count, 60)
             ):
-                member_msg_count += 1
-                if member_msg_count > 29:
-                    break
+                if (
+                    not thread_message.author.bot
+                    and thread_message.type == discord.MessageType.default
+                ):
+                    member_msg_count += 1
+                    if member_msg_count > 29:
+                        break
 
-        if member_msg_count < 30:
-            await thread.send(
-                embed=discord.Embed(
-                    title="Post scheduled for deletion",
-                    description=(
-                        "Someone deleted the starter message of this post.\n\n"
-                        "Since it contains less than 30 messages sent by "
-                        "server members, it will be deleted "
-                        f"**<t:{int(time.time()+300)}:R>**."
-                    ),
-                    color=0x551111,
+            if member_msg_count < 30:
+                await thread.send(
+                    embed=discord.Embed(
+                        title="Post scheduled for deletion",
+                        description=(
+                            "Someone deleted the starter message of this post.\n\n"
+                            "Since it contains less than 30 messages sent by "
+                            "server members, it will be deleted "
+                            f"**<t:{int(time.time()+300)}:R>**."
+                        ),
+                        color=0x551111,
+                    )
                 )
-            )
-            await asyncio.sleep(300)
-            await thread.delete()
+                await asyncio.sleep(300)
+                await thread.delete()
+        except discord.HTTPException:
+            pass
 
     @staticmethod
     def validate_help_forum_channel_thread_name(thread: discord.Thread) -> bool:
