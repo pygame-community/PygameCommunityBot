@@ -323,51 +323,59 @@ class HelpForumsPre(BaseCommandCog, name="helpforums-pre"):
                     bad_thread_name = False
                     bad_thread_tags = False
 
-                    owner_id_suffix_added = not before.name.endswith(
-                        owner_id_suffix
-                    ) and after.name.endswith(owner_id_suffix)
+                    updater_id = None
 
-                    if before.name != after.name:
+                    async for action in after.guild.audit_logs(
+                        limit=20, action=discord.AuditLogAction.thread_update
+                    ):
+                        if (target := action.target) and target.id == after.id:
+                            if action.user:
+                                updater_id = action.user.id
+                                break
+
+                    if before.name != after.name and updater_id != self.bot.user.id:
                         if caution_types := self.get_help_forum_channel_thread_name_cautions(
                             after
                         ):
                             bad_thread_name = True
-                            if not owner_id_suffix_added:
-                                caution_messages.extend(
-                                    await self.caution_about_help_forum_channel_thread_name(
-                                        after, *caution_types
+                            caution_messages.extend(
+                                await self.caution_about_help_forum_channel_thread_name(
+                                    after, *caution_types
+                                )
+                            )
+                            if (
+                                "thread_title_too_short" in caution_types
+                                and after.slowmode_delay
+                                < THREAD_TITLE_TOO_SHORT_SLOWMODE_DELAY
+                            ):
+                                thread_edits.update(
+                                    dict(
+                                        slowmode_delay=THREAD_TITLE_TOO_SHORT_SLOWMODE_DELAY,
+                                        reason="Slowmode penalty for the title of this "
+                                        "help post being too short.",
                                     )
                                 )
-                                if (
-                                    "thread_title_too_short" in caution_types
-                                    and after.slowmode_delay
-                                    < THREAD_TITLE_TOO_SHORT_SLOWMODE_DELAY
-                                ):
-                                    thread_edits.update(
-                                        dict(
-                                            slowmode_delay=THREAD_TITLE_TOO_SHORT_SLOWMODE_DELAY,
-                                            reason="Slowmode penalty for the title of this "
-                                            "help post being too short.",
-                                        )
+                            elif (
+                                after.slowmode_delay
+                                == THREAD_TITLE_TOO_SHORT_SLOWMODE_DELAY
+                            ):
+                                thread_edits.update(
+                                    dict(
+                                        slowmode_delay=(
+                                            after.parent
+                                            or self.bot.get_channel(after.parent_id)
+                                            or await self.bot.fetch_channel(
+                                                after.parent_id
+                                            )
+                                        ).default_thread_slowmode_delay,
+                                        reason="This help post's title is not too short anymore.",
                                     )
-                                elif (
-                                    after.slowmode_delay
-                                    == THREAD_TITLE_TOO_SHORT_SLOWMODE_DELAY
-                                ):
-                                    thread_edits.update(
-                                        dict(
-                                            slowmode_delay=(
-                                                after.parent
-                                                or self.bot.get_channel(after.parent_id)
-                                                or await self.bot.fetch_channel(
-                                                    after.parent_id
-                                                )
-                                            ).default_thread_slowmode_delay,  # type: ignore
-                                            reason="This help post's title is not too short anymore.",
-                                        )
-                                    )
+                                )
 
-                    elif before.applied_tags != after.applied_tags:
+                    elif (
+                        before.applied_tags != after.applied_tags
+                        and updater_id != self.bot.user.id
+                    ):
                         if after.parent_id == HELP_FORUM_CHANNEL_IDS["regulars"]:
                             if not self.validate_regulars_help_forum_channel_thread_tags(
                                 after
@@ -395,7 +403,10 @@ class HelpForumsPre(BaseCommandCog, name="helpforums-pre"):
                             (msg.id for msg in caution_messages)
                         )
                     else:
-                        if after.id in self.bad_help_thread_data:
+                        if (
+                            after.id in self.bad_help_thread_data
+                            and updater_id != self.bot.user.id
+                        ):
                             if (
                                 after.slowmode_delay
                                 == THREAD_TITLE_TOO_SHORT_SLOWMODE_DELAY
@@ -408,7 +419,7 @@ class HelpForumsPre(BaseCommandCog, name="helpforums-pre"):
                                             or await self.bot.fetch_channel(
                                                 after.parent_id
                                             )
-                                        ).default_thread_slowmode_delay,  # type: ignore
+                                        ).default_thread_slowmode_delay,
                                         reason="This help post's title is not invalid anymore.",
                                     )
                                 )
@@ -466,15 +477,15 @@ class HelpForumsPre(BaseCommandCog, name="helpforums-pre"):
                                     del self.inactive_help_thread_data[after.id]
 
                         elif solved_in_before and not solved_in_after:
-                            parent: discord.ForumChannel = (
+                            parent = (
                                 after.parent
                                 or self.bot.get_channel(after.parent_id)
                                 or await self.bot.fetch_channel(after.parent_id)
-                            )  # type: ignore
+                            )
 
                             new_tags = after.applied_tags
                             if len(new_tags) < FORUM_THREAD_TAG_LIMIT:
-                                for tag in parent.available_tags:  # type: ignore
+                                for tag in parent.available_tags:
                                     if tag.name.lower().startswith("unsolved"):
                                         new_tags.insert(
                                             0, tag
@@ -532,7 +543,8 @@ class HelpForumsPre(BaseCommandCog, name="helpforums-pre"):
                         if thread_edits:
                             await after.edit(archived=False)
                             await asyncio.sleep(5)
-                            await after.edit(archived=True, **thread_edits)
+                            thread_edits["archived"] = True
+                            await after.edit(**thread_edits)
 
             except discord.HTTPException:
                 pass
