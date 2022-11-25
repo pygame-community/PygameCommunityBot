@@ -74,6 +74,13 @@ class PygameCommunityBot(snakecore.commands.Bot):
     def cached_embed_paginators_maxsize(self):
         return self._cached_embed_paginators_maxsize
 
+    async def is_owner(self, user: Union[discord.User, discord.Member], /) -> bool:
+        return (
+            isinstance(user, discord.Member)
+            and (owner_role_ids := self._config.get("owner_role_ids", ()))
+            and any(role.id in owner_role_ids for role in user.roles)
+        ) or await super().is_owner(user)
+
     async def process_commands(
         self, message: discord.Message, /, ctx: Optional[commands.Context] = None
     ) -> None:
@@ -382,21 +389,23 @@ class PygameCommunityBot(snakecore.commands.Bot):
                 and exception.original.args
             ):
                 description = exception.original.args[0]
-            title = "Invalid argument(s)!"
+            title = "Invalid argument(s)"
             description = (
-                f"{description}\n\nFor help on bot commands, call `help <command>` with "
-                "the correct prefix."
+                "Parameter "
+                + f"{(context.current_parameter.name if context.current_parameter else '')}"
+                + f": {description}\n\nFor help on bot commands, call `help <command>`"
+                " with a correct prefix."
             )
 
         elif isinstance(exception, commands.UserInputError):
-            title = "Invalid command input(s)!"
+            title = "Invalid command input(s)"
             description = (
                 f"{description}\n\nFor help on bot commands, call `help <command>` with "
-                "the correct prefix."
+                "a correct prefix."
             )
 
         elif isinstance(exception, commands.DisabledCommand):
-            title = f"Cannot execute command! ({exception.args[0]})"
+            title = f"Cannot execute command ({exception.args[0]})"
             description = (
                 f"The specified command has been globally disabled. "
                 "Please stand by as the bot wizards search for "
@@ -455,24 +464,18 @@ class PygameCommunityBot(snakecore.commands.Bot):
             elif exception.__cause__:
                 log_exception = True
                 has_cause = True
-                title = "Unknown error!"
+                title = "Unknown error"
                 description = (
                     "An unknown error occured while running the "
                     f"{context.command.qualified_name} command!\n"
-                    "This is most likely a bug in the bot itself, and our fellow bot wizards will "
-                    "banish it in no time!\n\n"
+                    "This is most likely a bug in this bot application, "
+                    "please report this to the bot team.\n\n"
                     f"```\n{exception.__cause__.args[0] if exception.__cause__.args else ''}```"
                 )
                 color = 0xFF0000
                 footer_text = exception.__cause__.__class__.__name__
 
-        if (
-            (flag_value := command.extras.get("response_deletion_with_reaction", False))
-            or flag_value is not False
-            and command.cog is not None
-            and getattr(command.cog, "response_deletion_with_reaction", False)
-        ):
-            footer_text = f"{footer_text}\n(React with 🗑 to delete this error message in the next 30s)"
+        footer_text += "\n(React with 🗑 to delete this error message in the next 30s)"
 
         if send_error_message:
             target_message = self._recent_response_error_messages.get(
