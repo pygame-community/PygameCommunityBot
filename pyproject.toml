@@ -34,14 +34,7 @@ combine_star = true
 line_length = 88
 
 [tool.pyright]
-include = [
-  "bot"
-]
 exclude = [
   "**/__pycache__",
-  "botconfig.py",
-  "build",
-  "dist",
-  "launchconfig.py"
 ]
 pythonVersion = "3.9"
