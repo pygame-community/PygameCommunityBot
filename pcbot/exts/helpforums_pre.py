@@ -316,6 +316,7 @@ class HelpForumsPre(BaseCommandCog, name="helpforums-pre"):
     async def on_thread_update(self, before: discord.Thread, after: discord.Thread):
         if after.parent_id in HELP_FORUM_CHANNEL_IDS.values():
             try:
+                assert self.bot.user
                 owner_id_suffix = f" | {after.owner_id}"
                 if not (after.archived or after.locked):
                     thread_edits = {}
@@ -333,7 +334,7 @@ class HelpForumsPre(BaseCommandCog, name="helpforums-pre"):
                                 updater_id = action.user.id
                                 break
 
-                    if before.name != after.name and updater_id != self.bot.user.id:
+                    if before.name != after.name and updater_id != self.bot.user.id: # type: ignore
                         if caution_types := self.get_help_forum_channel_thread_name_cautions(
                             after
                         ):
@@ -367,7 +368,7 @@ class HelpForumsPre(BaseCommandCog, name="helpforums-pre"):
                                             or await self.bot.fetch_channel(
                                                 after.parent_id
                                             )
-                                        ).default_thread_slowmode_delay,
+                                        ).default_thread_slowmode_delay, # type: ignore
                                         reason="This help post's title is not too short anymore.",
                                     )
                                 )
@@ -419,7 +420,7 @@ class HelpForumsPre(BaseCommandCog, name="helpforums-pre"):
                                             or await self.bot.fetch_channel(
                                                 after.parent_id
                                             )
-                                        ).default_thread_slowmode_delay,
+                                        ).default_thread_slowmode_delay, # type: ignore
                                         reason="This help post's title is not invalid anymore.",
                                     )
                                 )
@@ -481,7 +482,7 @@ class HelpForumsPre(BaseCommandCog, name="helpforums-pre"):
                                 after.parent
                                 or self.bot.get_channel(after.parent_id)
                                 or await self.bot.fetch_channel(after.parent_id)
-                            )
+                            )  # type: ignore
 
                             new_tags = after.applied_tags
                             if len(new_tags) < FORUM_THREAD_TAG_LIMIT:
