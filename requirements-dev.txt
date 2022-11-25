@@ -1,3 +1,4 @@
 black~=22.6
 pytest~=7.0
 pytest-asyncio~=0.18
+python-dotenv~=0.21

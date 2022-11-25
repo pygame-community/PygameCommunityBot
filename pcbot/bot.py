@@ -74,6 +74,13 @@ class PygameCommunityBot(snakecore.commands.Bot):
     def cached_embed_paginators_maxsize(self):
         return self._cached_embed_paginators_maxsize
 
+    async def is_owner(self, user: Union[discord.User, discord.Member], /) -> bool:
+        return (
+            isinstance(user, discord.Member)
+            and (owner_role_ids := self._config.get("owner_role_ids", ()))
+            and any(role.id in owner_role_ids for role in user.roles)
+        ) or await super().is_owner(user)
+
     async def process_commands(
         self, message: discord.Message, /, ctx: Optional[commands.Context] = None
     ) -> None:
