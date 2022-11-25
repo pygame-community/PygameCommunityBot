@@ -59,6 +59,9 @@ DEFAULT_EXTENSIONS: list[dict[str, Any]] = [
         "config": {"color": constants.DEFAULT_EMBED_COLOR},
     },
     {
+        "name": f"{__package__}.exts.messaging",
+    },
+    {
         "name": f"{__package__}.exts.polls_pre",
     },
     {
@@ -501,10 +504,12 @@ def main(
 
     # -------------------------------------------------------------------------
     # config.owner_role_ids
-    
+
     if "owner_role_ids" in config:  # logging is disabled in the default configuration
         try:
-            if not all(isinstance(role_id, int) for role_id in config["owner_role_ids"]):
+            if not all(
+                isinstance(role_id, int) for role_id in config["owner_role_ids"]
+            ):
                 click.secho(
                     "  config error: 'owner_role_ids' variable must be a container of 'int's that supports membership testing.",
                     err=True,
@@ -516,7 +521,6 @@ def main(
                 err=True,
                 fg="red",
             )
-
 
     # -------------------------------------------------------------------------
     # TODO: Add support for more config variables as desired

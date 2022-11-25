@@ -334,7 +334,7 @@ class HelpForumsPre(BaseCommandCog, name="helpforums-pre"):
                                 updater_id = action.user.id
                                 break
 
-                    if before.name != after.name and updater_id != self.bot.user.id: # type: ignore
+                    if before.name != after.name and updater_id != self.bot.user.id:  # type: ignore
                         if caution_types := self.get_help_forum_channel_thread_name_cautions(
                             after
                         ):
@@ -368,7 +368,7 @@ class HelpForumsPre(BaseCommandCog, name="helpforums-pre"):
                                             or await self.bot.fetch_channel(
                                                 after.parent_id
                                             )
-                                        ).default_thread_slowmode_delay, # type: ignore
+                                        ).default_thread_slowmode_delay,  # type: ignore
                                         reason="This help post's title is not too short anymore.",
                                     )
                                 )
@@ -420,7 +420,7 @@ class HelpForumsPre(BaseCommandCog, name="helpforums-pre"):
                                             or await self.bot.fetch_channel(
                                                 after.parent_id
                                             )
-                                        ).default_thread_slowmode_delay, # type: ignore
+                                        ).default_thread_slowmode_delay,  # type: ignore
                                         reason="This help post's title is not invalid anymore.",
                                     )
                                 )
