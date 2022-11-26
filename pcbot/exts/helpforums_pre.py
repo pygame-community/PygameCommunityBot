@@ -717,8 +717,14 @@ class HelpForumsPre(BaseCommandCog, name="helpforums-pre"):
             self.bot.get_channel(fid) or (await self.bot.fetch_channel(fid))
             for fid in HELP_FORUM_CHANNEL_IDS.values()
         ]:
+            if not isinstance(forum_channel, discord.ForumChannel):
+                return
+
             now_ts = time.time()
-            for help_thread in itertools.chain(forum_channel.threads, [thr async for thr in forum_channel.archived_threads(limit=20)]):  # type: ignore
+            for help_thread in itertools.chain(
+                forum_channel.threads,
+                [thr async for thr in forum_channel.archived_threads(limit=20)],
+            ):
                 try:
                     if not help_thread.created_at:
                         continue
