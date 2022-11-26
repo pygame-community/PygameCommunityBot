@@ -1128,6 +1128,6 @@ async def setup(bot: BotT, color: Union[int, discord.Color] = 0):
         )
 
     elif stored_version < extension_version:
-        await bot.update_extension_data(version=__version__)  # type: ignore
+        await bot.update_extension_data(__name__, version=__version__)  # type: ignore
 
     await bot.add_cog(HelpForumsPre(bot, theme_color=int(color)))
