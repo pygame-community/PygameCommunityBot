@@ -338,6 +338,12 @@ class PygameCommunityBot(snakecore.commands.Bot):
         if self._databases:
             await self._close_database_connections()
 
+    async def close(self) -> None:
+        await asyncio.gather(
+            *self.dispatch("close"), return_exceptions=True
+        )  # wait for all events to finish being processed.
+        return await super().close()
+
     async def on_ready(self):
         assert self.user is not None
         self.loading_emoji = self.get_emoji(1017826887990509661) or self.loading_emoji

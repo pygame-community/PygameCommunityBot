@@ -128,7 +128,9 @@ class DebugInfo(BaseCommandCog, name="debug-info"):
 
     @tasks.loop(seconds=60, reconnect=False)
     async def update_status_message(self):
-        next_refresh = self.update_status_message.next_iteration
+        next_refresh = datetime.datetime.now(
+            datetime.timezone.utc
+        ) + datetime.timedelta(seconds=60)
 
         recent_records = tuple(self.short_log_record_queue)
         first_record_dt = datetime.datetime.fromtimestamp(recent_records[0].created)
@@ -242,6 +244,19 @@ class DebugInfo(BaseCommandCog, name="debug-info"):
         if not self.bot_was_ready:
             self.bot_was_ready = True
             await self.prepare_status_reporting()
+
+    @commands.Cog.listener()
+    async def on_close(self):
+        if self.status_message:
+            self.status_message = await self.status_message.edit(
+                content="```ansi\n\u001b[1;31mBot Application Closed\u001b[0m\n```"
+                "```ansi\n"
+                f"- Account: \u001b[0;33m{self.bot.user}\u001b[0m (ID: {self.bot.user.id})\n"  # type: ignore
+                f"- Machine: \u001b[0;34m{self.platform_info}\u001b[0m\n"
+                "```\n"
+                "__**Logs**__\n"
+            )
+            await self.update_status_message()
 
     @commands.command()
     async def version(self, ctx: commands.Context[BotT]):

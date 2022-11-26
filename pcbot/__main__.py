@@ -80,7 +80,7 @@ DEFAULT_CONFIG: dict[str, Any] = {
 config: dict = copy.deepcopy(DEFAULT_CONFIG)
 
 
-def setup_logging(log_level: int = logging.INFO) -> None:
+def setup_logging(log_level) -> None:
     logger = logging.getLogger()
     logger.setLevel(log_level)
 
@@ -123,9 +123,9 @@ def clear_logging_handlers(logger: Optional[logging.Logger] = None):
 
 
 @contextlib.contextmanager
-def logging_handling(log_level: int = logging.INFO):
+def logging_handling(log_level):
     try:
-        setup_logging(log_level=log_level)
+        setup_logging(log_level)
         yield
     finally:
         clear_logging_handlers()
