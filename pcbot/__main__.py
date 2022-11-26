@@ -95,9 +95,13 @@ def setup_logging(log_level) -> None:
     if not os.path.exists("logs/"):
         os.mkdir("logs/")
 
+    log_directory = config.get("log_directory", "logs")
+    log_filename = config.get("log_filename", "pygamecommunitybot.0")
+    log_extension = config.get("log_extension", ".log")
+
     rotating_file_handler = utils.CustomRotatingFileHandler(
-        "logs/pygamecommunitybot.0",
-        extension="log",
+        f"{log_directory}/{log_filename}",
+        extension=log_extension,
         maxBytes=8 * 2**20,
         backupCount=10,
     )
@@ -501,6 +505,43 @@ def main(
             fg="red",
         )
         raise click.Abort()
+
+    # -------------------------------------------------------------------------
+    # config.log_directory
+
+    if "log_directory" in config:
+        if not isinstance(config["log_directory"], str) or not os.path.isdir(
+            config["log_directory"]
+        ):
+            click.secho(
+                "  config error: 'log_directory' variable must be a valid path to a directory.",
+                err=True,
+                fg="red",
+            )
+
+    # -------------------------------------------------------------------------
+    # config.log_filename
+
+    if "log_filename" in config:
+        if not isinstance(config["log_filename"], str):
+            click.secho(
+                "  config error: 'log_filename' variable must be a valid file name.",
+                err=True,
+                fg="red",
+            )
+
+    # -------------------------------------------------------------------------
+    # config.log_extension
+
+    if "log_extension" in config:
+        if not isinstance(config["log_extension"], str) or config[
+            "log_extension"
+        ].startswith("."):
+            click.secho(
+                "  config error: 'log_extension' variable must be a file extension (do not prefix it with a '.' symbol).",
+                err=True,
+                fg="red",
+            )
 
     # -------------------------------------------------------------------------
     # config.owner_role_ids
