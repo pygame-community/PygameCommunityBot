@@ -184,9 +184,6 @@ class HelpForumsPre(BaseCommandCog, name="helpforums-pre"):
         help_thread_data = await self.bot.read_extension_data(__name__)
         self.bad_help_thread_data = help_thread_data.get("bad_help_thread_data", {})  # type: ignore
         self.inactive_help_thread_data = help_thread_data.get("bad_help_thread_data", {})  # type: ignore
-        self.inactive_help_thread_alert.start()
-        self.force_help_thread_archive_after_timeout.start()
-        self.delete_help_threads_without_starter_message.start()
 
     async def cog_unload(self) -> None:
         self.inactive_help_thread_alert.stop()
@@ -203,7 +200,7 @@ class HelpForumsPre(BaseCommandCog, name="helpforums-pre"):
                 task_objs.append(task_obj)
 
         if task_objs:
-            await asyncio.gather(*task_objs)
+            await asyncio.gather(*task_objs, return_exceptions=True)
 
         dumped_help_thread_data = pickle.dumps(
             {
@@ -212,6 +209,16 @@ class HelpForumsPre(BaseCommandCog, name="helpforums-pre"):
             }
         )
         await self.bot.update_extension_data(__name__, data=dumped_help_thread_data)
+
+    @commands.Cog.listener()
+    async def on_ready(self):
+        for task_loop in (
+            self.inactive_help_thread_alert,
+            self.force_help_thread_archive_after_timeout,
+            self.delete_help_threads_without_starter_message,
+        ):
+            if not task_loop.is_running():
+                task_loop.start()
 
     @commands.Cog.listener()
     async def on_message_delete(self, msg: discord.Message):
