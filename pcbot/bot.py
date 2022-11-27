@@ -339,10 +339,11 @@ class PygameCommunityBot(snakecore.commands.Bot):
             await self._close_database_connections()
 
     async def close(self) -> None:
-        await asyncio.gather(
-            *self.dispatch("close"), return_exceptions=True
-        )  # wait for all events to finish being processed.
-        return await super().close()
+        if not self.is_closing():
+            await asyncio.gather(
+                *self.dispatch("close"), return_exceptions=True
+            )  # wait for all 'close' events to finish being processed.
+            return await super().close()
 
     async def on_ready(self):
         assert self.user is not None
