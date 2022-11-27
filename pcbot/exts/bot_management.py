@@ -428,6 +428,7 @@ class BotManagement(BaseCommandCog, name="bot-management"):
                                 record_strings.append(line)
                                 record_matches.append(match)
                                 last_selected_match = match
+                                previous_match_was_selected = True
                             elif (
                                 previous_match_was_selected := after_ts
                                 < iso_dt.timestamp()
