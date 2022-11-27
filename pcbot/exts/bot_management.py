@@ -86,7 +86,7 @@ class BotManagement(BaseCommandCog, name="bot-management"):
         self.log_filename = log_filename or self.bot.config.get(
             "log_filename", self.bot.__class__.__name__.lower()
         )
-        self.log_file_extension = self.log_file_extension or self.bot.config.get(
+        self.log_file_extension = log_file_extension or self.bot.config.get(
             "log_file_extension", "log"
         )
         self.log_filename_glob = (
