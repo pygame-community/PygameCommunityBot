@@ -376,7 +376,7 @@ class BotManagement(BaseCommandCog, name="bot-management"):
                 commands.CommandError("No log data was found.")
             )
         filenames = glob.glob(
-            os.path.join(self.log_directory, "pcbot*log")
+            os.path.join(self.log_directory, self.log_file_glob)
         )  # detect currently available log files
         if not filenames:
             raise commands.CommandInvokeError(
