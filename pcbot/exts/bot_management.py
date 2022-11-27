@@ -15,6 +15,7 @@ from typing import Optional, Union
 import discord
 from discord.utils import _ColourFormatter
 from discord.ext import commands, tasks
+import psutil
 import snakecore
 from snakecore.commands.converters import CodeBlock, DateTime
 from snakecore.commands.decorators import flagconverter_kwargs
@@ -34,6 +35,8 @@ BotT = PygameCommunityBot
 
 _root_logger = logging.getLogger()
 _logger = logging.getLogger(__name__)
+
+process = psutil.Process(os.getpid())
 
 
 def is_bot_manager():
@@ -299,6 +302,18 @@ class BotManagement(BaseCommandCog, name="bot-management"):
             )
         )
         snakecore.utils.hold_task(asyncio.create_task(ctx.bot.close()))
+
+    @is_bot_manager()
+    @commands.command(aliases=["heap"], hidden=True)
+    async def memory(self, ctx: commands.Context[BotT]):
+        mem = process.memory_info().rss
+        await ctx.send(
+            embed=discord.Embed(
+                title="Total memory used:",
+                description=f"**{snakecore.utils.format_byte(mem, 4)}**\n({mem} B)",
+                color=int(self.theme_color),
+            )
+        )
 
     @commands.is_owner()
     @commands.command(hidden=True)

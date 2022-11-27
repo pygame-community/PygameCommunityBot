@@ -96,15 +96,13 @@ BOT_WELCOME_MSG = {
 
 
 class PGCActivity(BaseCommandCog, name="pgc-activity"):
-
     def __init__(self, bot: BotT, theme_color: Union[int, discord.Color] = 0) -> None:
         super().__init__(bot, theme_color)
 
     @commands.Cog.listener()
     async def on_ready(self):
-        if not (task_loop:=self.toggle_presence).is_running():
+        if not (task_loop := self.toggle_presence).is_running():
             task_loop.start()
-    
 
     @tasks.loop(seconds=30, reconnect=False)
     async def toggle_presence(self):
