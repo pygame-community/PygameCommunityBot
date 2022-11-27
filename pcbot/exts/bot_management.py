@@ -54,7 +54,7 @@ def is_bot_manager():
     return commands.check(predicate)
 
 
-class DebugInfo(BaseCommandCog, name="debug-info"):
+class BotManagement(BaseCommandCog, name="bot-management"):
     invoke_on_message_edit: bool = True
 
     def __init__(
@@ -97,7 +97,7 @@ class DebugInfo(BaseCommandCog, name="debug-info"):
             asyncio.get_running_loop().call_later(
                 0.5,
                 lambda: _logger.warning(
-                    "No log directory provided to DebugInfo cog instance "
+                    "No log directory provided to BotManagement cog instance "
                     f"{hex(id(self))}: All bot commands involving log output "
                     "will be internally disabled."
                 ),
@@ -509,7 +509,7 @@ async def setup(
     invocation_log_channel_id: Optional[int] = None,
 ):
     await bot.add_cog(
-        DebugInfo(
+        BotManagement(
             bot,
             theme_color=color,
             log_directory=os.path.abspath(log_directory) if log_directory else None,
