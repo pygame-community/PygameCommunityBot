@@ -27,6 +27,7 @@ config = {
         "token": "RVfpk43ojf...",
         # more custom stuff
     },
+    "manager_role_ids": [111222333444555667, 888999000111222334], # bot managers (e.g. the Wizard role on the Discord server)
     "intents": 0b1100011111111011111101, # https://discord.com/developers/docs/topics/gateway#list-of-intents
     "extensions": [
         {
@@ -46,14 +47,14 @@ To override variables as if they were omitted, define them with a value of `...`
 
 #### Example code for `localconfig.py` 
 ```py
-OMIT = Ellipsis
+OMIT = Ellipsis # helper constant
 config = {
     "command_prefix": "!",  # can also be a list of prefixes
     "mention_as_command_prefix": True, # whether mentions may count as command prefixes
     "log_level": "INFO", # omission disables logging entirely
     "owner_ids" : [420420420420420420, 696969696969696969],
-    "owner_role_ids": [123456789101213151, 987654321987654321], # used to implement dynamic owners across guilds
-    # "manager_role_ids": [], # bot managers (e.g. the Wizard role on the Discord server)
+    "owner_role_ids": [123456789101213151, 987654321987654321], # used to implement role-based dynamic owners
+    "manager_role_ids": OMIT, # will override and delete variable
     "extensions": [
         {
             "name": "pcbot.exts.bundled_extension2",
