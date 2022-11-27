@@ -18,6 +18,8 @@ This file is meant to hold all essential configuration settings of the bot appli
 
 For the dictionaries within the `"extensions"` list, the `"name"` and `"package"` keys match the names of the `name` and `package` arguments in the [`discord.ext.commands.Bot.load_extension`](https://discordpy.readthedocs.io/en/latest/ext/commands/api.html#discord.ext.commands.Bot.load_extension) method and the values are meant to be forwarded to it, during startup. The `"config"` key (not to be confused with the `config` dictionary or `config.py`) inside an extension dictionary (only supported with `snakecore`) can be used as a way to provide keyword arguments to extensions while they load, if supported.
 
+The resulting `config` dictionary will be passed to the bot constructor and will remain accessable in a read-only state as a `.config` attribute.
+
 #### Example code for `config.py`
 ```py
 config = {
@@ -44,6 +46,7 @@ To override variables as if they were omitted, define them with a value of `...`
 
 #### Example code for `localconfig.py` 
 ```py
+OMIT = Ellipsis
 config = {
     "command_prefix": "!",  # can also be a list of prefixes
     "mention_as_command_prefix": True, # whether mentions may count as command prefixes
@@ -74,9 +77,9 @@ config = {
             "url": "sqlite+aiosqlite:///path/to/a_database.db",
             "connect_args": {},  # arguments to pass to aiosqlite.connect() from sqlalchemy
         },
-        {"...": ...} # other databases
+        # other secondary databases would go here
     ],
-    "main_database_name": "a_database"
+    "main_database_name": "a_database", # a way to select the main database by name
 }
 ```
 

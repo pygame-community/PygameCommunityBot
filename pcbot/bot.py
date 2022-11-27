@@ -6,7 +6,8 @@ from collections import OrderedDict
 import datetime
 import logging
 import time
-from typing import Any, Optional, Type, Union
+from types import MappingProxyType
+from typing import Any, Mapping, Optional, Type, Union
 
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncConnection
 import sqlalchemy.engine
@@ -28,9 +29,8 @@ _logger = logging.getLogger(__name__)
 class PygameCommunityBot(snakecore.commands.Bot):
     def __init__(self, *args, **kwargs) -> None:
         super().__init__(*args, **kwargs)
-        self._config: dict = {}
+        self._config: dict[str, Any] = kwargs.get("config", {})
         self.loading_emoji = "🔄"
-
         self._loading_reaction_queue: asyncio.Queue = UNSET
 
         self._recent_response_error_messages: dict[int, discord.Message] = {}
@@ -53,6 +53,11 @@ class PygameCommunityBot(snakecore.commands.Bot):
 
         self.before_invoke(self.bot_before_invoke)
         self.after_invoke(self.bot_after_invoke)
+
+    @property
+    def config(self) -> Mapping[str, Any]:
+        """Optional bot configuration data provided during bot creation."""
+        return MappingProxyType(self._config)
 
     @property
     def cached_response_messages(self):

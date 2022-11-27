@@ -47,8 +47,7 @@ DEFAULT_EXTENSIONS: list[dict[str, Any]] = [
     {
         "name": f"{__package__}.exts.bot_management",
         "config": {
-            "log_directory": "logs/",  # will be loaded relative to this file
-            "log_file_glob": "pygamecommunitybot*log",
+            "color": constants.DEFAULT_EMBED_COLOR,
         },
     },
     {
@@ -98,11 +97,11 @@ def setup_logging(log_level) -> None:
 
     log_directory = config.get("log_directory", "logs")
     log_filename = config.get("log_filename", "pygamecommunitybot.0")
-    log_extension = config.get("log_extension", ".log")
+    log_file_extension = config.get("log_file_extension", ".log")
 
     rotating_file_handler = utils.CustomRotatingFileHandler(
         f"{log_directory}/{log_filename}",
-        extension=log_extension,
+        extension=log_file_extension,
         maxBytes=8 * 2**20,
         backupCount=10,
     )
@@ -587,15 +586,15 @@ def main(
             return
 
     # -------------------------------------------------------------------------
-    # config.log_extension
+    # config.log_file_extension
 
-    if "log_extension" in config:
-        if not isinstance(config["log_extension"], str) or config[
-            "log_extension"
+    if "log_file_extension" in config:
+        if not isinstance(config["log_file_extension"], str) or config[
+            "log_file_extension"
         ].startswith("."):
             click.secho(
-                "  config error: 'log_extension' variable must be a file extension"
-                " (do not prefix it with a '.' symbol).",
+                "  config error: 'log_file_extension' variable must be a 'str'"
+                "representing a file extension (do not prefix it with a '.' symbol).",
                 err=True,
                 fg="red",
             )
@@ -702,9 +701,8 @@ def main(
         strip_after_prefix=True,
         owner_id=config.get("owner_id"),
         owner_ids=config.get("owner_ids", set()),
+        config=config,
     )
-
-    bot._config = config
 
     if (
         config["log_level"] is not None

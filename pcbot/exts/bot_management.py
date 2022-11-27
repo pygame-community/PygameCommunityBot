@@ -44,9 +44,7 @@ def is_bot_manager():
         if not (
             (
                 isinstance(ctx.author, discord.Member)
-                and hasattr(ctx.bot, "_config")
-                and isinstance(ctx.bot._config, dict)
-                and (manager_role_ids := ctx.bot._config.get("manager_role_ids", ()))
+                and (manager_role_ids := ctx.bot.config.get("manager_role_ids", ()))
                 and any(role.id in manager_role_ids for role in ctx.author.roles)
             )
             or await ctx.bot.is_owner(ctx.author)
@@ -64,12 +62,15 @@ class BotManagement(BaseCommandCog, name="bot-management"):
         self,
         bot: BotT,
         theme_color: Union[int, discord.Color] = 0,
-        log_directory: Optional[str] = None,
-        log_file_glob: Optional[str] = None,
+        log_directory: Optional[Union[str, os.PathLike]] = None,
+        log_filename: Optional[str] = None,
+        log_file_extension: Optional[str] = None,
+        log_filename_glob: Optional[str] = None,
         status_channel_id: Optional[int] = None,
         invocation_log_channel_id: Optional[int] = None,
     ) -> None:
         super().__init__(bot, theme_color)
+        self.bot: BotT = bot
         self.dummy_handler = DummyHandler()  # helper handler for queuing filters
         self.short_log_record_filter = QueuingFilter(maxlen=200)
         self.log_record_error_filter = QueuingFilter(
@@ -81,8 +82,16 @@ class BotManagement(BaseCommandCog, name="bot-management"):
                 f"The log directory '{log_directory}' does not exist"
             )
 
-        self.log_directory = log_directory
-        self.log_file_glob = log_file_glob or "*.log"  # match any .log files by default
+        self.log_directory = log_directory or self.bot.config.get("log_directory")
+        self.log_filename = log_filename or self.bot.config.get(
+            "log_filename", self.bot.__class__.__name__.lower()
+        )
+        self.log_file_extension = self.log_file_extension or self.bot.config.get(
+            "log_file_extension", "log"
+        )
+        self.log_filename_glob = (
+            log_filename_glob or f"{self.log_filename}*{self.log_file_extension}"
+        )
         self.platform_info = platform.platform()
         self.short_log_record_queue = self.short_log_record_filter.queue
         self.short_log_record_error_queue = self.log_record_error_filter.queue
@@ -173,7 +182,7 @@ class BotManagement(BaseCommandCog, name="bot-management"):
                                 for record in recent_records
                             )
                         ),  # type: ignore
-                        filename=f"{self.bot.__class__.__name__.lower()}_"
+                        filename=f"{self.log_filename}_"
                         f"{first_record_dt.strftime('%Y-%m-%d_%H-%M-%S')}"
                         f"--{last_record_dt.strftime('%Y-%m-%d_%H-%M-%S')}.log",
                     ),
@@ -184,7 +193,7 @@ class BotManagement(BaseCommandCog, name="bot-management"):
                                 for record in recent_records
                             )
                         ),  # type: ignore
-                        filename=f"{self.bot.__class__.__name__.lower()}_"
+                        filename=f"{self.log_filename}_"
                         f"{first_record_dt.strftime('%Y-%m-%d_%H-%M-%S')}"
                         f"--{last_record_dt.strftime('%Y-%m-%d_%H-%M-%S')}.log.ansi",
                     ),
@@ -211,7 +220,7 @@ class BotManagement(BaseCommandCog, name="bot-management"):
                                 for record in recent_records
                             )
                         ),  # type: ignore
-                        filename=f"{self.bot.__class__.__name__.lower()}_"
+                        filename=f"{self.log_filename}_"
                         f"{first_record_dt.strftime('%Y-%m-%d %H-%M-%S')}"
                         f"--{last_record_dt.strftime('%Y-%m-%d %H-%M-%S')}.log",
                     ),
@@ -222,7 +231,7 @@ class BotManagement(BaseCommandCog, name="bot-management"):
                                 for record in recent_records
                             )
                         ),  # type: ignore
-                        filename=f"{self.bot.__class__.__name__.lower()}_"
+                        filename=f"{self.log_filename}_"
                         f"{first_record_dt.strftime('%Y-%m-%d %H-%M-%S')}"
                         f"--{last_record_dt.strftime('%Y-%m-%d %H-%M-%S')}.log.ansi",
                     ),
@@ -376,7 +385,7 @@ class BotManagement(BaseCommandCog, name="bot-management"):
                 commands.CommandError("No log data was found.")
             )
         filenames = glob.glob(
-            os.path.join(self.log_directory, self.log_file_glob)
+            os.path.join(self.log_directory, self.log_filename_glob)
         )  # detect currently available log files
         if not filenames:
             raise commands.CommandInvokeError(
@@ -469,16 +478,19 @@ class BotManagement(BaseCommandCog, name="bot-management"):
 
             await ctx.send(
                 content=f"Bot logs from **<t:{int(first_record_dt.timestamp())}:f>** "  # type: ignore
-                f"to **<t:{int(last_record_dt.timestamp())}:f>** (**{total_record_writes}** total) :",  # type: ignore
+                f"to **<t:{int(last_record_dt.timestamp())}:f>** "  # type: ignore
+                f"(**{total_record_writes}** total) :",
                 file=discord.File(
                     strio,  # type: ignore
-                    filename=f"{self.bot.__class__.__name__.lower()}_"
+                    filename=f"{self.log_filename}_"
                     f"{first_record_dt.strftime('%Y-%m-%d_%H-%M-%S')}"  # type: ignore
                     f"--{last_record_dt.strftime('%Y-%m-%d_%H-%M-%S')}.log",  # type: ignore
                 ),
             )
         else:
-            for filename in sorted(filenames, reverse=True):
+            for filename in sorted(
+                filenames, reverse=True, key=lambda fname: (len(fname), fname)
+            ):  # sort by length, followed by size
                 await ctx.send(
                     file=discord.File(filename),
                 )
@@ -518,8 +530,10 @@ class BotManagement(BaseCommandCog, name="bot-management"):
 async def setup(
     bot: BotT,
     color: Union[int, discord.Color] = constants.DEFAULT_EMBED_COLOR,
-    log_directory: Optional[str] = None,
-    log_file_glob: Optional[str] = None,
+    log_directory: Optional[Union[str, os.PathLike]] = None,
+    log_filename: Optional[str] = None,
+    log_file_extension: Optional[str] = None,
+    log_filename_glob: Optional[str] = None,
     status_channel_id: Optional[int] = None,
     invocation_log_channel_id: Optional[int] = None,
 ):
@@ -528,7 +542,9 @@ async def setup(
             bot,
             theme_color=color,
             log_directory=os.path.abspath(log_directory) if log_directory else None,
-            log_file_glob=log_file_glob,
+            log_filename=log_filename,
+            log_file_extension=log_file_extension,
+            log_filename_glob=log_filename_glob,
             status_channel_id=status_channel_id,
             invocation_log_channel_id=invocation_log_channel_id,
         )
