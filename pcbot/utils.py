@@ -247,10 +247,8 @@ DEFAULT_FORMATTER = DefaultFormatter(
     "[{asctime}] [ {levelname:<8} ] {name} -- {message}", style="{"
 )
 
-DEFAULT_FORMATTER_REGEX = (  # detects formatted output written by DEFAULT_FORMATTER, including appended tracebacks
-    r"\[(\d{4}-\d\d-\d\d.\d\d:\d\d:\d\d\.\d\d\d)\]"
-    r"(?:(?!\n\[(\d{4}-\d\d-\d\d.\d\d:\d\d:\d\d\.\d\d\d)\]\n|.)+"
-)
+DEFAULT_FORMATTER_REGEX = r"\[(\d{4}-\d\d-\d\d.\d\d:\d\d:\d\d\.\d\d\d)\](?:(?!\n\[(\d{4}-\d\d-\d\d.\d\d:\d\d:\d\d\.\d\d\d)\])\n|.)+"
+# detects formatted output written by DEFAULT_FORMATTER, including appended tracebacks
 # on followup lines
 
 ANSI_FORMATTER = ANSIColorFormatter()
