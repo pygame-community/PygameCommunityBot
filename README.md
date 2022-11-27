@@ -16,14 +16,14 @@ For easier overriding of configuration data or local development or testing, a `
 ### `config.py`
 This file is meant to hold all essential configuration settings of the bot application, such as credentials and API endpoints. Creating this file is mandatory if `localconfig.py` doesn't exist, all data must be stored within a dictionary called `config`, meaning that it would be accessible as `config.config`. `"token"` within `"authentication"` is mandatory, but `"authentication"` can be expanded as needed to hold more related data. If using hosting solutions based on ephemeral file systems, credentials stored within the `"authentication"` dictionary like `"token"` can be turned into uppercase environment variables prefixed with `AUTH_` (e.g. `AUTH_TOKEN`) instead. As this file is a Python file, those credentials can be loaded into the `config` dictionary during startup via `os.environ`.
 
-For the dictionaries within the `"extensions"` list, the `"name"` and `"package"` keys match the names of the `name` and `package` arguments in the [`discord.ext.commands.Bot.load_extension`](https://discordpy.readthedocs.io/en/latest/ext/commands/api.html#discord.ext.commands.Bot.load_extension) method and the values are meant to be forwarded to it, during startup. The `"config"` key (not to be confused with the `config` dictionary or `config.py`) inside an extension dictionary (only supported with `snakecore`) can be used as a way to provide keyword arguments to extensions while they load, if supported. 
+For the dictionaries within the `"extensions"` list, the `"name"` and `"package"` keys match the names of the `name` and `package` arguments in the [`discord.ext.commands.Bot.load_extension`](https://discordpy.readthedocs.io/en/latest/ext/commands/api.html#discord.ext.commands.Bot.load_extension) method and the values are meant to be forwarded to it, during startup. The `"config"` key (not to be confused with the `config` dictionary or `config.py`) inside an extension dictionary (only supported with `snakecore`) can be used as a way to provide keyword arguments to extensions while they load, if supported.
 
 #### Example code for `config.py`
 ```py
 config = {
     "authentication": {
-        "token": "...",
-        "...": ...
+        "token": "RVfpk43ojf...",
+        # more custom stuff
     },
     "intents": 0b1100011111111011111101, # https://discord.com/developers/docs/topics/gateway#list-of-intents
     "extensions": [
@@ -40,12 +40,17 @@ config = {
 ### `localconfig.py`
 This file is meant to override any data specified in the `config` dictionary inside `config.py`, in order to e.g. locally customize the launching/startup process of the bot application using custom/extra configuration settings. Creating this file is optional. All data must be stored within a dictionary called `config`, meaning that it would be accessible as `localconfig.config`.
 
+To override variables as if they were omitted, define them with a value of `...` (`Ellipsis` object in Python).
+
 #### Example code for `localconfig.py` 
 ```py
 config = {
     "command_prefix": "!",  # can also be a list of prefixes
     "mention_as_command_prefix": True, # whether mentions may count as command prefixes
     "log_level": "INFO", # omission disables logging entirely
+    "owner_ids" : [420420420420420420, 696969696969696969],
+    "owner_role_ids": [123456789101213151, 987654321987654321], # used to implement dynamic owners across guilds
+    # "bot_manager_role_ids": [], # bot managers (e.g. the Wizard role on the Discord server)
     "extensions": [
         {
             "name": "pcbot.exts.bundled_extension2",
@@ -95,8 +100,10 @@ Options:
                                   Failure will occur silently if this file
                                   could cannot be found/read successfully,
                                   except when 'config.py' is not provided, in
-                                  which case an error will occur.  [default:
-                                  ./localconfig.py]
+                                  which case an error will occur. HINT:
+                                  Setting variables to '...' (Ellipsis) in
+                                  'localconfig.py' will treat them as if they
+                                  were omitted.  [default: ./localconfig.py]
   --intents TEXT                  The integer of bot intents as bitwise flags
                                   to be used by the bot instead of
                                   discord.py's defaults

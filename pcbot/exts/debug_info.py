@@ -9,13 +9,14 @@ import os
 import platform
 import random
 import re
+import time
 from typing import Optional, Union
 
 import discord
 from discord.utils import _ColourFormatter
 from discord.ext import commands, tasks
 import snakecore
-from snakecore.commands.converters import DateTime
+from snakecore.commands.converters import CodeBlock, DateTime
 from snakecore.commands.decorators import flagconverter_kwargs
 
 from pcbot import constants, PygameCommunityBot, __version__ as bot_version
@@ -33,6 +34,24 @@ BotT = PygameCommunityBot
 
 _root_logger = logging.getLogger()
 _logger = logging.getLogger(__name__)
+
+
+def is_bot_manager():
+    async def predicate(ctx: commands.Context[BotT]) -> bool:
+        if not (
+            (
+                isinstance(ctx.author, discord.Member)
+                and hasattr(ctx.bot, "_config")
+                and isinstance(ctx.bot._config, dict)
+                and (manager_role_ids := ctx.bot._config.get("manager_role_ids", ()))
+                and any(role.id in manager_role_ids for role in ctx.author.roles)
+            )
+            or await ctx.bot.is_owner(ctx.author)
+        ):
+            raise commands.NotOwner("You're not a manager or owner of this bot.")
+        return True
+
+    return commands.check(predicate)
 
 
 class DebugInfo(BaseCommandCog, name="debug-info"):
@@ -270,6 +289,44 @@ class DebugInfo(BaseCommandCog, name="debug-info"):
         )
 
     @commands.is_owner()
+    @commands.command(aliases=["stop"], hidden=True)
+    async def shutdown(self, ctx: commands.Context[BotT]):
+        await ctx.send(
+            embed=discord.Embed(
+                title="Shutting down...",
+                description="Change da world,\nMy final message,\nGoodbye.",
+                color=int(self.theme_color),
+            )
+        )
+        snakecore.utils.hold_task(asyncio.create_task(ctx.bot.close()))
+
+    @commands.is_owner()
+    @commands.command(hidden=True)
+    async def eval(self, ctx: commands.Context[BotT], code: CodeBlock):
+        try:
+            script = compile(code.code, "<string>", "eval")  # compile script
+            script_start = time.perf_counter()
+            eval_output = eval(script)  # pylint: disable = eval-used
+            total = time.perf_counter() - script_start
+        except Exception as ex:
+            raise commands.CommandInvokeError(
+                commands.CommandError(
+                    "An exception occured:\n"
+                    + snakecore.utils.code_block(
+                        type(ex).__name__ + ": " + ", ".join(map(str, ex.args))
+                    )
+                ),
+            )
+        await ctx.send(
+            embed=discord.Embed(
+                title=f"Return output (code executed in "
+                f"{snakecore.utils.format_time_by_units(total)}):",
+                description=snakecore.utils.code_block(repr(eval_output)),
+                color=int(self.theme_color),
+            ),
+        )
+
+    @is_bot_manager()
     @commands.command(
         usage="[flags [after: DateTime] [before: DateTime] [limit: Integer]]",
         extras=dict(invoke_on_message_edit=False),

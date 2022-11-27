@@ -3,6 +3,7 @@
 import asyncio
 import contextlib
 import copy
+from importlib.util import resolve_name
 import logging
 import logging.handlers
 from math import log10
@@ -77,7 +78,7 @@ DEFAULT_CONFIG: dict[str, Any] = {
     "extensions": [],
 }
 
-config: dict = copy.deepcopy(DEFAULT_CONFIG)
+config: dict = DEFAULT_CONFIG.copy() | {"extensions": []}
 
 
 def setup_logging(log_level) -> None:
@@ -164,7 +165,8 @@ async def close_bot(bot: Bot) -> None:
     help="A path to the optional 'localconfig.py' file to use for locally overriding "
     "'config.py'. Failure will occur silently if this file could cannot be found/read "
     "successfully, except when 'config.py' is not provided, in which case an error "
-    "will occur.")
+    "will occur.\nHINT: Setting variables to '...' (Ellipsis) in 'localconfig.py' "
+    "will treat them as if they were omitted.")
 @click.option("--intents", type=str,
     help=("The integer of bot intents as bitwise flags to be used by the bot instead "
     f"of discord.py's defaults ({bin(DEFAULT_CONFIG['intents'])}). "
@@ -232,7 +234,7 @@ def main(
                     err=True,
                     fg="red",
                 )
-                raise click.Abort()
+                return
             else:
                 click.secho(
                     f"  Successfully loaded 'config' data from path '{config_path}'"
@@ -252,7 +254,7 @@ def main(
                     err=True,
                     fg="red",
                 )
-                raise click.Abort()
+                return
 
             config_loading_failed = True
 
@@ -271,7 +273,7 @@ def main(
                     err=True,
                     fg="red",
                 )
-                raise click.Abort()
+                return
         except ImportError:
             if not config_path or config_loading_failed:
                 click.secho(
@@ -281,12 +283,23 @@ def main(
                     err=True,
                     fg="red",
                 )
-                raise click.Abort()
+                return
             click.echo("  No 'localconfig.py' file found, continuing...")
         else:
             click.echo(f"  Successfully loaded 'localconfig' from {localconfig_path}")
 
     click.echo("Reading configuration data...")
+    removed = 0
+    for k, v in config.items():
+        if v is Ellipsis:
+            # automatically delete configuration variables that are Ellipsis objects
+            del config[k]
+            removed += 1
+    if removed:
+        click.secho(
+            f"Removed {removed} configuration variables marked as '...' (Ellipsis).",
+            fg="yellow",
+        )
 
     # -------------------------------------------------------------------------
     # config.authentication
@@ -299,12 +312,12 @@ def main(
         or not isinstance(config["authentication"]["token"], str)
     ):
         click.secho(
-            "  config error: 'authentication' variable must be of type 'dict' "
+            "  config error: Required 'authentication' variable must be of type 'dict' "
             "and must at least contain 'token' of type 'str'",
             err=True,
             fg="red",
         )
-        raise click.Abort()
+        return
 
     # -------------------------------------------------------------------------
     # config.intents
@@ -340,7 +353,7 @@ def main(
                 err=True,
                 fg="red",
             )
-            raise click.Abort()
+            return
 
     # -------------------------------------------------------------------------
     # config.command_prefix
@@ -364,7 +377,7 @@ def main(
             err=True,
             fg="red",
         )
-        raise click.Abort()
+        return
 
     if mention_as_command_prefix:
         config["mention_as_command_prefix"] = mention_as_command_prefix
@@ -375,7 +388,7 @@ def main(
             err=True,
             fg="red",
         )
-        raise click.Abort()
+        return
 
     if config["command_prefix"] is not None and config["mention_as_command_prefix"]:
         final_prefix = commands.when_mentioned_or(
@@ -395,31 +408,71 @@ def main(
             err=True,
             fg="red",
         )
-        raise click.Abort()
+        return
 
     # -------------------------------------------------------------------------
     # config.extensions
 
     if not isinstance(config["extensions"], (list, tuple)):
         click.secho(
-            "  config error: 'exts' variable must be a container of type 'list'/'tuple' "
-            "containing dictionaries that specify parameters for the extensions to load.",
+            "  config error: 'extensions' variable must be a container of type "
+            "'list'/'tuple' containing dictionaries that specify "
+            "parameters for the extensions to load.",
             err=True,
             fg="red",
         )
-        raise click.Abort()
+        return
 
     elif config["extensions"] and not all(
         isinstance(ext_dict, dict) and "name" in ext_dict
         for ext_dict in config["extensions"]
     ):
         click.secho(
-            "  config error: The objects in the 'exts' variable container must be of type 'dict' "
-            "and must at least contain the 'name' key mapping to the string name of an extension to load.",
+            "  config error: The objects in the 'extensions' variable container "
+            "must be of type 'dict' and must at least contain the 'name' key "
+            "that maps to the string name of an extension to load.",
             err=True,
             fg="red",
         )
-        raise click.Abort()
+        return
+
+    # handle extension dicts
+    if ignore_all_extensions:
+        config["extensions"] = []
+    else:
+        default_extensions = DEFAULT_EXTENSIONS
+        extra_extensions = config["extensions"]
+        final_extensions = []
+
+        if not ignore_default_extensions:
+            final_extensions.extend(default_extensions)
+        if not ignore_extra_extensions:
+            final_extensions.extend(extra_extensions)
+
+        if ignore_extension:
+            ignore_extension_set = set(ignore_extension)
+            final_extensions = [
+                ext_dict
+                for ext_dict in final_extensions
+                if ext_dict["name"] not in ignore_extension_set
+            ]
+        try:
+            config["extensions"] = list(
+                {
+                    resolve_name(dct["name"], dct["package"])
+                    if "package" in dct
+                    else dct["name"]: dct
+                    for dct in final_extensions
+                }.values()
+            )  # allow extension dicts to overwrite each other by their qualified name
+        except Exception as e:
+            click.secho(
+                "  config error: Internal error while processing 'extension' "
+                f"variable: {e.__class__.__name__}: {e}",
+                err=True,
+                fg="red",
+            )
+            return
 
     # -------------------------------------------------------------------------
     # config.databases
@@ -459,7 +512,7 @@ def main(
                 err=True,
                 fg="red",
             )
-            raise click.Abort()
+            return
 
         if "main_database_name" in config:
             if not isinstance(config["main_database_name"], str):
@@ -469,7 +522,7 @@ def main(
                     err=True,
                     fg="red",
                 )
-                raise click.Abort()
+                return
 
             for i in range(len(config["databases"])):
                 if config["databases"][i]["name"] == config["main_database_name"]:
@@ -484,7 +537,7 @@ def main(
                     err=True,
                     fg="red",
                 )
-                raise click.Abort()
+                return
 
     # -------------------------------------------------------------------------
     # config.main_database_name
@@ -500,11 +553,12 @@ def main(
 
     elif config["log_level"] is not None and config["log_level"] not in LOG_LEVEL_NAMES:
         click.secho(
-            "  config error: 'log_level' variable must be a valid log level name of type 'str' or None.",
+            "  config error: 'log_level' variable must be a valid log level name of "
+            "type 'str', or None.",
             err=True,
             fg="red",
         )
-        raise click.Abort()
+        return
 
     # -------------------------------------------------------------------------
     # config.log_directory
@@ -518,6 +572,7 @@ def main(
                 err=True,
                 fg="red",
             )
+            return
 
     # -------------------------------------------------------------------------
     # config.log_filename
@@ -529,6 +584,7 @@ def main(
                 err=True,
                 fg="red",
             )
+            return
 
     # -------------------------------------------------------------------------
     # config.log_extension
@@ -538,64 +594,115 @@ def main(
             "log_extension"
         ].startswith("."):
             click.secho(
-                "  config error: 'log_extension' variable must be a file extension (do not prefix it with a '.' symbol).",
+                "  config error: 'log_extension' variable must be a file extension"
+                " (do not prefix it with a '.' symbol).",
                 err=True,
                 fg="red",
             )
+            return
+
+    # -------------------------------------------------------------------------
+    # config.owner_id
+
+    if "owner_id" in config and not isinstance(config["owner_id"], (int, type(None))):
+        click.secho(
+            "  config error: 'owner_id' variable must be either an 'int' object or 'None'.",
+            err=True,
+            fg="red",
+        )
+        return
+
+    # -------------------------------------------------------------------------
+    # config.owner_ids
+
+    if "owner_ids" in config:
+        if "owner_id" in config and config["owner_id"] is not None:
+            click.secho(
+                "  config error: 'owner_id' and 'owner_ids' variables cannot be "
+                "specified together.",
+                err=True,
+                fg="red",
+            )
+            return
+        try:
+            if not all(isinstance(role_id, int) for role_id in config["owner_ids"]):
+                click.secho(
+                    "  config error: 'owner_ids' variable must be a container "
+                    "(preferably a 'set' object) of 'int's that supports membership testing.",
+                    err=True,
+                    fg="red",
+                )
+                return
+        except TypeError:
+            click.secho(
+                "  config error: 'owner_ids' variable must be a container "
+                "(preferably a 'set' object) of 'int's that supports membership testing.",
+                err=True,
+                fg="red",
+            )
+            return
 
     # -------------------------------------------------------------------------
     # config.owner_role_ids
 
-    if "owner_role_ids" in config:  # logging is disabled in the default configuration
+    if "owner_role_ids" in config:
         try:
             if not all(
                 isinstance(role_id, int) for role_id in config["owner_role_ids"]
             ):
                 click.secho(
-                    "  config error: 'owner_role_ids' variable must be a container of 'int's that supports membership testing.",
+                    "  config error: 'owner_role_ids' variable must be a container "
+                    "(preferably a 'set' object) of 'int's that supports membership testing.",
                     err=True,
                     fg="red",
                 )
+                return
         except TypeError:
             click.secho(
-                "  config error: 'owner_role_ids' variable must be a container of 'int's that supports membership testing.",
+                "  config error: 'owner_role_ids' variable must be a container "
+                "(preferably a 'set' object) of 'int's that supports membership testing.",
                 err=True,
                 fg="red",
             )
+            return
+
+    # -------------------------------------------------------------------------
+    # config.manager_role_ids
+
+    if "manager_role_ids" in config:
+        try:
+            if not all(
+                isinstance(role_id, int) for role_id in config["manager_role_ids"]
+            ):
+                click.secho(
+                    "  config error: 'manager_role_ids' variable must be a container "
+                    "(preferably a 'set' object) of 'int's that supports membership testing.",
+                    err=True,
+                    fg="red",
+                )
+                return
+        except TypeError:
+            click.secho(
+                "  config error: 'manager_role_ids' variable must be a container "
+                "(preferably a 'set' object) of 'int's that supports membership testing.",
+                err=True,
+                fg="red",
+            )
+            return
 
     # -------------------------------------------------------------------------
     # TODO: Add support for more config variables as desired
 
     click.echo("  Finished reading configuration data")
 
-    # handle extensions
-
-    if ignore_all_extensions:
-        config["extensions"] = []
-    else:
-        default_extensions = DEFAULT_EXTENSIONS
-        extra_extensions = config["extensions"]
-        final_extensions = []
-
-        if not ignore_default_extensions:
-            final_extensions.extend(default_extensions)
-        if not ignore_extra_extensions:
-            final_extensions.extend(extra_extensions)
-
-        if ignore_extension:
-            ignore_extension_set = set(ignore_extension)
-            final_extensions = [
-                ext_dict
-                for ext_dict in final_extensions
-                if ext_dict["name"] not in ignore_extension_set
-            ]
-
-        config["extensions"] = list(
-            {dct["name"]: dct for dct in final_extensions}.values()
-        )  # allow extension dicts to overwrite each other by their qualified name
-
     # pass configuration data to bot instance
-    bot = Bot(final_prefix, intents=discord.Intents(config["intents"]), strip_after_prefix=True)  # type: ignore
+    bot = Bot(
+        final_prefix,
+        intents=discord.Intents(config["intents"]),  # type: ignore
+        strip_after_prefix=True,
+        owner_id=config.get("owner_id"),
+        owner_ids=config.get("owner_ids", set()),
+    )
 
     bot._config = config
 
