@@ -23,8 +23,8 @@ PRESENCE_MAP = {
     discord.ActivityType.watching: ["the pygame community", "over fellow pygamers"],
     discord.ActivityType.playing: ["Hiss at newcomers", "at Pygame Community Discord"],
     discord.ActivityType.listening: [
-        "to 'help' (mention me as a prefix)",
-        "to bugs in my head",
+        "'help' (mention me as a prefix)",
+        "bugs in my head",
     ],
 }
 
