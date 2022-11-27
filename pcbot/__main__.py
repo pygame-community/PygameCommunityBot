@@ -45,7 +45,7 @@ DEFAULT_EXTENSIONS: list[dict[str, Any]] = [
     # These can only be excluded through the --ignore-ext' or '--disable-all-exts'
     # CLI options.
     {
-        "name": f"{__package__}.exts.debug_info",
+        "name": f"{__package__}.exts.bot_management",
         "config": {
             "log_directory": "logs/",  # will be loaded relative to this file
             "log_file_glob": "pygamecommunitybot*log",
