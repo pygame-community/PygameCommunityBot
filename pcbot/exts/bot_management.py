@@ -455,13 +455,14 @@ class BotManagement(BaseCommandCog, name="bot-management"):
                 defer_writes and record_strings and record_matches
             ):  # record strings are sliced to
                 # record string list is sliced to only pick x newest entries, where x equals a specified limit
-                for string in record_strings[-limit:]:  # type: ignore
+                limit_index = max(0, len(record_strings) - limit)  # type: ignore
+                for string in record_strings[limit_index:]:  # type: ignore
                     strio.write(string)
                     total_record_writes += 1
 
                 if not first_record_dt:
                     first_record_dt = datetime.datetime.fromisoformat(
-                        record_matches[-limit].group(1)  # type: ignore
+                        record_matches[limit_index].group(1)  # type: ignore
                     )
 
             if last_selected_match:
