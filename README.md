@@ -50,7 +50,7 @@ config = {
     "log_level": "INFO", # omission disables logging entirely
     "owner_ids" : [420420420420420420, 696969696969696969],
     "owner_role_ids": [123456789101213151, 987654321987654321], # used to implement dynamic owners across guilds
-    # "bot_manager_role_ids": [], # bot managers (e.g. the Wizard role on the Discord server)
+    # "manager_role_ids": [], # bot managers (e.g. the Wizard role on the Discord server)
     "extensions": [
         {
             "name": "pcbot.exts.bundled_extension2",
