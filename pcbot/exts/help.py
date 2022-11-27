@@ -117,6 +117,8 @@ class EmbedHelpCommand(commands.HelpCommand):
         start_embed_dict = {}
         start_embed_dict["title"] = f"`{cog.qualified_name}` Commands"
         start_embed_dict["color"] = int(self.theme_color)
+        start_embed_dict["footer"] = dict(text=self.get_ending_note())
+
         embed_dict = start_embed_dict.copy()
         if cog.description:
             embed_dict["description"] = cog.description
@@ -146,8 +148,6 @@ class EmbedHelpCommand(commands.HelpCommand):
                 for command in filtered
             )
         )
-
-        embed_dict["footer"] = dict(text=self.get_ending_note())
 
         await self.send_paginated_response_embeds(
             *(
