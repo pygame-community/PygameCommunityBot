@@ -138,7 +138,7 @@ class BotManagement(BaseCommandCog, name="bot-management"):
                         name=str(ctx.author),
                         icon_url=str(ctx.author.avatar or ctx.author.default_avatar),
                     ),
-                    title=f"New Command Invocation (<t:{int(ctx.message.created_at.timestamp())}:f>)",
+                    title=f"New Command Invocation",
                     description=escaped_cmd_text
                     if len(escaped_cmd_text) <= 4095
                     else escaped_cmd_text[:2044] + "...",
@@ -152,6 +152,7 @@ class BotManagement(BaseCommandCog, name="bot-management"):
                             inline=False,
                         ),
                     ],
+                    timestamp=ctx.message.created_at.isoformat(),
                 )
             ),
             file=log_txt_file,  # type: ignore
