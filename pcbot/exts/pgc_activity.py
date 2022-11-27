@@ -23,7 +23,7 @@ PRESENCE_MAP = {
     discord.ActivityType.watching: ["the pygame community", "over fellow pygamers"],
     discord.ActivityType.playing: ["Hiss at newcomers", "at Pygame Community Discord"],
     discord.ActivityType.listening: [
-        "'pg!help'",
+        *("'pg!help'" for i in range(4)),
         "bugs in my head",
     ],
 }
@@ -113,6 +113,48 @@ class PGCActivity(BaseCommandCog, name="pgc-activity"):
                 name=random.choice(PRESENCE_MAP[key]),
             )
         )
+
+    @commands.Cog.listener()
+    async def on_message(self, message: discord.Message):
+        if not (
+            message.guild
+            and message.guild.id == PGC_GUILD_ID
+            and message.type
+            in (
+                discord.MessageType.premium_guild_subscription,
+                discord.MessageType.premium_guild_tier_1,
+                discord.MessageType.premium_guild_tier_2,
+                discord.MessageType.premium_guild_tier_3,
+            )
+            and message.channel.permissions_for(
+                message.guild.get_member(self.bot.user.id)  # type: ignore
+                or await message.guild.fetch_member(self.bot.user.id)  # type: ignore
+            ).send_messages
+        ):
+            return
+
+        if message.type == discord.MessageType.premium_guild_tier_1:
+            await message.channel.send(
+                "LETS GO 🎉 ! Thanks for boosting us to **LEVEL 1** "
+                f"{message.author.mention}!"
+            )
+
+        elif message.type == discord.MessageType.premium_guild_tier_2:
+            await message.channel.send(
+                "LETS GOO FURTHER 🎉🎉 !! Huge thanks for boosting us to **LEVEL 2** "
+                f"{message.author.mention}!!"
+            )
+
+        elif message.type == discord.MessageType.premium_guild_tier_3:
+            await message.channel.send(
+                "LETS KEEP GOOOING UP 🎉🎉🎉 !!! A MASSIVE thanks for boosting us to "
+                f"**LEVEL 3** {message.author.mention}!!!"
+            )
+
+        else:
+            await message.channel.send(
+                f"Wow! Thanks for giving us a boost {message.author.mention}! 🤩"
+            )
 
     @commands.Cog.listener()
     async def on_member_join(self, member: discord.Member):
