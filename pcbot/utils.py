@@ -452,11 +452,8 @@ async def message_delete_reaction_listener(
             if on_delete is not None:
                 await discord.utils.maybe_coroutine(on_delete, msg)
 
-    except (asyncio.TimeoutError, asyncio.CancelledError) as a:
+    except asyncio.TimeoutError:
         try:
             await msg.clear_reaction(emoji)
         except discord.HTTPException:
             pass
-
-        if isinstance(a, asyncio.CancelledError):
-            raise a
