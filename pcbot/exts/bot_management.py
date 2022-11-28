@@ -125,6 +125,11 @@ class BotManagement(BaseCommandCog, name="bot-management"):
         self.dummy_handler.addFilter(self.log_record_error_filter)
         self.bot_was_ready = self.bot.is_ready()
 
+    async def cog_unload(self) -> None:
+        if (task_loop := self.update_status_message).is_running():
+            task_loop.cancel()
+        _root_logger.removeHandler(self.dummy_handler)
+
     @commands.Cog.listener()
     async def on_command(self, ctx: commands.Context[BotT]):
         if not self.invocation_log_channel:
