@@ -262,6 +262,50 @@ class ShowcasePre(BaseCommandCog, name="showcase-pre"):
                     )
                 )
 
+    @commands.Cog.listener()
+    async def on_message_delete(self, message: discord.Message):
+        if (
+            message.channel.id in (SHOWCASE_ENTRIES_CHANNEL, ENTRIES_DISCUSSION_CHANNEL)
+            and message.channel
+            and message.guild
+        ):
+            if (
+                message.channel.id == SHOWCASE_ENTRIES_CHANNEL
+                and message.id in self.entry_message_deletion_dict
+            ):  # for case where user deletes their bad entry by themselves
+                deletion_data_list = self.entry_message_deletion_dict[message.id]
+                deletion_task = deletion_data_list[0]
+                if not deletion_task.done():
+                    deletion_task.cancel()
+                    try:
+                        warn_msg = await message.channel.fetch_message(
+                            deletion_data_list[1]
+                        )  # warning and entry message were already deleted
+                        await warn_msg.delete()
+                    except discord.NotFound:
+                        pass
+
+                del self.entry_message_deletion_dict[message.id]
+
+            entries_discussion_channel = message.guild.get_channel(
+                ENTRIES_DISCUSSION_CHANNEL
+            ) or await message.guild.fetch_channel(ENTRIES_DISCUSSION_CHANNEL)
+
+            async for message in entries_discussion_channel.history(  # type: ignore
+                around=message.created_at, limit=5
+            ):
+                try:
+                    link = message.embeds[0].fields[1].value
+                    if not isinstance(link, str):
+                        continue
+
+                    if int(link.split("/")[6][:-1]) == message.id:
+                        await message.delete()
+                        break
+
+                except (IndexError, AttributeError):
+                    pass
+
 
 @snakecore.commands.decorators.with_config_kwargs
 async def setup(bot: BotT):
