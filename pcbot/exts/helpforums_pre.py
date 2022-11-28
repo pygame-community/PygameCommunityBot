@@ -766,28 +766,43 @@ class HelpForumsPre(BaseCommandCog, name="helpforums-pre"):
                                 ]
                                 < last_active_ts
                             ):
-                                alert_message = await help_thread.send(
-                                    f"help-post-inactive(<@{help_thread.owner_id}>, **{help_thread.name}**)",
-                                    embed=discord.Embed(
-                                        title="Your help post has gone inactive... 💤",
-                                        description=f"Your help post was last active **<t:{int(last_active_ts)}:R>** ."
-                                        "\nHas your issue been solved? If so, mark it as **Solved** by "
-                                        "doing one of these:\n\n"
-                                        "  **• React on your starter message with ✅**.\n"
-                                        "  **• Right-click on your post (click and hold on mobile), "
-                                        "go to 'Edit Tags', select the `✅ Solved` tag and save your changes.**\n\n"
-                                        "**Mark all messages you find helpful here with a ✅ reaction please** "
-                                        "<:pg_robot:837389387024957440>\n\n"
-                                        "*If your issue has't been solved, you may "
-                                        "either wait for help or close this post.*",
-                                        color=0x888888,
-                                    ),
-                                )
-                                self.inactive_help_thread_data[help_thread.id] = {
-                                    "thread_id": help_thread.id,
-                                    "last_active_ts": alert_message.created_at.timestamp(),
-                                    "alert_message_id": alert_message.id,
-                                }
+                                if not (
+                                    help_thread.archived
+                                    and help_thread.archiver_id
+                                    and (
+                                        help_thread.archiver_id == help_thread.owner_id
+                                        or forum_channel.permissions_for(
+                                            help_thread.guild.get_member(
+                                                help_thread.archiver_id
+                                            )
+                                            or await help_thread.guild.fetch_member(
+                                                help_thread.archiver_id
+                                            )
+                                        ).manage_threads
+                                    )  # allow alert supression by help thread owner/OP or forum channel moderator
+                                ):
+                                    alert_message = await help_thread.send(
+                                        f"help-post-inactive(<@{help_thread.owner_id}>, **{help_thread.name}**)",
+                                        embed=discord.Embed(
+                                            title="Your help post has gone inactive... 💤",
+                                            description=f"Your help post was last active **<t:{int(last_active_ts)}:R>** ."
+                                            "\nHas your issue been solved? If so, mark it as **Solved** by "
+                                            "doing one of these:\n\n"
+                                            "  **• React on your starter message with ✅**.\n"
+                                            "  **• Right-click on your post (click and hold on mobile), "
+                                            "go to 'Edit Tags', select the `✅ Solved` tag and save your changes.**\n\n"
+                                            "**Mark all messages you find helpful here with a ✅ reaction please** "
+                                            "<:pg_robot:837389387024957440>\n\n"
+                                            "*If your issue has't been solved, you may "
+                                            "either wait for help or close this post.*",
+                                            color=0x888888,
+                                        ),
+                                    )
+                                    self.inactive_help_thread_data[help_thread.id] = {
+                                        "thread_id": help_thread.id,
+                                        "last_active_ts": alert_message.created_at.timestamp(),
+                                        "alert_message_id": alert_message.id,
+                                    }
                         elif (
                             help_thread.id in self.inactive_help_thread_data
                             and (
