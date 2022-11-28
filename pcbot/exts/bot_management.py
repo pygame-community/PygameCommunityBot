@@ -299,6 +299,7 @@ class BotManagement(BaseCommandCog, name="bot-management"):
                 "__**Logs**__\n"
             )
             await self.update_status_message()
+            self.status_message = None
 
     @commands.command()
     async def version(self, ctx: commands.Context[BotT]):
@@ -321,7 +322,14 @@ class BotManagement(BaseCommandCog, name="bot-management"):
                 color=int(self.theme_color),
             )
         )
-        snakecore.utils.hold_task(asyncio.create_task(ctx.bot.close()))
+        snakecore.utils.hold_task(asyncio.create_task(self._bot_shutdown_loop()))
+
+    async def _bot_shutdown_loop(
+        self,
+    ):  # force shutdown, even if it gets ignored initially
+        while not self.bot.is_closed():
+            await self.bot.close()
+            await asyncio.sleep(10)
 
     @is_bot_manager()
     @commands.command(aliases=["heap"], hidden=True)
