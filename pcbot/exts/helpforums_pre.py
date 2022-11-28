@@ -184,6 +184,7 @@ class HelpForumsPre(BaseCommandCog, name="helpforums-pre"):
         help_thread_data = await self.bot.read_extension_data(__name__)
         self.bad_help_thread_data = help_thread_data.get("bad_help_thread_data", {})  # type: ignore
         self.inactive_help_thread_data = help_thread_data.get("bad_help_thread_data", {})  # type: ignore
+        self.save_help_thread_data.start()
 
     async def cog_unload(self) -> None:
         self.inactive_help_thread_alert.stop()
@@ -228,6 +229,16 @@ class HelpForumsPre(BaseCommandCog, name="helpforums-pre"):
             and msg.id == msg.channel.id  # OP deleted starter message
         ):
             await self.help_thread_deletion_checks(msg.channel)
+
+    @tasks.loop(hours=1)
+    async def save_help_thread_data(self):
+        dumped_help_thread_data = pickle.dumps(
+            {
+                "bad_help_thread_data": self.bad_help_thread_data,
+                "inactive_help_thread_data": self.inactive_help_thread_data,
+            }
+        )
+        await self.bot.update_extension_data(__name__, data=dumped_help_thread_data)
 
     @commands.Cog.listener()
     async def on_thread_create(self, thread: discord.Thread):
