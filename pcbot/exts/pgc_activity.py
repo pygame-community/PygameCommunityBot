@@ -109,6 +109,10 @@ class PGCActivity(BaseCommandCog, name="pgc-activity"):
         if not (task_loop := self.toggle_presence).is_running():
             task_loop.start()
 
+    async def cog_unload(self) -> None:
+        if (task_loop := self.toggle_presence).is_running():
+            task_loop.cancel()
+
     @tasks.loop(seconds=30, reconnect=False)
     async def toggle_presence(self):
         key = random.choice(PRESENCES)
