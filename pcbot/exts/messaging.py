@@ -872,7 +872,7 @@ class Messaging(BaseCommandCog, name="messaging"):
 
                 await destination.send(embed=info_embed, file=content_file)  # type: ignore
 
-            elif content_attachment:
+            elif content_attachment and msg.content:
                 with io.BytesIO(msg.content.encode("utf-8")) as fobj:
                     await destination.send(
                         file=discord.File(fobj, "messagedata.txt"),
@@ -897,7 +897,7 @@ class Messaging(BaseCommandCog, name="messaging"):
                                 )
                             ),
                         )
-                else:
+                elif escaped_msg_content:
                     await destination.send(
                         embed=discord.Embed.from_dict(
                             dict(
