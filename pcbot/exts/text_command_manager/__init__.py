@@ -1454,8 +1454,8 @@ async def setup(bot: BotT, color: Union[int, discord.Color] = 0):
     elif stored_version < extension_version:
         conn: AsyncConnection
         async with db_engine.begin() as conn:
-            for vi in sorted(map(Version, MIGRATIONS[db_engine.name])):
-                if vi > stored_version:
+            for vi in MIGRATIONS[db_engine.name]:
+                if Version(vi) > stored_version:
                     await conn.execute(text(MIGRATIONS[db_engine.name][f"{vi}"]))
 
         extension_data["version"] = __version__
