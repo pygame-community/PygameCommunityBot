@@ -197,19 +197,6 @@ class HelpForumsPre(BaseCommandCog, name="helpforums-pre"):
         self.delete_help_threads_without_starter_message.stop()
         self.save_help_thread_data.stop()
 
-        task_objs = []
-        for task_obj in (
-            self.inactive_help_thread_alert.get_task(),
-            self.force_help_thread_archive_after_timeout.get_task(),
-            self.delete_help_threads_without_starter_message.get_task(),
-            self.save_help_thread_data.get_task(),
-        ):
-            if task_obj:
-                task_objs.append(task_obj)
-
-        if task_objs:
-            await asyncio.gather(*task_objs, return_exceptions=True)
-
         dumped_help_thread_data = pickle.dumps(
             {
                 "bad_help_thread_data": self.bad_help_thread_data,
