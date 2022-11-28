@@ -205,9 +205,176 @@ def get_msg_info_embed(msg: discord.Message, author: bool = True):
 
 
 class Messaging(BaseCommandCog, name="messaging"):
+    async def message_send_func(
+        self,
+        ctx: commands.Context[BotT],
+        attachments: commands.Greedy[discord.Attachment],
+        *,
+        c: Optional[String] = None,
+        text: Optional[String] = None,
+        content: Optional[String] = None,
+        embeds: tuple[CodeBlock, ...],
+        to: Optional[tuple[MessageableGuildChannel, ...]] = None,
+        reply_to: Optional[discord.PartialMessage] = None,
+        delete_after: Optional[float] = None,
+        mention_all: bool = False,
+        mention_everyone: bool = False,
+        mention_users: Union[tuple[discord.User], bool] = False,
+        mention_roles: Union[tuple[discord.Role], bool] = False,
+        mention_replied_user: bool = False,
+    ):
+        assert (
+            ctx.guild
+            and ctx.bot.user
+            and (bot_member := ctx.guild.get_member(ctx.bot.user.id))
+            and isinstance(
+                ctx.channel,
+                (discord.TextChannel, discord.VoiceChannel, discord.Thread),
+            )
+            and isinstance(ctx.author, discord.Member)
+        )
+
+        content = c or text or content
+
+        if not (content or attachments or embeds):
+            raise commands.CommandInvokeError(
+                commands.CommandError("Not enough arguments given as input.")
+            )
+
+        destinations = to
+        if not destinations:
+            destinations = (ctx.channel,)
+
+        if not snakecore.utils.have_permissions_in_channels(
+            ctx.author,
+            destinations,
+            "view_channel",
+        ):
+            raise commands.CommandInvokeError(
+                commands.CommandError(
+                    "You do not have enough permissions to run this command on the "
+                    "target channel(s) "
+                    f"({', '.join(f'<#{dest.id}>' for dest in destinations)})."
+                )
+            )
+
+        parsed_embeds = []
+        files = []
+
+        if embeds:
+            for i, code_block in enumerate(embeds):
+                if code_block.language in ("json", None):
+                    try:
+                        embed_dict = json.loads(code_block.code)
+                    except Exception as jerr:
+                        raise commands.CommandInvokeError(
+                            commands.CommandError(
+                                "Error while parsing JSON code block "
+                                f"{i}: {jerr.__class__.__name__}: {jerr.args[0]}"
+                            )
+                        )
+                elif code_block.language in ("py", "python"):
+                    try:
+                        embed_dict = literal_eval(code_block.code)
+                    except Exception as perr:
+                        raise commands.CommandInvokeError(
+                            commands.CommandError(
+                                "Error while parsing Python dict code block "
+                                f"{i}: {perr.__class__.__name__}: {perr.args[0]}"
+                            )
+                        )
+
+                else:
+                    raise commands.CommandInvokeError(
+                        commands.CommandError(
+                            f"Unsupported code block language: {code_block.language}"
+                        )
+                    )
+
+                parsed_embeds.append(discord.Embed.from_dict(embed_dict))
+
+        if attachments:
+            for i, att in enumerate(attachments):
+                if att.size > 2**20 * 8:
+                    raise commands.CommandInvokeError(
+                        commands.CommandError(
+                            f"Attachment {i} is too large to be resent (> 8MiB)"
+                        )
+                    )
+                files.append(await att.to_file(use_cached=True))
+
+        for dest in destinations:
+            msg = await (
+                reply_to.reply(
+                    content=content,
+                    embeds=parsed_embeds,
+                    files=files,
+                    allowed_mentions=(
+                        discord.AllowedMentions.all()
+                        if mention_all
+                        else discord.AllowedMentions(
+                            everyone=mention_everyone,
+                            users=mention_users,
+                            roles=mention_roles,
+                            replied_user=mention_replied_user,
+                        )
+                    ),
+                )
+                if reply_to
+                else dest.send(
+                    content=content,
+                    embeds=parsed_embeds,
+                    files=files,
+                    allowed_mentions=(
+                        discord.AllowedMentions.all()
+                        if mention_all
+                        else discord.AllowedMentions(
+                            everyone=mention_everyone,
+                            users=mention_users,
+                            roles=mention_roles,
+                            replied_user=mention_replied_user,
+                        )
+                    ),
+                )
+            )
+            if delete_after:
+                await msg.delete(delay=delete_after)
+
     @commands.group(invoke_without_command=True, aliases=["msg"])
-    async def message(self, ctx: commands.Context[BotT]):
-        pass
+    async def message(
+        self,
+        ctx: commands.Context[BotT],
+        attachments: commands.Greedy[discord.Attachment],
+        *,
+        c: Optional[String] = None,
+        text: Optional[String] = None,
+        content: Optional[String] = None,
+        embeds: tuple[CodeBlock, ...],
+        to: Optional[tuple[MessageableGuildChannel, ...]] = None,
+        reply_to: Optional[discord.PartialMessage] = None,
+        delete_after: Optional[float] = None,
+        mention_all: bool = False,
+        mention_everyone: bool = False,
+        mention_users: Union[tuple[discord.User], bool] = False,
+        mention_roles: Union[tuple[discord.Role], bool] = False,
+        mention_replied_user: bool = False,
+    ):
+        return await self.message_send_func(
+            ctx,
+            attachments,
+            c=c,
+            text=text,
+            content=content,
+            embeds=embeds,
+            to=to,
+            reply_to=reply_to,
+            delete_after=delete_after,
+            mention_all=mention_all,
+            mention_everyone=mention_everyone,
+            mention_users=mention_users,
+            mention_roles=mention_roles,
+            mention_replied_user=mention_replied_user,
+        )
 
     @commands.guild_only()
     @message.command(
@@ -352,122 +519,22 @@ class Messaging(BaseCommandCog, name="messaging"):
         mention_roles: Union[tuple[discord.Role], bool] = False,
         mention_replied_user: bool = False,
     ):
-        assert (
-            ctx.guild
-            and ctx.bot.user
-            and (bot_member := ctx.guild.get_member(ctx.bot.user.id))
-            and isinstance(
-                ctx.channel,
-                (discord.TextChannel, discord.VoiceChannel, discord.Thread),
-            )
-            and isinstance(ctx.author, discord.Member)
+        return await self.message_send_func(
+            ctx,
+            attachments,
+            c=c,
+            text=text,
+            content=content,
+            embeds=embeds,
+            to=to,
+            reply_to=reply_to,
+            delete_after=delete_after,
+            mention_all=mention_all,
+            mention_everyone=mention_everyone,
+            mention_users=mention_users,
+            mention_roles=mention_roles,
+            mention_replied_user=mention_replied_user,
         )
-
-        content = c or text or content
-
-        if not (content or attachments or embeds):
-            raise commands.CommandInvokeError(
-                commands.CommandError("Not enough arguments given as input.")
-            )
-
-        destinations = to
-        if not destinations:
-            destinations = (ctx.channel,)
-
-        if not snakecore.utils.have_permissions_in_channels(
-            ctx.author,
-            destinations,
-            "view_channel",
-        ):
-            raise commands.CommandInvokeError(
-                commands.CommandError(
-                    "You do not have enough permissions to run this command on the "
-                    "target channel(s) "
-                    f"({', '.join(f'<#{dest.id}>' for dest in destinations)})."
-                )
-            )
-
-        parsed_embeds = []
-        files = []
-
-        if embeds:
-            for i, code_block in enumerate(embeds):
-                if code_block.language in ("json", None):
-                    try:
-                        embed_dict = json.loads(code_block.code)
-                    except Exception as jerr:
-                        raise commands.CommandInvokeError(
-                            commands.CommandError(
-                                "Error while parsing JSON code block "
-                                f"{i}: {jerr.__class__.__name__}: {jerr.args[0]}"
-                            )
-                        )
-                elif code_block.language in ("py", "python"):
-                    try:
-                        embed_dict = literal_eval(code_block.code)
-                    except Exception as perr:
-                        raise commands.CommandInvokeError(
-                            commands.CommandError(
-                                "Error while parsing Python dict code block "
-                                f"{i}: {perr.__class__.__name__}: {perr.args[0]}"
-                            )
-                        )
-
-                else:
-                    raise commands.CommandInvokeError(
-                        commands.CommandError(
-                            f"Unsupported code block language: {code_block.language}"
-                        )
-                    )
-
-                parsed_embeds.append(discord.Embed.from_dict(embed_dict))
-
-        if attachments:
-            for i, att in enumerate(attachments):
-                if att.size > 2**20 * 8:
-                    raise commands.CommandInvokeError(
-                        commands.CommandError(
-                            f"Attachment {i} is too large to be resent (> 8MiB)"
-                        )
-                    )
-                files.append(await att.to_file(use_cached=True))
-
-        for dest in destinations:
-            msg = await (
-                reply_to.reply(
-                    content=content,
-                    embeds=parsed_embeds,
-                    files=files,
-                    allowed_mentions=(
-                        discord.AllowedMentions.all()
-                        if mention_all
-                        else discord.AllowedMentions(
-                            everyone=mention_everyone,
-                            users=mention_users,
-                            roles=mention_roles,
-                            replied_user=mention_replied_user,
-                        )
-                    ),
-                )
-                if reply_to
-                else dest.send(
-                    content=content,
-                    embeds=parsed_embeds,
-                    files=files,
-                    allowed_mentions=(
-                        discord.AllowedMentions.all()
-                        if mention_all
-                        else discord.AllowedMentions(
-                            everyone=mention_everyone,
-                            users=mention_users,
-                            roles=mention_roles,
-                            replied_user=mention_replied_user,
-                        )
-                    ),
-                )
-            )
-            if delete_after:
-                await msg.delete(delay=delete_after)
 
     @commands.guild_only()
     @commands.max_concurrency(1, per=commands.BucketType.default, wait=True)
