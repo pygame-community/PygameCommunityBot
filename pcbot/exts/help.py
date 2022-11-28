@@ -50,7 +50,7 @@ class EmbedHelpCommand(commands.HelpCommand):
         )
 
     def get_command_signature(
-        self, command: commands.Command, escape_markdown: bool = True
+        self, command: commands.Command, escape_markdown: bool = False
     ):
         return (
             discord.utils.escape_markdown(
@@ -146,7 +146,7 @@ class EmbedHelpCommand(commands.HelpCommand):
         embed_dict["fields"].extend(
             (
                 dict(
-                    name=f"`{self.get_command_signature(command, escape_markdown=False)}`",
+                    name=f"`{self.get_command_signature(command)}`",
                     value=command.short_doc or "\u200b",
                     inline=False,
                 )
@@ -182,7 +182,7 @@ class EmbedHelpCommand(commands.HelpCommand):
         embed_dict["description"] = ""
 
         if (
-            signature_str := self.get_command_signature(group, escape_markdown=False)
+            signature_str := self.get_command_signature(group)
         ) != group.qualified_name:  # ignore empty signatures
             embed_dict["description"] = f"```\n{signature_str}```\n"
 
@@ -210,7 +210,7 @@ class EmbedHelpCommand(commands.HelpCommand):
             embed_dict["fields"].extend(
                 (
                     dict(
-                        name=f"`{self.get_command_signature(command, escape_markdown=False)}`",
+                        name=f"`{self.get_command_signature(command)}`",
                         value=command.short_doc or "\u200b",
                         inline=False,
                     )
