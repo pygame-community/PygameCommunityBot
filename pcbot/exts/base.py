@@ -1,3 +1,8 @@
+"""This file is a part of the source code for PygameCommunityBot.
+This project has been licensed under the MIT license.
+Copyright (c) 2022-present pygame-community.
+"""
+
 import asyncio
 from collections import OrderedDict
 from typing import Optional, Sequence, Union
