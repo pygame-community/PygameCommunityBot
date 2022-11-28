@@ -339,7 +339,8 @@ class PygameCommunityBot(snakecore.commands.Bot):
                 )
             else:
                 _logger.info(
-                    f"Successfully loaded extension '{ext_dict.get('package', '')}{ext_dict['name']}' at launch"
+                    f"Successfully loaded extension "
+                    f"'{ext_dict.get('package', '')}{ext_dict['name']}' at launch"
                 )
 
     async def teardown_hook(self) -> None:

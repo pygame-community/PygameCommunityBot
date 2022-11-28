@@ -314,7 +314,8 @@ class BotManagement(BaseCommandCog, name="bot-management"):
 
     @commands.is_owner()
     @commands.command(aliases=["stop"], hidden=True)
-    async def shutdown(self, ctx: commands.Context[BotT]):
+    @flagconverter_kwargs()
+    async def shutdown(self, ctx: commands.Context[BotT], *, timeout: float = 60.0):
         await ctx.send(
             embed=discord.Embed(
                 title="Shutting down...",
@@ -322,14 +323,22 @@ class BotManagement(BaseCommandCog, name="bot-management"):
                 color=int(self.theme_color),
             )
         )
-        snakecore.utils.hold_task(asyncio.create_task(self._bot_shutdown_loop()))
+        snakecore.utils.hold_task(asyncio.create_task(self._bot_shutdown(timeout)))
 
-    async def _bot_shutdown_loop(
-        self,
+    async def _bot_shutdown(
+        self, timeout: float
     ):  # force shutdown, even if it gets ignored initially
-        while not self.bot.is_closed():
-            await self.bot.close()
-            await asyncio.sleep(10)
+        try:
+            await asyncio.wait_for(self.bot.close(), timeout=timeout)
+        except asyncio.TimeoutError:
+            # bot.close is blocked from completion, perhaps due to
+            # an extension getting stuck while shutting down
+            _logger.warning(
+                f"{self.bot.__class__.__qualname__}.close() timed out after {timeout} "
+                "seconds, preparing to exit "
+                "forcefully..."
+            )
+            raise KeyboardInterrupt()  # last resort attempt at stopping
 
     @is_bot_manager()
     @commands.command(aliases=["heap"], hidden=True)
