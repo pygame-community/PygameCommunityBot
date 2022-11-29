@@ -365,7 +365,7 @@ class Messaging(BaseCommandCog, name="messaging"):
         mention_roles: Union[tuple[discord.Role], bool] = False,
         mention_replied_user: bool = False,
     ):
-        """\u200b\nSend a message to the invocation channel or a custom destination.
+        """Send a message to the invocation channel or a custom destination.
 
         __**Parameters:**__
 
@@ -489,7 +489,7 @@ class Messaging(BaseCommandCog, name="messaging"):
         mention_roles: Union[tuple[discord.Role], bool] = False,
         mention_replied_user: bool = False,
     ):
-        """\u200b\nSend a message with the specified text content to the invocation channel or a custom destination.
+        """Send a message with the specified text content to the invocation channel or a custom destination.
 
         __**Parameters:**__
 
@@ -620,7 +620,7 @@ class Messaging(BaseCommandCog, name="messaging"):
         mention_roles: Optional[Union[tuple[discord.Role], bool]] = None,
         mention_replied_user: Optional[bool] = None,
     ):
-        """\u200b\nEdit a previously sent message.
+        """Edit a previously sent message.
 
         __**Parameters:**__
 
@@ -931,6 +931,9 @@ class Messaging(BaseCommandCog, name="messaging"):
     @commands.max_concurrency(1, per=commands.BucketType.default, wait=True)
     @message.command(
         name="extract",
+        usage="<messages>... [to: Channel] [content: yes|no] "
+        "[content_attachment: yes|no] [attachments: yes|no] [embeds: yes|no] "
+        "[info: yes|no] [author_info: yes|no]",
         extras=dict(
             inject_reference_as_first_argument=True,
             response_deletion_with_reaction=True,
@@ -940,7 +943,7 @@ class Messaging(BaseCommandCog, name="messaging"):
     async def message_extract(
         self,
         ctx: commands.Context[BotT],
-        *msgs: discord.Message,
+        *messages: discord.Message,
         to: Optional[MessageableGuildChannel] = None,
         content: bool = True,
         content_attachment: bool = False,
@@ -949,6 +952,45 @@ class Messaging(BaseCommandCog, name="messaging"):
         info: bool = False,
         author_info: bool = True,
     ):
+        """Extract the parts of a Discord message and send them in an accessible form.
+        Message components in action rows are ignored.
+
+        __**Parameters:**__
+
+        **`<messages>...`**
+        > The messages to extract parts from.
+
+        **`[to: Channel]`**
+        > A flag for the channel to send the extracted parts to.
+        > Defaults to the invocation channel.
+
+        **`[content: yes|no]`**
+        > A flag for whether to extract message content, in the form of an embed containing a code block.
+        > Defaults to 'yes'.
+        
+        **`[content_attachment: yes|no]`**
+        > A flag for whether to extract message content, in the form of a text attachment.
+        > This flag overrides the `content:` flag if set to 'yes'.
+        > Defaults to 'no'.
+
+        **`[attachments: yes|no]`**
+        > A flag for whether to extract message attachments.
+        > Defaults to 'yes'.
+        
+        **`[embeds: yes|no]`**
+        > A flag for whether to extract message embeds as JSON files.
+        > Defaults to 'yes'.
+        
+        **`[info: yes|no]`**
+        > A flag for whether to send an informational embed containing details about a message.
+        > If set to 'no', this flag will supress the `author_info:` flag.
+        > Defaults to 'no'.
+        
+        **`[author_info: yes|no]`**
+        > A flag for whether to send an informational embed containing details about a message author.
+        > Defaults to 'yes'.
+
+        """
         assert (
             ctx.guild
             and ctx.bot.user
@@ -976,7 +1018,7 @@ class Messaging(BaseCommandCog, name="messaging"):
             )
 
         checked_channels = set()
-        for i, msg in enumerate(msgs):
+        for i, msg in enumerate(messages):
             if msg and msg.channel not in checked_channels:
                 if not snakecore.utils.have_permissions_in_channels(
                     ctx.author,
@@ -995,12 +1037,12 @@ class Messaging(BaseCommandCog, name="messaging"):
             if not i % 50:
                 await asyncio.sleep(0)
 
-        if not all(msgs):
+        if not all(messages):
             raise commands.CommandInvokeError(
                 commands.CommandError("No messages given as input.")
             )
 
-        for i, msg in enumerate(msgs):
+        for i, msg in enumerate(messages):
             assert msg
             escaped_msg_content = msg.content.replace("```", "\\`\\`\\`")
             attached_files = None
@@ -1118,6 +1160,8 @@ class Messaging(BaseCommandCog, name="messaging"):
     @commands.max_concurrency(1, per=commands.BucketType.default, wait=True)
     @message.command(
         name="clone",
+        usage="<messages>.. [to: Channel] [embeds: yes|no] [attachments: yes|no] "
+        "[as_spoiler: yes|no] [info: yes|no] [author_info: yes|no] [skip_empty: yes|no]",
         extras=dict(
             inject_reference_as_first_argument=True,
             response_deletion_with_reaction=True,
@@ -1127,8 +1171,9 @@ class Messaging(BaseCommandCog, name="messaging"):
     async def message_clone(
         self,
         ctx: commands.Context[BotT],
-        *msgs: discord.Message,
+        *messages: discord.Message,
         to: Optional[tuple[MessageableGuildChannel, ...]] = None,
+        content: bool = True,
         embeds: bool = True,
         attachments: bool = True,
         as_spoiler: Optional[bool] = None,
@@ -1136,6 +1181,43 @@ class Messaging(BaseCommandCog, name="messaging"):
         author_info: bool = True,
         skip_empty: bool = True,
     ):
+        """Clone the specified messages with all or some of their parts included.
+        Message components in action rows are ignored.
+
+        __**Parameters:**__
+
+        **`<messages>...`**
+        > The messages to clone.
+
+        **`[to: Channel]`**
+        > A flag for the channel to send the cloned messages to.
+        > Defaults to the invocation channel.
+
+        **`[content: yes|no]`**
+        > A flag for whether to include message content in the cloned messages.
+        > Defaults to 'yes'.
+
+        **`[attachments: yes|no]`**
+        > A flag for whether to incude message attachments in the cloned messages.
+        > Defaults to 'yes'.
+        
+        **`[embeds: yes|no]`**
+        > A flag for whether to include message embeds in the cloned messages.
+        > Defaults to 'yes'.
+        
+        **`[info: yes|no]`**
+        > A flag for whether to send an informational embed containing details about a message.
+        > If set to 'no', this flag will supress the `author_info:` flag.
+        > Defaults to 'no'.
+        
+        **`[author_info: yes|no]`**
+        > A flag for whether to send an informational embed containing details about a message author.
+        > Defaults to 'yes'.
+
+        **`[skip_empty: yes|no]`**
+        > A flag for whether to automatically ignore messages without content, embeds or attachments.
+        > Defaults to 'yes'.        
+        """
         assert (
             ctx.guild
             and ctx.bot.user
@@ -1163,7 +1245,7 @@ class Messaging(BaseCommandCog, name="messaging"):
             )
 
         checked_channels = set()
-        for i, msg in enumerate(msgs):
+        for i, msg in enumerate(messages):
             if msg.channel not in checked_channels:
                 if not snakecore.utils.have_permissions_in_channels(
                     ctx.author,
@@ -1182,13 +1264,13 @@ class Messaging(BaseCommandCog, name="messaging"):
             if not i % 50:
                 await asyncio.sleep(0)
 
-        if not msgs:
+        if not messages:
             raise commands.CommandInvokeError(
                 commands.CommandError("No messages given as input.")
             )
 
         no_mentions = discord.AllowedMentions.none()
-        for i, msg in enumerate(msgs):
+        for i, msg in enumerate(messages):
             attached_files = []
             if msg.attachments and attachments:
                 filesize_limit = 2**20 * 8  # 8 MiB
@@ -1210,7 +1292,7 @@ class Messaging(BaseCommandCog, name="messaging"):
                         for a in msg.attachments
                     ]
             for destination in destinations:
-                if msg.content or msg.embeds or attached_files:
+                if (content or embeds or attachments) and (msg.content or msg.embeds or attached_files):
                     if len(msg.content) > 2000:
                         start_idx = 0
                         stop_idx = 0
@@ -1242,17 +1324,19 @@ class Messaging(BaseCommandCog, name="messaging"):
                                 allowed_mentions=no_mentions,
                             )
                         await destination.send(
+                            content=msg.content if content else None,
                             embeds=msg.embeds if embeds else None,  # type: ignore
                             files=attached_files if attachments else None,  # type: ignore
                         )
                     else:
                         first_cloned_msg = await destination.send(
-                            content=msg.content,
+                            content=msg.content if content else None,
                             embeds=msg.embeds if embeds else None,  # type: ignore
                             files=attached_files if attachments else None,  # type: ignore
                             allowed_mentions=no_mentions,
                         )
-                elif not skip_empty:
+
+                elif not (msg.content or msg.embeds or attached_files) and not skip_empty:
                     raise commands.CommandInvokeError(
                         commands.CommandError("Cannot clone an empty message")
                     )
@@ -1715,6 +1799,7 @@ class Messaging(BaseCommandCog, name="messaging"):
     @commands.guild_only()
     @message.group(
         name="pin",
+        usage="<messages>... [delete_system_message: yes|no] [unpin_last: yes|no]",
         invoke_without_command=True,
         extras=dict(
             inject_reference_as_first_argument=True,
@@ -1725,11 +1810,26 @@ class Messaging(BaseCommandCog, name="messaging"):
     async def message_pin(
         self,
         ctx: commands.Context[BotT],
-        *msgs: discord.PartialMessage,
+        *messages: discord.PartialMessage,
         delete_system_message: bool = False,
-        unpin_last: bool = True,
+        unpin_last: bool = False,
         _channel: Optional[MessageableGuildChannel] = None,
     ):
+        """Pin the specified messages.
+
+        __**Parameters:**__
+
+        **`<messages>...`**
+        > The messages to pin.
+        
+        **`[delete_system_message: yes|no]`**
+        > A flag for whether any system messages about pinning should be automatically deleted.
+        > Defaults to 'no'.
+        
+        **`[unpin_last: yes|no]`**
+        > Whether to unpin the least recently pinned message(s) if the maximum pin limit of 50 is being approached.
+        > Defaults to 'no'.
+        """
         assert (
             ctx.guild
             and ctx.bot.user
@@ -1762,20 +1862,20 @@ class Messaging(BaseCommandCog, name="messaging"):
                 )
             )
 
-        if not msgs:
+        if not messages:
             raise commands.CommandInvokeError(
                 commands.CommandError(
                     "No message IDs given as input.",
                 )
             )
-        elif len(msgs) > 50:
+        elif len(messages) > 50:
             raise commands.CommandInvokeError(
                 commands.CommandError(
                     "Cannot pin more than 50 messages in a channel at a time.",
                 )
             )
 
-        elif not all(msg.channel.id == channel.id for msg in msgs):
+        elif not all(msg.channel.id == channel.id for msg in messages):
             raise commands.CommandInvokeError(
                 commands.CommandError(
                     "All specified messages must originate from the given channel "
@@ -1785,7 +1885,7 @@ class Messaging(BaseCommandCog, name="messaging"):
 
         pinned_msgs = await channel.pins()
 
-        unpin_count = max((len(pinned_msgs) + len(msgs)) - 50, 0)
+        unpin_count = max((len(pinned_msgs) + len(messages)) - 50, 0)
         if unpin_count > 0:
             if unpin_last:
                 for i in range(unpin_count):
@@ -1793,7 +1893,9 @@ class Messaging(BaseCommandCog, name="messaging"):
             else:
                 raise commands.CommandInvokeError(
                     commands.CommandError(
-                        "Maximum pins limit of 50 reached (specify `unpin_last: yes` to migitate this)"
+                        "Cannot pin messages: The maximum pins limit of 50 would be "
+                        "reached (specify `unpin_last: yes` to unpin least recently "
+                        "pinned messages)"
                     )
                 )
 
@@ -1804,12 +1906,12 @@ class Messaging(BaseCommandCog, name="messaging"):
                 fields=[dict(name="\u200b", value="`...`", inline=False)],
             )
         )
-        message_count = len(msgs)
+        message_count = len(messages)
         system_message_check = (
             lambda m: m.channel.id == channel.id  # type: ignore
             and m.type == discord.MessageType.pins_add
         )
-        for i, msg in enumerate(msgs):
+        for i, msg in enumerate(messages):
             if message_count > 2 and not i % 3:
                 await self.send_or_edit_response(
                     ctx,
@@ -1849,6 +1951,7 @@ class Messaging(BaseCommandCog, name="messaging"):
     @commands.guild_only()
     @message_pin.command(
         name="in",
+        usage="<messages>... [channel: TextChannel/Thread] [delete_system_message: yes|no] [unpin_last: yes|no]",
         invoke_without_command=True,
         extras=dict(response_deletion_with_reaction=True),
     )
@@ -1857,13 +1960,32 @@ class Messaging(BaseCommandCog, name="messaging"):
         self,
         ctx: commands.Context[BotT],
         channel: Optional[MessageableGuildChannel] = None,
-        *msgs: discord.PartialMessage,
+        *messages: discord.PartialMessage,
         delete_system_message: bool = False,
         unpin_last: bool = True,
     ):
+        """Pin the specified messages inside the specified channel.
+
+        __**Parameters:**__
+
+        **`<messages>...`**
+        > The messages to pin.
+        
+        **`[channel: TextChannel/Thread]`**
+        > A flag for the channel the messages are contained in.
+        > Defaults to the invocation channel.
+        
+        **`[delete_system_message: yes|no]`**
+        > A flag for whether any system messages about pinning should be automatically deleted.
+        > Defaults to 'no'.
+        
+        **`[unpin_last: yes|no]`**
+        > Whether to unpin the least recently pinned message(s) if the maximum pin limit of 50 is being approached.
+        > Defaults to 'no'.
+        """
         await self.message_pin(
             ctx,
-            *msgs,
+            *messages,
             delete_system_message=delete_system_message,
             unpin_last=unpin_last,
             _channel=channel,
@@ -1872,6 +1994,7 @@ class Messaging(BaseCommandCog, name="messaging"):
     @commands.guild_only()
     @message.group(
         name="unpin",
+        usage="<messages>...",
         invoke_without_command=True,
         extras=dict(
             inject_reference_as_first_argument=True,
@@ -1881,9 +2004,16 @@ class Messaging(BaseCommandCog, name="messaging"):
     async def message_unpin(
         self,
         ctx: commands.Context[BotT],
-        *msgs: discord.PartialMessage,
+        *messages: discord.PartialMessage,
         _channel: Optional[MessageableGuildChannel] = None,
     ):
+        """Unpin the specified messages.
+        
+        __**Parameters:**__
+
+        **`<messages>...`**
+        > The messages to unpin.
+        """
         assert (
             ctx.guild
             and ctx.bot.user
@@ -1927,17 +2057,17 @@ class Messaging(BaseCommandCog, name="messaging"):
                 )
             )
 
-        if not msgs:
+        if not messages:
             raise commands.CommandInvokeError(
                 commands.CommandError("No messages given as input.")
             )
-        elif len(msgs) > 50:
+        elif len(messages) > 50:
             raise commands.CommandInvokeError(
                 commands.CommandError(
                     "No more than 50 messages can be unpinned in a channel at a time."
                 )
             )
-        elif not all(msg.channel.id == channel.id for msg in msgs):
+        elif not all(msg.channel.id == channel.id for msg in messages):
             raise commands.CommandInvokeError(
                 commands.CommandError(
                     "All specified messages must originate from the given channel "
@@ -1956,8 +2086,8 @@ class Messaging(BaseCommandCog, name="messaging"):
             )
         )
 
-        message_count = len(msgs)
-        for i, msg in enumerate(msgs):
+        message_count = len(messages)
+        for i, msg in enumerate(messages):
             if message_count > 2 and not i % 3:
                 await self.send_or_edit_response(
                     ctx,
@@ -1989,6 +2119,7 @@ class Messaging(BaseCommandCog, name="messaging"):
     @commands.guild_only()
     @message_unpin.command(
         name="in",
+        usage="<messages>... [channel: TextChannel/Thread]",
         invoke_without_command=True,
         extras=dict(response_deletion_with_reaction=True),
     )
@@ -1996,9 +2127,20 @@ class Messaging(BaseCommandCog, name="messaging"):
         self,
         ctx: commands.Context[BotT],
         channel: Optional[MessageableGuildChannel] = None,
-        *msgs: discord.PartialMessage,
+        *messages: discord.PartialMessage,
     ):
-        await self.message_unpin(ctx, *msgs, _channel=channel)
+        """Unpin the specified messages in the specified channel.
+        
+        __**Parameters:**__
+
+        **`<messages>...`**
+        > The messages to unpin.
+
+        **`[channel: TextChannel/Thread]`**
+        > The channel in which the messages are contained in.
+        > Defaults to the invocation channel.
+        """
+        await self.message_unpin(ctx, *messages, _channel=channel)
 
 
 @snakecore.commands.decorators.with_config_kwargs

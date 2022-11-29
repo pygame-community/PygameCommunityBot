@@ -13,7 +13,16 @@ from math import log10
 import os
 import sys
 import types
-from typing import Any, Callable, Coroutine, Iterable, Optional, Sequence, Union
+from typing import (
+    Any,
+    Callable,
+    Collection,
+    Coroutine,
+    Iterable,
+    Optional,
+    Sequence,
+    Union,
+)
 
 import discord
 from discord.ext import commands
@@ -366,7 +375,7 @@ async def message_delete_reaction_listener(
     msg: discord.Message,
     invoker: Union[discord.Member, discord.User],
     emoji: Union[discord.Emoji, discord.PartialEmoji, str],
-    role_whitelist: Optional[Sequence[Union[discord.Role, int]]] = None,
+    role_whitelist: Optional[Collection[Union[discord.Role, int]]] = None,
     timeout: Optional[float] = None,
     on_delete: Union[
         Callable[[discord.Message], Coroutine[Any, Any, Any]],
@@ -378,22 +387,25 @@ async def message_delete_reaction_listener(
     If any HTTP-related exceptions are raised by `discord.py` within this function,
     it will fail silently.
 
-    Args:
-        msg (discord.Message): The message to use.
-        invoker (Union[discord.Member, discord.User]): The member/user who can delete
-          a message.
-        emoji (Union[discord.Emoji, discord.PartialEmoji, str]): The emoji to
-          listen for.
-        role_whitelist (Sequence[int], optional): A sequence (that supports `__contains__`) of
-          role IDs whose reactions can also be picked up by this function.
-        timeout (Optional[float], optional): A timeout for waiting, before automatically
-          removing any added reactions and returning silently.
-        on_delete (Union[Callable[[discord.Message], Coroutine[Any, Any, Any]], Callable[[discord.Message], Any], None], optional):
-          A (coroutine) function to call when a message is successfully deleted via the
-          reaction. Defaults to None.
+    Parameters
+    ----------
+        msg: :class:`discord.Message`
+            The message to use.
+        invoker: Union[:class:`discord.Member`, :class:`discord.User`]
+            The member/user who can delete a message.
+        emoji Union[:class:`discord.Emoji`, :class:`discord.PartialEmoji`, :class:`str`]):
+            The emoji to listen for.
+        role_whitelist Optional[Collection[Union[:class:`discord.Role`, :class:`int`]]], optional
+            A collection of roles or role IDs whose users' reactions can also be picked up by this function.
+        timeout: Optional[:class:`float`], optional
+            A timeout for waiting, before automatically removing any added reactions and returning silently.
+        on_delete: Union[Callable[[:class:`discord.Message`], Coroutine[Any, Any, Any]], Callable[[:class:`discord.Message`], Any], None], optional
+            A (coroutine) function to call when a message is successfully deleted via the reaction. Defaults to `None`.
 
-    Raises:
-        TypeError: Invalid argument types.
+    Raises
+    ------
+        TypeError
+            Invalid argument types.
     """
 
     role_whitelist_set = set(
