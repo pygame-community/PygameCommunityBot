@@ -758,7 +758,7 @@ class HelpForumsPre(BaseCommandCog, name="helpforums-pre"):
                                 ]
                                 < last_active_ts
                             ):
-                                if not (
+                                if (
                                     help_thread.archived
                                     and help_thread.archiver_id
                                     and (
@@ -773,6 +773,11 @@ class HelpForumsPre(BaseCommandCog, name="helpforums-pre"):
                                         ).manage_threads
                                     )  # allow alert supression by help thread owner/OP or forum channel moderator
                                 ):
+                                    self.inactive_help_thread_data[help_thread.id] = {
+                                        "thread_id": help_thread.id,
+                                        "last_active_ts": time.time(),
+                                    }
+                                else:
                                     alert_message = await help_thread.send(
                                         f"help-post-inactive(<@{help_thread.owner_id}>, **{help_thread.name}**)",
                                         embed=discord.Embed(
