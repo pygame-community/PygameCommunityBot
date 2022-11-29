@@ -365,7 +365,7 @@ class Messaging(BaseCommandCog, name="messaging"):
         mention_roles: Union[tuple[discord.Role], bool] = False,
         mention_replied_user: bool = False,
     ):
-        """Send a message to the invocation channel or a custom destination.
+        """\u200b\nSend a message to the invocation channel or a custom destination.
 
         __**Parameters:**__
 
@@ -489,7 +489,7 @@ class Messaging(BaseCommandCog, name="messaging"):
         mention_roles: Union[tuple[discord.Role], bool] = False,
         mention_replied_user: bool = False,
     ):
-        """Send a message with the specified text content to the invocation channel or a custom destination.
+        """\u200b\nSend a message with the specified text content to the invocation channel or a custom destination.
 
         __**Parameters:**__
 
@@ -620,7 +620,7 @@ class Messaging(BaseCommandCog, name="messaging"):
         mention_roles: Optional[Union[tuple[discord.Role], bool]] = None,
         mention_replied_user: Optional[bool] = None,
     ):
-        """Edit a previously sent message.
+        """\u200b\nEdit a previously sent message.
 
         __**Parameters:**__
 
