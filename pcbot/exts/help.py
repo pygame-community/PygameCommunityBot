@@ -25,18 +25,32 @@ class EmbedHelpCommand(commands.HelpCommand):
         "response_deletion_with_reaction": True,
     }
 
+    default_command_attrs = {
+        "usage": "[name]",
+        "help": """Retrieve help information for the specified command or command category.
+
+        __**Parameters:**__
+
+        **`[name]`**
+        > The qualified name of the command or command category.
+        """,
+    }
+
     def __init__(self, **options: Any) -> None:
+        command_attrs: dict[str, Any]
         if "command_attrs" in options:
             command_attrs = options["command_attrs"]
-
         else:
-            options["command_attrs"] = command_attrs = {}
+            command_attrs = options["command_attrs"] = {}
+
+        command_attrs = options["command_attrs"] = (
+            self.default_command_attrs | command_attrs
+        )
 
         if "extras" not in command_attrs:
             command_attrs["extras"] = {}
 
         command_attrs["extras"].update(self.default_command_extras)
-        command_attrs["usage"] = "[name]"
 
         self.theme_color = discord.Color(int(options.get("theme_color", 0)))
         self.bot_help_message = options.get("bot_help_message", "")

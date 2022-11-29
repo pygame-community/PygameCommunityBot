@@ -330,7 +330,10 @@ class PollsPre(BaseCommandCog, name="polls-pre"):
             ),
         )
 
-    @commands.group(invoke_without_command=True)
+    @commands.group(
+        invoke_without_command=True,
+        usage="<description> <<option: Emoji Text>... [multiple_votes: yes|no]>",
+    )
     @flagconverter_kwargs()
     async def poll(
         self,
@@ -340,6 +343,26 @@ class PollsPre(BaseCommandCog, name="polls-pre"):
         option: list[tuple[discord.PartialEmoji, String]],
         multiple_votes: bool = True,
     ):
+        """Create a poll, powered by Discord message embeds and reactions.
+
+        __**Parameters:**__
+
+        **<description>**
+        > A description of the poll.
+
+        **`<option: Emoji Text>...`**
+        > A flag representing a poll option as an emoji, followed by description text.
+        > Can be specified up to 20 times.
+
+        **`[multiple_votes: yes|no]`**
+        > A flag for setting whether voting for multiple options should be allowed.
+        > Defaults to 'yes' if omitted.
+
+
+        __**Examples:**__
+
+        poll "Which apple is better?" option: 🍎 "Red apple" option: 🍏 "Green apple"
+        """
         return await self.poll_func(
             ctx,
             description,
@@ -347,20 +370,31 @@ class PollsPre(BaseCommandCog, name="polls-pre"):
             multiple_votes=multiple_votes,
         )
 
-    @poll.command(name="close", extras=dict(inject_reference_as_first_argument=True))
+    @poll.command(
+        name="close",
+        usage="<message>",
+        extras=dict(inject_reference_as_first_argument=True),
+    )
     async def poll_close(
         self,
         ctx: commands.Context[BotT],
-        msg: Optional[discord.Message],
+        message: Optional[discord.Message],
     ):
-        if not msg:
+        """Close the poll in the specified message.
+
+        __**Parameters:**__
+
+        **`<message>`**
+        > The poll message.
+        """
+        if not message:
             raise commands.CommandInvokeError(
-                commands.CommandError(
-                    "No message given as input.",
+                commands.BadArgument(
+                    "'message' is a required argument that is missing.",
                 )
             )
 
-        return await self.poll_close_func(ctx, msg)
+        return await self.poll_close_func(ctx, message)
 
     @commands.group(invoke_without_command=True)
     @flagconverter_kwargs()
@@ -422,22 +456,34 @@ class PollsPre(BaseCommandCog, name="polls-pre"):
         )
 
     @richpoll.command(
-        name="close", extras=dict(inject_reference_as_first_argument=True)
+        name="close",
+        usage="<message> [[color: Color]]",
+        extras=dict(inject_reference_as_first_argument=True),
     )
     async def richpoll_close(
         self,
         ctx: commands.Context[BotT],
-        msg: Optional[discord.Message] = None,
+        message: Optional[discord.Message] = None,
         *,
         color: Optional[discord.Color] = None,
     ):
-        if not msg:
+        """Close the poll in the specified message, optionally changing its embed's color to the one specified.
+
+        __**Parameters:**__
+
+        **`<message>`**
+        > The poll message.
+
+        **`[color: Color]`**
+        > A flag denoting a custom color to apply to the specified poll's embed upon closing it.
+        """
+        if not message:
             raise commands.CommandInvokeError(
-                commands.CommandError(
-                    "No message given as input.",
+                commands.BadArgument(
+                    "'message' is a required argument that is missing.",
                 )
             )
-        return await self.poll_close_func(ctx, msg, _color=color)
+        return await self.poll_close_func(ctx, message, _color=color)
 
 
 @snakecore.commands.decorators.with_config_kwargs

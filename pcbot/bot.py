@@ -408,9 +408,12 @@ class PygameCommunityBot(snakecore.commands.Bot):
                 description = exception.original.args[0]
             title = "Invalid argument(s)"
             description = (
-                "Parameter "
-                + f"{(context.current_parameter.name if context.current_parameter else '')}"
-                + f": {description}\n\nFor help on bot commands, call `help <command>`"
+                (
+                    f"Parameter '{context.current_parameter.name}': "
+                    if context.current_parameter
+                    else ""
+                )
+                + f"{description}\n\nFor help on bot commands, call `help <command>`"
                 " with a correct prefix."
             )
 

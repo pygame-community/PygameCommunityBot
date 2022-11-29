@@ -22,7 +22,7 @@ from discord.utils import _ColourFormatter
 from discord.ext import commands, tasks
 import psutil
 import snakecore
-from snakecore.commands.converters import CodeBlock, DateTime
+from snakecore.commands.converters import CodeBlock, DateTime, TimeDelta
 from snakecore.commands.decorators import flagconverter_kwargs
 
 from pcbot import constants, PygameCommunityBot, __version__ as bot_version
@@ -313,9 +313,22 @@ class BotManagement(BaseCommandCog, name="bot-management"):
         )
 
     @commands.is_owner()
-    @commands.command(aliases=["stop"], hidden=True)
+    @commands.command(
+        aliases=["stop"], usage="[timeout: Number/TimeDelta]", hidden=True
+    )
     @flagconverter_kwargs()
-    async def shutdown(self, ctx: commands.Context[BotT], *, timeout: float = 60.0):
+    async def shutdown(
+        self, ctx: commands.Context[BotT], *, timeout: Union[float, TimeDelta] = 60.0
+    ):
+        """Shutdown this bot application, with a timeout.
+
+        __**Parameters:**__
+
+        **`[timeout: Number/TimeDelta]`**
+        > A flag for the timeout to wait after requesting a shutdown, before a forceful shutdown is performed.
+        > Defaults to 60 seconds.
+
+        """
         await ctx.send(
             embed=discord.Embed(
                 title="Shutting down...",
@@ -323,7 +336,15 @@ class BotManagement(BaseCommandCog, name="bot-management"):
                 color=int(self.theme_color),
             )
         )
-        snakecore.utils.hold_task(asyncio.create_task(self._bot_shutdown(timeout)))
+        snakecore.utils.hold_task(
+            asyncio.create_task(
+                self._bot_shutdown(
+                    timeout.total_seconds()
+                    if isinstance(timeout, datetime.timedelta)
+                    else timeout
+                )
+            )
+        )
 
     async def _bot_shutdown(
         self, timeout: float
@@ -343,6 +364,9 @@ class BotManagement(BaseCommandCog, name="bot-management"):
     @is_bot_manager()
     @commands.command(aliases=["heap"], hidden=True)
     async def memory(self, ctx: commands.Context[BotT]):
+        """Display the current amount of memory used by the main process
+        of this bot application.
+        """
         mem = process.memory_info().rss
         await ctx.send(
             embed=discord.Embed(
@@ -353,8 +377,17 @@ class BotManagement(BaseCommandCog, name="bot-management"):
         )
 
     @commands.is_owner()
-    @commands.command(hidden=True)
+    @commands.command(usage="<code (CodeBlock)>", hidden=True)
     async def eval(self, ctx: commands.Context[BotT], code: CodeBlock):
+        """Evaluate the specified Python expression and show the returned value.
+        This command is restricted to bot owners.
+
+        __**Parameters:**__
+
+        **`<code (CodeBlock)>`**
+        > A code block containing the Python expression to evaluate.
+        """
+
         try:
             script = compile(code.code, "<string>", "eval")  # compile script
             script_start = time.perf_counter()
@@ -380,7 +413,7 @@ class BotManagement(BaseCommandCog, name="bot-management"):
 
     @is_bot_manager()
     @commands.command(
-        usage="[flags [after: DateTime] [before: DateTime] [limit: Integer]]",
+        usage="[after: DateTime] [before: DateTime] [limit: Integer]",
         extras=dict(invoke_on_message_edit=False),
         hidden=True,
     )
@@ -395,18 +428,18 @@ class BotManagement(BaseCommandCog, name="bot-management"):
     ):
         """Get the current log information of this bot application.
 
-        **Parameters:**
-            **`<flags ... >`**
-                Flags for filtering the returned log records. If omitted, all log records are returned in files, each ≤ 8 MiB.
+        __**Parameters:**__
 
-                • `[after: DateTime]`
-                > A flag to limit log records to those newer than the specified date.
+        **`[after: DateTime]`**
+        > A flag to limit log records to those newer than the specified date.
 
-                • `[before: DateTime]`
-                > A flag to limit log records to those older than the specified date.
+        **`[before: DateTime]`**
+        > A flag to limit log records to those older than the specified date.
 
-                • `[limit: integer]`
-                > A total limit on the amount of log records to retrieve.
+        **`[limit: Integer]`**
+        > A total limit on the amount of log records to retrieve.
+
+        *If all flags omitted, all log records are returned in files, each ≤ 8 MiB.*
         """
         if not self.log_directory:
             raise commands.CommandInvokeError(

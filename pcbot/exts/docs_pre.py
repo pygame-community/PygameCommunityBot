@@ -292,9 +292,17 @@ class DocsPre(BaseCommandCog, name="docs-pre"):
     @commands.command(
         extras=dict(invoke_on_message_edit=True, response_deletion_with_reaction=True)
     )
-    async def doc(self, ctx: commands.Context[BotT], query: str):
+    async def doc(self, ctx: commands.Context[BotT], name: str):
+        """Retrieve structural and docstring documentation of a speficied Python module, class, method or function by its qualified name.
+
+
+        __**Parameters:**__
+
+        **`<name>`**
+        > The qualified name.
+        """
         assert isinstance(ctx.author, discord.Member)
-        await self.put_doc(ctx, query, ctx.author)
+        await self.put_doc(ctx, name, ctx.author)
 
 
 @snakecore.commands.decorators.with_config_kwargs
