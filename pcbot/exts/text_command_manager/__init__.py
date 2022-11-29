@@ -610,7 +610,11 @@ class TextCommandManager(BaseCommandCog, name="text-command-manager"):
             return
 
     @commands.has_guild_permissions(manage_roles=True)
-    @tcm.command(name="mockroles", extras=dict(response_deletion_with_reaction=True))
+    @tcm.command(
+        name="mockroles",
+        usage="[roles (Role)...]",
+        extras=dict(response_deletion_with_reaction=True),
+    )
     async def tcm_mockroles(
         self,
         ctx: commands.Context[BotT],
@@ -625,10 +629,10 @@ class TextCommandManager(BaseCommandCog, name="text-command-manager"):
 
         __**Parameters:**__
 
-            **`[roles...]`**
-            > A role or sequence of roles to apply as mock roles.
-            > If omitted, an embed of currently set mock roles will be sent.
-            > 'everyone' can be speficied to refer to the default @everyone role applied to every server member (same as passing in the guild ID as a role).
+        **`[roles (Role)...]`**
+        > A role or sequence of roles to apply as mock roles.
+        > If omitted, an embed of currently set mock roles will be sent.
+        > 'everyone' can be speficied to refer to the default @everyone role (hidden guild ID role that applies to every server member).
         """
         assert ctx.guild and isinstance(ctx.author, discord.Member)
 
@@ -743,7 +747,7 @@ class TextCommandManager(BaseCommandCog, name="text-command-manager"):
 
         __**Parameters:**__
 
-        **`[names...]`**
+        **`[names (Text)...]`**
         > The full command name or a sequence of full command names whose settings should be shown.
         """
         assert ctx.guild and isinstance(ctx.author, discord.Member)
@@ -951,8 +955,8 @@ class TextCommandManager(BaseCommandCog, name="text-command-manager"):
     @commands.max_concurrency(1, per=commands.BucketType.guild, wait=True)
     @tcm.command(
         name="set",
-        usage="<name/( name ... )> <flags [override: Role/Channel on|off]... "
-        "[enabled: yes|no] [subcommands_enabled: yes|no]>",
+        usage="<name/( name ... )> <override: Role/Channel on|off>... "
+        "[enabled: yes|no] [subcommands_enabled: yes|no]",
     )
     @flagconverter_kwargs()
     async def tcm_set(
@@ -968,21 +972,20 @@ class TextCommandManager(BaseCommandCog, name="text-command-manager"):
 
         __**Parameters:**__
 
-            **`<name/( name ... )>`**
-            > The full command name or a parenthesized sequence of full command names to alter the settings of.
+        **`<name/( name ... )>`**
+        > The full command name or a parenthesized sequence of full command names to alter the settings of.
 
-            **`<flags ... >`**
-                ...
-                • `[override: Role/Channel on|off]...`
-                > A flag for specifying a role or channel to override, followed by 'on' or 'off' to allow or deny command execution for the specified command(s).
-                > If specified, any previous overrides are overwritten.
-                > Can be specified multiple times.
+        **`<override: Role/Channel on|off>...`**
+        > A flag for a role or channel to override, followed by 'on' or 'off' to allow or deny command execution for the specified command(s).
+        > 'everyone' can be speficied to refer to the default @everyone role (hidden guild ID role that applies to every server member).
+        > If specified, any previous overrides are overwritten.
+        > Can be specified multiple times.
 
-                • `[enabled: on|off]...`
-                > A flag for enabling or disabling the execution of the specified command(s).
+        **`[enabled: on|off]`**
+        > A flag for enabling or disabling the execution of the specified command(s).
 
-                • `[subcommands_enabled: on|off]...`
-                > A flag for enabling or recursively disabling the execution of any subcommands of the specified command(s).
+        **`[subcommands_enabled: on|off]`**
+        > A flag for enabling or recursively disabling the execution of any subcommands of the specified command(s).
 
         __**Examples:**__
 
@@ -1183,7 +1186,7 @@ class TextCommandManager(BaseCommandCog, name="text-command-manager"):
 
     @commands.guild_only()
     @commands.max_concurrency(1, per=commands.BucketType.guild, wait=True)
-    @tcm.command(name="setglobal", usage="<flags <override: role/channel on|off>... >")
+    @tcm.command(name="setglobal", usage="<override: Role/Channel on|off>...")
     @flagconverter_kwargs()
     async def tcm_setglobal(
         self,
@@ -1196,17 +1199,16 @@ class TextCommandManager(BaseCommandCog, name="text-command-manager"):
 
         __**Parameters:**__
 
-            **`<flags ... >`**
-                ...
-                • `<override: Role/Channel on|off>...`
-                > A flag for specifying a role or channel to override, followed by 'on' or 'off' to allow or deny command execution.
-                > If specified, any previous overrides are overwritten.
-                > Can be specified multiple times.
+        **`<override: Role/Channel on|off>...`**
+        > A flag for a role or channel to override, followed by 'on' or 'off' to allow or deny command execution.
+        > 'everyone' can be speficied to refer to the default @everyone role (hidden guild ID role that applies to every server member).
+        > 'all channels' can be speficied to refer all channels in a guild/server.
+        > If specified, any preexisting overrides are overwritten.
+        > Can be specified multiple times.
 
         __**Examples:**__
-        tcm setglobal
-        override: "All Channels" off
-        override: #bot-playground on
+
+        tcm setglobal override: "All Channels" off override: #bot-playground on
         """
         assert ctx.guild
 
@@ -1262,8 +1264,8 @@ class TextCommandManager(BaseCommandCog, name="text-command-manager"):
 
         __**Parameters:**__
 
-            **`<names...>`**
-            > The full command name or a sequence of full command names whose settings should be cleared.
+        **`<names...>`**
+        > The full command name or a sequence of full command names whose settings should be cleared.
         """
         assert ctx.guild
 
@@ -1299,7 +1301,7 @@ class TextCommandManager(BaseCommandCog, name="text-command-manager"):
     @commands.guild_only()
     @tcm.command(
         name="clearoverrides",
-        usage="<name/( name ... )> [flags [roles: yes|no] [channels: yes|no]]",
+        usage="<name/( name ... )> [roles: yes|no] [channels: yes|no]",
     )
     @flagconverter_kwargs()
     async def tcm_clearoverrides(
@@ -1314,21 +1316,21 @@ class TextCommandManager(BaseCommandCog, name="text-command-manager"):
 
         __**Parameters:**__
 
-            **`<name/( name ... )>`**
-            > The full command name or a parenthesized sequence of full command names to clear overrides of.
+        **`<name/( name ... )>`**
+        > The full command name or a parenthesized sequence of full command names to clear overrides of.
 
-            **`[flags ... ]`**'
-                *If 'roles:' nor 'channels:' are specified, both will count as 'yes'.*
+        **`[roles: yes|no]...`**
+        > A flag for choosing whether role overrides should be cleared.
+        > Defaults to 'no'.
 
-                • `[roles: yes|no]...`
-                > A flag for choosing whether role overrides should be cleared.
-                > Omission counts as 'no'.
+        **`[channels: yes|no]...`**
+        > A flag for choosing whether channel overrides should be cleared.
+        > Default to 'no'.
 
-                • `[channels: yes|no]...`
-                > A flag for choosing whether channel overrides should be cleared.
-                > Omission counts as 'no'.
+        *If 'roles:' nor 'channels:' are specified, both will default to 'yes'.*
 
         __**Examples:**__
+
         tcm clearoverrides ( "economy" "8ball" ) roles: yes
         """
         assert ctx.guild
@@ -1368,7 +1370,7 @@ class TextCommandManager(BaseCommandCog, name="text-command-manager"):
     @commands.guild_only()
     @tcm.command(
         name="clearglobaloverrides",
-        usage="[flags [roles: on|off] [channels: on|off]]",
+        usage="[[roles: on|off] [channels: on|off]]",
     )
     @flagconverter_kwargs()
     async def tcm_clearglobaloverrides(
@@ -1382,18 +1384,18 @@ class TextCommandManager(BaseCommandCog, name="text-command-manager"):
 
         __**Parameters:**__
 
-            **`[flags ... ]`**'
-                *If 'roles:' nor 'channels:' are specified, both will count as 'yes'.*
+        **`[roles: yes|no]...`**
+        > A flag for choosing whether role overrides should be cleared.
+        > Defaults to 'no'.
 
-                • `[roles: yes|no]...`
-                > A flag for choosing whether role overrides should be cleared.
-                > Omission counts as 'no'.
+        **`[channels: yes|no]...`**
+        > A flag for choosing whether channel overrides should be cleared.
+        > Default to 'no'.
 
-                • `[channels: yes|no]...`
-                > A flag for choosing whether channel overrides should be cleared.
-                > Omission counts as 'no'.
+        *If 'roles:' nor 'channels:' are specified, both will default to 'yes'.*
 
         __**Examples:**__
+
         tcm clearglobalroverrides channels: yes
         """
         assert ctx.guild

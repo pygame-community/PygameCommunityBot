@@ -14,7 +14,7 @@ import discord
 from discord.ext import commands
 import snakecore
 from snakecore.commands.decorators import flagconverter_kwargs
-from snakecore.commands.converters import CodeBlock, String, Parens
+from snakecore.commands.converters import CodeBlock, String, Parens, TimeDelta
 
 from .base import BaseCommandCog
 
@@ -210,13 +210,11 @@ class Messaging(BaseCommandCog, name="messaging"):
         ctx: commands.Context[BotT],
         attachments: commands.Greedy[discord.Attachment],
         *,
-        c: Optional[String] = None,
-        text: Optional[String] = None,
         content: Optional[String] = None,
         embeds: tuple[CodeBlock, ...],
         to: Optional[tuple[MessageableGuildChannel, ...]] = None,
         reply_to: Optional[discord.PartialMessage] = None,
-        delete_after: Optional[float] = None,
+        delete_after: Optional[Union[float, TimeDelta]] = None,
         mention_all: bool = False,
         mention_everyone: bool = False,
         mention_users: Union[tuple[discord.User], bool] = False,
@@ -233,8 +231,6 @@ class Messaging(BaseCommandCog, name="messaging"):
             )
             and isinstance(ctx.author, discord.Member)
         )
-
-        content = c or text or content
 
         if not (content or attachments or embeds):
             raise commands.CommandInvokeError(
@@ -319,6 +315,9 @@ class Messaging(BaseCommandCog, name="messaging"):
                             replied_user=mention_replied_user,
                         )
                     ),
+                    delete_after=delete_after.total_seconds()
+                    if isinstance(delete_after, datetime.timedelta)
+                    else delete_after,  # type: ignore
                 )
                 if reply_to
                 else dest.send(
@@ -335,21 +334,112 @@ class Messaging(BaseCommandCog, name="messaging"):
                             replied_user=mention_replied_user,
                         )
                     ),
+                    delete_after=delete_after.total_seconds()
+                    if isinstance(delete_after, datetime.timedelta)
+                    else delete_after,  # type: ignore
                 )
             )
-            if delete_after:
-                await msg.delete(delay=delete_after)
 
-    @commands.group(invoke_without_command=True, aliases=["msg"])
+    @commands.group(
+        invoke_without_command=True,
+        aliases=["msg"],
+        usage="[attachments (upload files < 8 MiB)]... [content: Text[2000]] [embeds: CodeBlock...] "
+        "[to: Channel] [reply_to: Message] [delete_after: Number/TimeDelta] "
+        "[mention_all: yes|no] [mention_everyone: yes|no] "
+        "[mention_users: User.../yes|no] [mention_roles: Role.../yes|no] [mention_replied_user: yes|no]",
+    )
+    @flagconverter_kwargs()
     async def message(
         self,
         ctx: commands.Context[BotT],
         attachments: commands.Greedy[discord.Attachment],
         *,
-        c: Optional[String] = None,
-        text: Optional[String] = None,
-        content: Optional[String] = None,
-        embeds: tuple[CodeBlock, ...],
+        content: Optional[String[2000]] = None,
+        embeds: tuple[CodeBlock, ...] = (),
+        to: Optional[tuple[MessageableGuildChannel, ...]] = None,
+        reply_to: Optional[discord.PartialMessage] = None,
+        delete_after: Optional[Union[float, TimeDelta]] = None,
+        mention_all: bool = False,
+        mention_everyone: bool = False,
+        mention_users: Union[tuple[discord.User], bool] = False,
+        mention_roles: Union[tuple[discord.Role], bool] = False,
+        mention_replied_user: bool = False,
+    ):
+        """Send a message to the invocation channel or a custom destination.
+
+        __**Parameters:**__
+
+        **`[attachments (upload files < (8 MiB))]...`**
+        > One or more attachments to add to the message.
+
+        **`[content: Text[2000]]`**
+        > A flag for the text content the message should contain.
+        > It must not exceed 2000 characters in length.
+
+        **`[embeds: CodeBlock...]`**
+        > A flag for the embeds to add to the message, as 1-10 code blocks containing embed data as a JSON object/Python dictionary.
+
+        **`[to: Channel]`**
+        > A flag for the destination channel of the message to send.
+        > Defaults to the command invocation channel.
+
+        **`[reply_to: Message]`**
+        > A flag for the message to use as a reference.
+
+        **`[delete_after: Number/TimeDelta]`**
+        > A flag to set a deletion timeout for the message upon its creation.
+
+        **`[mention_all: yes|no]`**
+        > A flag for whether all mentionable targets in the message text content (users, roles, user being replied to) should receive a mention ping.
+        > Defaults to 'no'.
+
+        **`[mention_everyone: yes|no]`**
+        > A flag for whether @everyone should be mentioned.
+
+        **`[mention_users: User.../yes|no]`**
+        > A flag for whether any mentioned users in the message text content should receive a mention ping.
+        > Can be either 'yes' or 'no', or a sequence of users to ping.
+        > Defaults to 'no'.
+
+        **`[mention_roles: Role.../yes|no]`**
+        > A flag for whether any mentioned roles in the message text content should receive a mention ping.
+        > Can be either 'yes' or 'no', or a sequence of roles to ping.
+        > Defaults to 'no'.
+
+        **`[mention_replied_user: yes|no]`**
+        > A flag for whether a user being replied to should be pinged.
+        > Defaults to 'no'.
+        """
+        return await self.message_send_func(
+            ctx,
+            attachments,
+            content=content,
+            embeds=embeds,
+            to=to,
+            reply_to=reply_to,
+            delete_after=delete_after,
+            mention_all=mention_all,
+            mention_everyone=mention_everyone,
+            mention_users=mention_users,
+            mention_roles=mention_roles,
+            mention_replied_user=mention_replied_user,
+        )
+
+    @message.command(
+        name="send",
+        aliases=["create"],
+        usage=message.usage,
+        help=message.help,
+        extras=dict(delete_invocation=True),
+    )
+    @flagconverter_kwargs()
+    async def message_send(
+        self,
+        ctx: commands.Context[BotT],
+        attachments: commands.Greedy[discord.Attachment],
+        *,
+        content: Optional[String[2000]] = None,
+        embeds: tuple[CodeBlock, ...] = (),
         to: Optional[tuple[MessageableGuildChannel, ...]] = None,
         reply_to: Optional[discord.PartialMessage] = None,
         delete_after: Optional[float] = None,
@@ -362,8 +452,6 @@ class Messaging(BaseCommandCog, name="messaging"):
         return await self.message_send_func(
             ctx,
             attachments,
-            c=c,
-            text=text,
             content=content,
             embeds=embeds,
             to=to,
@@ -378,12 +466,20 @@ class Messaging(BaseCommandCog, name="messaging"):
 
     @commands.guild_only()
     @message.command(
-        name="sendtext", aliases=["text"], extras=dict(delete_invocation=True)
+        name="sendcontent",
+        aliases=["createcontent", "sendtext", "createtext"],
+        extras=dict(delete_invocation=True),
+        usage="<content (Text[2000])> [to: Channel] [reply_to: Message] "
+        "[delete_after: Number/TimeDelta] [mention_all: yes|no] "
+        "[mention_everyone: yes|no] [mention_users: User.../yes|no] "
+        "[mention_roles: Role.../yes|no] [mention_replied_user: yes|no]",
     )
-    async def message_sendtext(
+    @flagconverter_kwargs()
+    async def message_sendcontent(
         self,
         ctx: commands.Context[BotT],
         content: str,
+        *,
         to: Optional[tuple[MessageableGuildChannel, ...]] = None,
         reply_to: Optional[discord.PartialMessage] = None,
         delete_after: Optional[float] = None,
@@ -393,6 +489,45 @@ class Messaging(BaseCommandCog, name="messaging"):
         mention_roles: Union[tuple[discord.Role], bool] = False,
         mention_replied_user: bool = False,
     ):
+        """Send a message with the specified text content to the invocation channel or a custom destination.
+
+        __**Parameters:**__
+
+        **`<content (Text[2000])>`**
+        > A flag for the text content the message should contain.
+        > It must not exceed 2000 characters in length.
+
+        **`[to: Channel]`**
+        > A flag for the destination channel of the message to send.
+        > Defaults to the command invocation channel.
+
+        **`[reply_to: Message]`**
+        > A flag for the message to use as a reference.
+
+        **`[delete_after: Number/TimeDelta]`**
+        > A flag to set a deletion timeout for the message upon its creation.
+
+        **`[mention_all: yes|no]`**
+        > A flag for whether all mentionable targets in the message text content (users, roles, user being replied to) should receive a mention ping.
+        > Defaults to 'no'.
+
+        **`[mention_everyone: yes|no]`**
+        > A flag for whether @everyone should be mentioned.
+
+        **`[mention_users: User.../yes|no]`**
+        > A flag for whether any mentioned users in the message text content should receive a mention ping.
+        > Can be either 'yes' or 'no', or a sequence of users to ping.
+        > Defaults to 'no'.
+
+        **`[mention_roles: Role.../yes|no]`**
+        > A flag for whether any mentioned roles in the message text content should receive a mention ping.
+        > Can be either 'yes' or 'no', or a sequence of roles to ping.
+        > Defaults to 'no'.
+
+        **`[mention_replied_user: yes|no]`**
+        > A flag for whether a user being replied to should be pinged.
+        > Defaults to 'no'.
+        """
         assert (
             ctx.guild
             and ctx.bot.user
@@ -454,92 +589,14 @@ class Messaging(BaseCommandCog, name="messaging"):
                 await msg.delete(delay=delete_after)
 
     @commands.guild_only()
-    @message.command(
-        name="edittext",
-        extras=dict(inject_reference_as_first_argument=True, delete_invocation=True),
-    )
-    async def message_edittext(
-        self,
-        ctx: commands.Context[BotT],
-        message: Optional[discord.Message],
-        content: str,
-    ):
-        assert (
-            ctx.guild
-            and ctx.bot.user
-            and (bot_member := ctx.guild.get_member(ctx.bot.user.id))
-            and isinstance(
-                ctx.channel,
-                (discord.TextChannel, discord.VoiceChannel, discord.Thread),
-            )
-            and isinstance(ctx.author, discord.Member)
-        )
-
-        if not message:
-            raise commands.CommandInvokeError(
-                commands.BadArgument("No message given as input.")
-            )
-        elif not isinstance(message.channel, (discord.TextChannel, discord.Thread)):
-            raise commands.CommandInvokeError(
-                commands.BadArgument("Can only edit messages within a guild.")
-            )
-
-        if not snakecore.utils.have_permissions_in_channels(
-            ctx.author,
-            message.channel,
-            "view_channel",
-        ):
-            raise commands.CommandInvokeError(
-                commands.CommandError(
-                    "You do not have enough permissions to run this command on the "
-                    f"target channel(s) (<#{message.channel.id}>)."
-                )
-            )
-        await message.edit(
-            content=content,
-        )
-
-    @message.command(name="send", extras=dict(delete_invocation=True))
-    @flagconverter_kwargs()
-    async def message_send(
-        self,
-        ctx: commands.Context[BotT],
-        attachments: commands.Greedy[discord.Attachment],
-        *,
-        c: Optional[String] = None,
-        text: Optional[String] = None,
-        content: Optional[String] = None,
-        embeds: tuple[CodeBlock, ...],
-        to: Optional[tuple[MessageableGuildChannel, ...]] = None,
-        reply_to: Optional[discord.PartialMessage] = None,
-        delete_after: Optional[float] = None,
-        mention_all: bool = False,
-        mention_everyone: bool = False,
-        mention_users: Union[tuple[discord.User], bool] = False,
-        mention_roles: Union[tuple[discord.Role], bool] = False,
-        mention_replied_user: bool = False,
-    ):
-        return await self.message_send_func(
-            ctx,
-            attachments,
-            c=c,
-            text=text,
-            content=content,
-            embeds=embeds,
-            to=to,
-            reply_to=reply_to,
-            delete_after=delete_after,
-            mention_all=mention_all,
-            mention_everyone=mention_everyone,
-            mention_users=mention_users,
-            mention_roles=mention_roles,
-            mention_replied_user=mention_replied_user,
-        )
-
-    @commands.guild_only()
     @commands.max_concurrency(1, per=commands.BucketType.default, wait=True)
     @message.command(
         name="edit",
+        usage="[attachments (upload files < 8 MiB)]... [content: Text[2000]] "
+        "[embeds: CodeBlock/Message/( Message Integer ) ... ] [to: Channel] "
+        "[reply_to: Message] [mention_all: yes|no] [mention_everyone: yes|no] "
+        "[mention_users: User.../yes|no] [mention_roles: Role.../yes|no] "
+        "[mention_replied_user: yes|no]",
         extras=dict(inject_reference_as_first_argument=True, delete_invocation=True),
     )
     @flagconverter_kwargs()
@@ -549,22 +606,64 @@ class Messaging(BaseCommandCog, name="messaging"):
         message: Optional[discord.Message],
         attachments: commands.Greedy[discord.Attachment],
         *,
-        c: Optional[String] = None,
-        text: Optional[String] = None,
         content: Optional[String] = None,
         embeds: tuple[
             Union[CodeBlock, discord.Message, Parens[discord.Message, int]], ...
-        ],
+        ] = (),
         remove_content: bool = False,
         remove_embeds: bool = False,
         remove_all_attachments: bool = False,
         remove_old_attachments: bool = False,
-        mention_all: bool = False,
-        mention_everyone: bool = False,
-        mention_users: Union[tuple[discord.User], bool] = False,
-        mention_roles: Union[tuple[discord.Role], bool] = False,
-        mention_replied_user: bool = False,
+        mention_all: Optional[bool] = None,
+        mention_everyone: Optional[bool] = None,
+        mention_users: Optional[Union[tuple[discord.User], bool]] = None,
+        mention_roles: Optional[Union[tuple[discord.Role], bool]] = None,
+        mention_replied_user: Optional[bool] = None,
     ):
+        """Edit a previously sent message.
+
+        __**Parameters:**__
+
+        **`[attachments (upload files < 8 MiB)]...`**
+        > One or more new attachments to add to the message.
+        > They must not exceed 8 MiB in size.
+
+        **`[content: Text[2000]]`**
+        > A flag for the text content the edited message should contain.
+        > It must not exceed 2000 characters in length.
+
+        **`[embeds: CodeBlock/Message/( Message Integer ) ... ]`**
+        > A flag for the embeds to add to the message, as 1-10 of these:
+        > • Code blocks containing embed data as a JSON object/Python dictionary
+        > • A message containing embed data as a JSON object/Python dictionary in its first attachment
+        > • A parenthesized pair containing a message containing embed data as a JSON object/Python dictionary in its first attachment, followed by an index (0-9) representing the attachment position.
+        >
+        > If any of these arguments evaluate to an empty dictionary/JSON object ( `{}` ), the preexisting embeds at their position will be preserved.
+
+        **`[remove_content: yes|no]`**
+        > A flag for whether all mentionable targets in the message text content (users, roles, user being replied to) should receive a mention ping.
+
+        **`[mention_all: yes|no]`**
+        > A flag for whether all mentionable targets in the message text content (users, roles, user being replied to) should receive a mention ping.
+        > Defaults to 'no'.
+
+        **`[mention_everyone: yes|no]`**
+        > A flag for whether @everyone should be marked as mentioned.
+
+        **`[mention_users: User.../yes|no]`**
+        > A flag for whether any mentioned users in the message text content should receive a mention ping.
+        > Can be either 'yes' or 'no', or a sequence of users to ping.
+        > Defaults to 'no'.
+
+        **`[mention_roles: Role.../yes|no]`**
+        > A flag for whether any mentioned roles in the message text content should receive a mention ping.
+        > Can be either 'yes' or 'no', or a sequence of roles to ping.
+        > Defaults to 'no'.
+
+        **`[mention_replied_user: yes|no]`**
+        > A flag for whether a user being replied to should be pinged.
+        > Defaults to 'no'.
+        """
         assert (
             ctx.guild
             and ctx.bot.user
@@ -576,11 +675,11 @@ class Messaging(BaseCommandCog, name="messaging"):
             and isinstance(ctx.author, discord.Member)
         )
 
-        content = c or text or content
-
         if not message:
             raise commands.CommandInvokeError(
-                commands.BadArgument("No message given as input.")
+                commands.BadArgument(
+                    "'message' is a required argument that is missing."
+                )
             )
 
         if not (content or attachments or embeds):
@@ -605,109 +704,106 @@ class Messaging(BaseCommandCog, name="messaging"):
         files = []
         old_attachments = [] if remove_old_attachments else message.attachments
 
-        if embeds:
-            for i, code_block_or_msg in enumerate(embeds):
-                if isinstance((code_block := code_block_or_msg), CodeBlock):
-                    if code_block.language in ("json", None):
-                        try:
-                            embed_dict = json.loads(code_block.code)
-                        except Exception as jerr:
-                            raise commands.CommandInvokeError(
-                                commands.CommandError(
-                                    "Error while parsing JSON code block "
-                                    f"{i}: {jerr.__class__.__name__}: {jerr.args[0]}"
-                                )
-                            )
-                    elif code_block.language in ("py", "python"):
-                        try:
-                            embed_dict = literal_eval(code_block.code)
-                        except Exception as perr:
-                            raise commands.CommandInvokeError(
-                                commands.CommandError(
-                                    "Error while parsing Python dict code block "
-                                    f"{i}: {perr.__class__.__name__}: {perr.args[0]}"
-                                )
-                            )
-
-                    else:
+        for i, code_block_or_msg in enumerate(embeds):
+            if isinstance((code_block := code_block_or_msg), CodeBlock):
+                if code_block.language in ("json", None):
+                    try:
+                        embed_dict = json.loads(code_block.code)
+                    except Exception as jerr:
                         raise commands.CommandInvokeError(
                             commands.CommandError(
-                                f"Unsupported code block language: {code_block.language}"
+                                "Error while parsing JSON code block "
+                                f"{i}: {jerr.__class__.__name__}: {jerr.args[0]}"
                             )
                         )
-                elif isinstance(
-                    (embed_msg := code_block_or_msg), (discord.Message, tuple)
-                ):
-                    attachment_index = 0
-                    if isinstance(embed_msg, tuple):
-                        embed_msg, attachment_index = (
-                            embed_msg[0],
-                            embed_msg[1],
-                        )
-
-                    if not (embed_msg_attachments := embed_msg.attachments):
+                elif code_block.language in ("py", "python"):
+                    try:
+                        embed_dict = literal_eval(code_block.code)
+                    except Exception as perr:
                         raise commands.CommandInvokeError(
                             commands.CommandError(
-                                f"Error with `embeds` argument {i}: Messages "
-                                "speficied for flag `embeds` must have at least one "
-                                "attachment as `.txt`, `.py` file containing a Python "
-                                "dictionary, or a `.json` file containing embed data. "
-                                "It must be less than 10KB in size.",
+                                "Error while parsing Python dict code block "
+                                f"{i}: {perr.__class__.__name__}: {perr.args[0]}"
                             )
                         )
 
-                    embed_attachment = embed_msg_attachments[
-                        min(attachment_index, len(embed_msg_attachments))
-                    ]
-
-                    if not (
-                        embed_attachment.content_type
-                        and embed_attachment.content_type.startswith(
-                            ("text", "application/json")
-                        )
-                        and embed_attachment.size < 10240
-                    ):
-                        raise commands.CommandInvokeError(
-                            commands.CommandError(
-                                f"Error with `embeds` argument {i}: Messages "
-                                "speficied for flag `embeds` must have at least one "
-                                "attachment as `.txt`, `.py` file containing a Python "
-                                "dictionary, or a `.json` file containing embed data. "
-                                "It must be less than 10KB in size.",
-                            )
-                        )
-
-                    embed_data = (await embed_attachment.read()).decode("utf-8")
-
-                    if (
-                        embed_attachment.content_type.startswith(
-                            ("application/json", "text")
-                        )
-                        and "x-python" not in embed_attachment.content_type
-                    ):
-                        try:
-                            embed_dict = json.loads(embed_data)
-                        except Exception as jerr:
-                            raise commands.CommandInvokeError(
-                                commands.CommandError(
-                                    "Error while parsing embed JSON from attachment: "
-                                    f"{i}: {jerr.__class__.__name__}: {jerr.args[0]}"
-                                )
-                            )
-                    else:
-                        try:
-                            embed_dict = literal_eval(embed_data)
-                        except Exception as perr:
-                            raise commands.CommandInvokeError(
-                                commands.CommandError(
-                                    "Error while parsing Python embed dict from attachment: "
-                                    f"{i}: {perr.__class__.__name__}: {perr.args[0]}"
-                                )
-                            )
                 else:
-                    continue
+                    raise commands.CommandInvokeError(
+                        commands.CommandError(
+                            f"Unsupported code block language: {code_block.language}"
+                        )
+                    )
+            elif isinstance((embed_msg := code_block_or_msg), (discord.Message, tuple)):
+                attachment_index = 0
+                if isinstance(embed_msg, tuple):
+                    embed_msg, attachment_index = (
+                        embed_msg[0],
+                        embed_msg[1],
+                    )
 
-                parsed_embeds.append(discord.Embed.from_dict(embed_dict))
+                if not (embed_msg_attachments := embed_msg.attachments):
+                    raise commands.CommandInvokeError(
+                        commands.CommandError(
+                            f"Error with `embeds` argument {i}: Messages "
+                            "speficied for flag `embeds` must have at least one "
+                            "attachment as `.txt`, `.py` file containing a Python "
+                            "dictionary, or a `.json` file containing embed data. "
+                            "It must be less than 10KB in size.",
+                        )
+                    )
+
+                embed_attachment = embed_msg_attachments[
+                    min(attachment_index, len(embed_msg_attachments))
+                ]
+
+                if not (
+                    embed_attachment.content_type
+                    and embed_attachment.content_type.startswith(
+                        ("text", "application/json")
+                    )
+                    and embed_attachment.size < 10240
+                ):
+                    raise commands.CommandInvokeError(
+                        commands.CommandError(
+                            f"Error with `embeds` argument {i}: Messages "
+                            "speficied for flag `embeds` must have at least one "
+                            "attachment as `.txt`, `.py` file containing a Python "
+                            "dictionary, or a `.json` file containing embed data. "
+                            "It must be less than 10KB in size.",
+                        )
+                    )
+
+                embed_data = (await embed_attachment.read()).decode("utf-8")
+
+                if (
+                    embed_attachment.content_type.startswith(
+                        ("application/json", "text")
+                    )
+                    and "x-python" not in embed_attachment.content_type
+                ):
+                    try:
+                        embed_dict = json.loads(embed_data)
+                    except Exception as jerr:
+                        raise commands.CommandInvokeError(
+                            commands.CommandError(
+                                "Error while parsing embed JSON from attachment: "
+                                f"{i}: {jerr.__class__.__name__}: {jerr.args[0]}"
+                            )
+                        )
+                else:
+                    try:
+                        embed_dict = literal_eval(embed_data)
+                    except Exception as perr:
+                        raise commands.CommandInvokeError(
+                            commands.CommandError(
+                                "Error while parsing Python embed dict from attachment: "
+                                f"{i}: {perr.__class__.__name__}: {perr.args[0]}"
+                            )
+                        )
+            else:
+                continue
+
+            parsed_embeds.append(discord.Embed.from_dict(embed_dict))
 
         if attachments:
             for i, att in enumerate(attachments):
@@ -726,6 +822,25 @@ class Messaging(BaseCommandCog, name="messaging"):
         ]
         # filter out empty embeds, which can act as placeholders for former embeds
 
+        final_attachments = discord.utils.MISSING
+        if files or old_attachments:
+            final_attachments = (old_attachments + files)[
+                max(-10, -(len(old_attachments) + len(files))) :
+            ]  # only keep the 10 newest entries
+        elif remove_all_attachments:
+            final_attachments = []
+
+        allowed_mentions_kwargs = {}
+        if not mention_all:
+            for kwarg, value in (
+                ("everyone", mention_everyone),
+                ("users", mention_users),
+                ("roles", mention_roles),
+                ("replied_user", mention_replied_user),
+            ):
+                if value is not None:
+                    allowed_mentions_kwargs[kwarg] = value
+
         await message.edit(
             content=content
             if content
@@ -737,21 +852,79 @@ class Messaging(BaseCommandCog, name="messaging"):
             else []
             if remove_embeds
             else discord.utils.MISSING,
-            attachments=old_attachments + files
-            if (files or old_attachments)
-            else []
-            if remove_all_attachments
-            else discord.utils.MISSING,
+            attachments=final_attachments,
             allowed_mentions=(
                 discord.AllowedMentions.all()
                 if mention_all
                 else discord.AllowedMentions(
-                    everyone=mention_everyone,
-                    users=mention_users,
-                    roles=mention_roles,
-                    replied_user=mention_replied_user,
+                    **allowed_mentions_kwargs,
                 )
+                if allowed_mentions_kwargs
+                else discord.utils.MISSING
             ),
+        )
+
+    @commands.guild_only()
+    @message.command(
+        name="editcontent",
+        aliases=["edittext"],
+        usage="<message> <content (Text[2000])>",
+        extras=dict(inject_reference_as_first_argument=True, delete_invocation=True),
+    )
+    async def message_editcontent(
+        self,
+        ctx: commands.Context[BotT],
+        message: Optional[
+            discord.Message
+        ],  # required for injecting reference messages to work
+        content: String[2000],
+    ):
+        """Edit an existing message with new text content.
+
+        __**Parameters:**__
+
+        **`<message>`**
+        > The message to edit.
+
+        **`<content (Text[2000])>`**
+        > The text content to edit the message with.
+        > It must not exceed 2000 characters in length.
+        """
+        assert (
+            ctx.guild
+            and ctx.bot.user
+            and (bot_member := ctx.guild.get_member(ctx.bot.user.id))
+            and isinstance(
+                ctx.channel,
+                (discord.TextChannel, discord.VoiceChannel, discord.Thread),
+            )
+            and isinstance(ctx.author, discord.Member)
+        )
+
+        if not message:
+            raise commands.CommandInvokeError(
+                commands.BadArgument(
+                    "'message' is a required argument that is missing."
+                )
+            )
+        elif not isinstance(message.channel, (discord.TextChannel, discord.Thread)):
+            raise commands.CommandInvokeError(
+                commands.BadArgument("Can only edit messages within a guild.")
+            )
+
+        if not snakecore.utils.have_permissions_in_channels(
+            ctx.author,
+            message.channel,
+            "view_channel",
+        ):
+            raise commands.CommandInvokeError(
+                commands.CommandError(
+                    "You do not have enough permissions to run this command on the "
+                    f"target channel(s) (<#{message.channel.id}>)."
+                )
+            )
+        await message.edit(
+            content=content,
         )
 
     @commands.guild_only()
@@ -1111,7 +1284,7 @@ class Messaging(BaseCommandCog, name="messaging"):
         raw: bool = False,
         show_header: bool = True,
         show_author: bool = True,
-        divider: String = "-" * 56,
+        divider: String = "-" * 56,  # type: ignore
         group_by_author: bool = True,
         group_by_author_timedelta: float = 600.0,
         message_links: bool = True,
