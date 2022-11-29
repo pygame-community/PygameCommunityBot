@@ -582,8 +582,15 @@ class PygameCommunityBot(snakecore.commands.Bot):
         If string database names are given, only the
         dictionaries of those (if found) will be returned by the bot.
 
-        Returns:
-            list[dict]: The dictionaries.
+        Parameters
+        ----------
+            *names: :class:`str`
+                The database name.
+
+        Returns
+        -------
+            :class:`list`[:class:`dict`]
+                The dictionaries.
         """
 
         db_dicts = []
