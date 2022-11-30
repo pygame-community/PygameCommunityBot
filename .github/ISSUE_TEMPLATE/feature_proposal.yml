@@ -1,1 +1,63 @@
+name: Feature Proposal
+description: Offer a detailed, actionable proposal for tackling a feature request.
+labels: feature request
+body:
+  - type: input
+    attributes:
+      label: Target Issue(s)
+      description: >
+        The issues targeted by this proposal, if any.
+      value: "This proposal is targeted at these issues: #issue-number, #..."
+  - type: input
+    attributes:
+      label: Overview
+      description: >
+        A short overview of what is being proposed.
+    validations:
+      required: true
+  - type: textarea
+    attributes:
+      label: Synopsis
+      description: >
+        Provide a detailed, high-level breakdown of what is being proposed.
+    validations:
+      required: true
+        
+    validations:
+      required: true
+  - type: textarea
+    attributes:
+      label: Technical Information
+      description: >
+        Provide any low-level technical information regarding your proposal.
+    validations:
+      required: true
+  - type: textarea
+    attributes:
+      label: New Bot Commands
+      description: >
+        Does your proposal involve the creation of new bot commands? If so, describe them here.
+      value: "*Commands should be defined in a checklist, to better keep track of them.*
+        - [ ] **`command`** : Brief description.
+        - [ ] **`command subcommand`**: Brief description.
+        
+        *If certain commands are being implemented in a specific (PR) (pull request), the PR can be added to the checklist, with commands defined in a sub-checklist beneath it.*
+        - [ ] #XYZ
+         - [ ] **`command`** : Brief description.
+         - [ ] **`command subcommand`**: Brief description.
+        "
+  - type: textarea
+    attributes:
+      label: Changed Bot Commands
+      description: >
+        Does your proposal involve changing/deleting any existing bot commands? If so, describe them here.
+      value: "*Commands should be defined in a checklist, to better keep track of them. Commands to remove should be striked through using markdown.*
+        - [ ] **`command`** : Brief description.
+        - [ ] **`command subcommand`**: Brief description.
+        
+        *If certain commands are being updated/removed in a specific (PR) (pull request), the PR can be added to the checklist, with commands defined in a sub-checklist beneath it.*
+        - [ ] #XYZ
+         - [ ] **`command`** : Brief description.
+         - [ ] ~~**`command subcommand`**: Brief description.~~
+        "
 
