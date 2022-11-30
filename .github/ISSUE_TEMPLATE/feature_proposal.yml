@@ -38,12 +38,17 @@ body:
       description: >
         Does your proposal involve the creation of new bot commands? If so, describe them here.
       value: "*Commands should be defined in a checklist, to better keep track of them.*
+        
         - [ ] **`command`** : Brief description.
+        
         - [ ] **`command subcommand`**: Brief description.
         
         *If certain commands are being implemented in a specific (PR) (pull request), the PR can be added to the checklist, with commands defined in a sub-checklist beneath it.*
+        
         - [ ] #XYZ
+         
          - [ ] **`command`** : Brief description.
+         
          - [ ] **`command subcommand`**: Brief description.
         "
   - type: textarea
