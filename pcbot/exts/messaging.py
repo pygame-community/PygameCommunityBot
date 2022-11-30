@@ -1051,13 +1051,13 @@ class Messaging(BaseCommandCog, name="messaging"):
                 with io.BytesIO(
                     "This file could not be duplicated due to the "
                     "message file limit of 8 MiB being exceeded.".encode("utf-8")
-                ) as fobj:
+                ) as strio:
                     cum_size = 0
                     attached_files = [
                         (
                             await a.to_file(spoiler=a.is_spoiler())
                             if (cum_size := cum_size + a.size) <= filesize_limit
-                            else discord.File(fobj, f"filetoolarge - {a.filename}.txt")
+                            else discord.File(strio, f"filetoolarge - {a.filename}.txt")
                         )
                         for a in msg.attachments
                     ]
@@ -1082,15 +1082,15 @@ class Messaging(BaseCommandCog, name="messaging"):
 
                 content_file = None
                 if content_attachment or len(msg.content) > 2000:
-                    with io.BytesIO(msg.content.encode("utf-8")) as fobj:
-                        content_file = discord.File(fobj, "messagedata.txt")
+                    with io.BytesIO(msg.content.encode("utf-8")) as strio:
+                        content_file = discord.File(strio, "messagedata.txt")
 
                 await destination.send(embed=info_embed, file=content_file)  # type: ignore
 
             elif content_attachment and msg.content:
-                with io.BytesIO(msg.content.encode("utf-8")) as fobj:
+                with io.BytesIO(msg.content.encode("utf-8")) as strio:
                     await destination.send(
-                        file=discord.File(fobj, "messagedata.txt"),
+                        file=discord.File(strio, "messagedata.txt"),
                         embed=discord.Embed.from_dict(
                             dict(
                                 author=dict(name="Message Data"),
@@ -1101,9 +1101,9 @@ class Messaging(BaseCommandCog, name="messaging"):
                     )
             elif content:
                 if len(msg.content) > 2000 or len(escaped_msg_content) > 2000:
-                    with io.BytesIO(msg.content.encode("utf-8")) as fobj:
+                    with io.BytesIO(msg.content.encode("utf-8")) as strio:
                         await destination.send(
-                            file=discord.File(fobj, "messagedata.txt"),
+                            file=discord.File(strio, "messagedata.txt"),
                             embed=discord.Embed.from_dict(
                                 dict(
                                     author=dict(name="Message Data"),
@@ -1137,22 +1137,22 @@ class Messaging(BaseCommandCog, name="messaging"):
                     )
 
             if embeds and msg.embeds:
-                embed_data_fobjs = []
+                embed_data_strios = []
                 for embed in msg.embeds:
-                    embed_data_fobj = io.StringIO(json.dumps(embed.to_dict(), indent=4))
-                    embed_data_fobj.seek(0)
-                    embed_data_fobjs.append(embed_data_fobj)
+                    embed_data_strio = io.StringIO(json.dumps(embed.to_dict(), indent=4))
+                    embed_data_strio.seek(0)
+                    embed_data_strios.append(embed_data_strio)
 
                 await ctx.send(
-                    content=f"**Message embeds** ({len(embed_data_fobjs)}):",
+                    content=f"**Message embeds** ({len(embed_data_strios)}):",
                     files=[
-                        discord.File(fobj, filename=f"embeddata{i}.json")
-                        for i, fobj in enumerate(embed_data_fobjs)
+                        discord.File(strio, filename=f"embeddata{i}.json")
+                        for i, strio in enumerate(embed_data_strios)
                     ],
                 )
 
-                for embed_data_fobj in embed_data_fobjs:
-                    embed_data_fobj.close()
+                for embed_data_strio in embed_data_strios:
+                    embed_data_strio.close()
 
             await asyncio.sleep(0)
 
@@ -1277,7 +1277,7 @@ class Messaging(BaseCommandCog, name="messaging"):
                 with io.StringIO(
                     "This file could not be duplicated due to the "
                     "message file limit of 8 MiB being exceeded."
-                ) as fobj:
+                ) as strio:
                     cum_size = 0
                     attached_files = [
                         (
@@ -1287,7 +1287,7 @@ class Messaging(BaseCommandCog, name="messaging"):
                                 else a.is_spoiler()
                             )
                             if (cum_size := cum_size + a.size) <= filesize_limit
-                            else discord.File(fobj, f"filetoolarge - {a.filename}.txt")  # type: ignore
+                            else discord.File(strio, f"filetoolarge - {a.filename}.txt")  # type: ignore
                         )
                         for a in msg.attachments
                     ]
@@ -1313,7 +1313,7 @@ class Messaging(BaseCommandCog, name="messaging"):
                                     allowed_mentions=no_mentions,
                                 )
 
-                        with io.StringIO(msg.content) as fobj:
+                        with io.StringIO(msg.content) as strio:
                             await destination.send(
                                 content=msg.content[stop_idx:],
                                 embed=discord.Embed.from_dict(
@@ -1322,7 +1322,7 @@ class Messaging(BaseCommandCog, name="messaging"):
                                         footer=dict(text="Full message data"),
                                     )
                                 ),
-                                file=discord.File(fobj, filename="messagedata.txt"),  # type: ignore
+                                file=discord.File(strio, filename="messagedata.txt"),  # type: ignore
                                 allowed_mentions=no_mentions,
                             )
                         await destination.send(
@@ -1533,7 +1533,7 @@ class Messaging(BaseCommandCog, name="messaging"):
             )
         )
         message_count = len(messages)
-        with io.StringIO("This file was too large to be archived.") as fobj:
+        with io.StringIO("This file was too large to be archived.") as strio:
             msg: discord.Message
             for i, msg in enumerate(
                 reversed(messages) if not oldest_first else messages
@@ -1561,7 +1561,7 @@ class Messaging(BaseCommandCog, name="messaging"):
 
                 await destination.typing()
 
-                fobj.seek(0)
+                strio.seek(0)
 
                 filesize_limit = 2**20 * 8  # 8 MiB
 
@@ -1570,7 +1570,7 @@ class Messaging(BaseCommandCog, name="messaging"):
                     (
                         await a.to_file(spoiler=a.is_spoiler())
                         if (cum_size := cum_size + a.size) <= filesize_limit
-                        else discord.File(fobj, f"filetoolarge - {a.filename}.txt")  # type: ignore
+                        else discord.File(strio, f"filetoolarge - {a.filename}.txt")  # type: ignore
                     )
                     for a in msg.attachments
                 ]
@@ -1663,7 +1663,7 @@ class Messaging(BaseCommandCog, name="messaging"):
                                         allowed_mentions=no_mentions,
                                     )
 
-                            with io.StringIO(msg.content) as fobj:
+                            with io.StringIO(msg.content) as strio:
                                 await destination.send(
                                     content=msg.content[stop_idx:],
                                     embed=discord.Embed.from_dict(
@@ -1672,7 +1672,7 @@ class Messaging(BaseCommandCog, name="messaging"):
                                             footer=dict(text="Full message data"),
                                         )
                                     ),
-                                    file=discord.File(fobj, filename="messagedata.txt"),  # type: ignore
+                                    file=discord.File(strio, filename="messagedata.txt"),  # type: ignore
                                     allowed_mentions=no_mentions,
                                 )
 
@@ -1718,9 +1718,9 @@ class Messaging(BaseCommandCog, name="messaging"):
                                 len(msg.content) > 2000
                                 or len(escaped_msg_content) + 7 > 2000
                             ):
-                                with io.StringIO(msg.content) as fobj:
+                                with io.StringIO(msg.content) as strio:
                                     message_id_cache[msg.id] = await destination.send(
-                                        file=discord.File(fobj, "messagedata.txt"),  # type: ignore
+                                        file=discord.File(strio, "messagedata.txt"),  # type: ignore
                                         reference=msg_reference_id,  # type: ignore
                                     )
                             else:
@@ -1740,10 +1740,10 @@ class Messaging(BaseCommandCog, name="messaging"):
                                 )
                     else:
                         if msg.content:
-                            with io.StringIO(msg.content) as fobj2:
+                            with io.StringIO(msg.content) as strio2:
                                 message_id_cache[msg.id] = await destination.send(
                                     file=discord.File(
-                                        fobj2, filename="messagedata.txt"  # type: ignore
+                                        strio2, filename="messagedata.txt"  # type: ignore
                                     ),
                                     allowed_mentions=no_mentions,
                                     reference=msg_reference_id,  # type: ignore
@@ -1757,28 +1757,23 @@ class Messaging(BaseCommandCog, name="messaging"):
                                 )
 
                     if msg.embeds:
-                        embed_data_fobjs = []
+                        embed_data_strios = []
                         for embed in msg.embeds:
-                            embed_data_fobj = io.StringIO()
-                            snakecore.utils.embeds.export_embed_data(
-                                embed.to_dict(),  # type: ignore
-                                fp=embed_data_fobj,
-                                indent=4,
-                                as_json=True,
-                            )
-                            embed_data_fobj.seek(0)
-                            embed_data_fobjs.append(embed_data_fobj)
+                            embed_data_strio = io.StringIO()
+                            json.dump(embed.to_dict(), embed_data_strio, indent=4)
+                            embed_data_strio.seek(0)
+                            embed_data_strios.append(embed_data_strio)
 
                         await destination.send(
                             content=f"**Message embeds** ({i + 1}):",
                             files=[
-                                discord.File(fobj, filename=f"embeddata{i}.json")
-                                for fobj in embed_data_fobjs
+                                discord.File(strio, filename=f"embeddata{i}.json")
+                                for strio in embed_data_strios
                             ],
                         )
 
-                        for embed_data_fobj in embed_data_fobjs:
-                            embed_data_fobj.close()
+                        for embed_data_strio in embed_data_strios:
+                            embed_data_strio.close()
 
                 await asyncio.sleep(0)
 
