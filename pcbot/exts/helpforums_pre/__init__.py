@@ -1261,10 +1261,13 @@ class HelpForumsPre(BaseCommandCog, name="helpforums-pre"):
         """Get the last time this thread was active. This is usually
         the creation date of the most recent message.
 
-        Args:
-            thread (discord.Thread): The thread.
+        Parameters
+        ----------
+        thread : discord.Thread
+            The thread.
 
-        Returns:
+        Returns
+        -------
             datetime.datetime: The time.
         """
         last_active = thread.created_at
@@ -1297,11 +1300,15 @@ class HelpForumsPre(BaseCommandCog, name="helpforums-pre"):
     ) -> Optional[discord.Message]:
         """Get the last message sent in the given thread.
 
-        Args:
-            thread (discord.Thread): The thread.
+        Parameters
+        ----------
+        thread : discord.Thread
+            The thread.
 
-        Returns:
-            Optional[discord.Message]: The message, if it exists.
+        Returns
+        -------
+        Optional[discord.Message]
+            The message, if it exists.
         """
         last_message = thread.last_message
         if last_message is None:

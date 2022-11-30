@@ -372,7 +372,7 @@ async def unload_databases(
 
 async def message_delete_reaction_listener(
     client: Union[discord.Client, discord.AutoShardedClient],
-    msg: discord.Message,
+    message: discord.Message,
     invoker: Union[discord.Member, discord.User],
     emoji: Union[discord.Emoji, discord.PartialEmoji, str],
     role_whitelist: Optional[Collection[Union[discord.Role, int]]] = None,
@@ -389,23 +389,23 @@ async def message_delete_reaction_listener(
 
     Parameters
     ----------
-        msg: :class:`discord.Message`
-            The message to use.
-        invoker: Union[:class:`discord.Member`, :class:`discord.User`]
-            The member/user who can delete a message.
-        emoji Union[:class:`discord.Emoji`, :class:`discord.PartialEmoji`, :class:`str`]):
-            The emoji to listen for.
-        role_whitelist Optional[Collection[Union[:class:`discord.Role`, :class:`int`]]], optional
-            A collection of roles or role IDs whose users' reactions can also be picked up by this function.
-        timeout: Optional[:class:`float`], optional
-            A timeout for waiting, before automatically removing any added reactions and returning silently.
-        on_delete: Union[Callable[[:class:`discord.Message`], Coroutine[Any, Any, Any]], Callable[[:class:`discord.Message`], Any], None], optional
-            A (coroutine) function to call when a message is successfully deleted via the reaction. Defaults to `None`.
+    message : :class:`discord.Message`
+        The message to use.
+    invoker : Union[:class:`discord.Member`, :class:`discord.User`]
+        The member/user who can delete a message.
+    emoji : Union[:class:`discord.Emoji`, :class:`discord.PartialEmoji`, :class:`str`]):
+        The emoji to listen for.
+    role_whitelist : Optional[Collection[Union[:class:`discord.Role`, :class:`int`]]], optional
+        A collection of roles or role IDs whose users' reactions can also be picked up by this function.
+    timeout : Optional[:class:`float`], optional
+        A timeout for waiting, before automatically removing any added reactions and returning silently.
+    on_delete : Union[Callable[[:class:`discord.Message`], Coroutine[Any, Any, Any]], Callable[[:class:`discord.Message`], Any], None], optional
+        A (coroutine) function to call when a message is successfully deleted via the reaction. Defaults to `None`.
 
     Raises
     ------
-        TypeError
-            Invalid argument types.
+    TypeError
+        Invalid argument types.
     """
 
     role_whitelist_set = set(
@@ -417,14 +417,14 @@ async def message_delete_reaction_listener(
 
     try:
         try:
-            await msg.add_reaction(emoji)
+            await message.add_reaction(emoji)
         except discord.HTTPException:
             return
 
         check = None
         if isinstance(invoker, discord.Member):
             check = (
-                lambda event: event.message_id == msg.id
+                lambda event: event.message_id == message.id
                 and (
                     event.user_id == invoker.id
                     or any(
@@ -435,14 +435,14 @@ async def message_delete_reaction_listener(
                 and snakecore.utils.is_emoji_equal(event.emoji, emoji)
             )
         elif isinstance(invoker, discord.User):
-            if isinstance(msg.channel, discord.DMChannel):
+            if isinstance(message.channel, discord.DMChannel):
                 check = (
-                    lambda event: event.message_id == msg.id
+                    lambda event: event.message_id == message.id
                     and snakecore.utils.is_emoji_equal(event.emoji, emoji)
                 )
             else:
                 check = (
-                    lambda event: event.message_id == msg.id
+                    lambda event: event.message_id == message.id
                     and event.user_id == invoker.id
                     and snakecore.utils.is_emoji_equal(event.emoji, emoji)
                 )
@@ -457,15 +457,15 @@ async def message_delete_reaction_listener(
         )
 
         try:
-            await msg.delete()
+            await message.delete()
         except discord.HTTPException:
             pass
         else:
             if on_delete is not None:
-                await discord.utils.maybe_coroutine(on_delete, msg)
+                await discord.utils.maybe_coroutine(on_delete, message)
 
     except asyncio.TimeoutError:
         try:
-            await msg.clear_reaction(emoji)
+            await message.clear_reaction(emoji)
         except discord.HTTPException:
             pass
