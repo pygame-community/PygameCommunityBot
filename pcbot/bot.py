@@ -25,7 +25,7 @@ from snakecore.constants import UNSET
 from snakecore.utils.pagination import EmbedPaginator
 
 from . import utils
-from ._types import _DatabaseDict
+from ._types import _DatabaseDict, ExtensionData
 
 _logger = logging.getLogger(__name__)
 
@@ -688,7 +688,7 @@ class PygameCommunityBot(snakecore.commands.Bot):
                 ),
             )
 
-    async def read_extension_data(self, name: str) -> dict[str, Union[str, bytes]]:
+    async def read_extension_data(self, name: str) -> ExtensionData:
         if not self._extension_data_storage_is_init:
             raise RuntimeError("Extension data storage was not initialized.")
 
@@ -717,7 +717,7 @@ class PygameCommunityBot(snakecore.commands.Bot):
                     f"'{name}'"
                 )
 
-            return dict(
+            return ExtensionData(
                 name=row.name,
                 version=row.version,
                 db_table_prefix=row.db_table_prefix,

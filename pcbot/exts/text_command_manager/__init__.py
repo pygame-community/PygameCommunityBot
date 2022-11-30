@@ -1462,7 +1462,11 @@ async def setup(bot: BotT, color: Union[int, discord.Color] = 0):
         async with db_engine.begin() as conn:
             for vi in MIGRATIONS[db_engine.name]:
                 if Version(vi) > stored_version:
-                    await conn.execute(text(MIGRATIONS[db_engine.name][f"{vi}"]))
+                    if isinstance(MIGRATIONS[db_engine.name][vi], tuple):
+                        for stmt in MIGRATIONS[db_engine.name][vi]:
+                            await conn.execute(text(stmt))
+                    else:
+                        await conn.execute(text(MIGRATIONS[db_engine.name][vi]))
 
         extension_data["version"] = __version__
         await bot.update_extension_data(**extension_data)

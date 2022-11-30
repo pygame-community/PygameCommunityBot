@@ -1344,11 +1344,8 @@ async def setup(bot: BotT, color: Union[int, discord.Color] = 0):
             name=__name__,
             version=__version__,
             db_table_prefix=DB_TABLE_PREFIX,
-            initial_data=pickle.dumps({}),
         )
-        await bot.create_extension_data(**extension_data)  # type: ignore
-        extension_data["data"] = extension_data["initial_data"]
-        del extension_data["initial_data"]
+        await bot.create_extension_data(**extension_data)
 
     extension_version = Version(__version__)
     stored_version = Version("0.0.0" if first_setup else str(extension_data["version"]))
@@ -1370,59 +1367,6 @@ async def setup(bot: BotT, color: Union[int, discord.Color] = 0):
                         await conn.execute(text(MIGRATIONS[db_engine.name][vi]))
 
         extension_data["version"] = __version__
-        await bot.update_extension_data(**(extension_data | dict(data=pickle.dumps({}))))  # type: ignore
-
-    if bool(extension_data["data"]) and (old_helpforums_data := pickle.loads(extension_data["data"])):  # type: ignore
-        # transfer
-        target_columns = (
-            "thread_id",
-            "last_cautioned_ts",
-            "caution_message_ids",
-        )
-        target_update_set_columns = ", ".join((f"{k} = :{k}" for k in target_columns))
-
-        conn: AsyncConnection
-        async with db_engine.begin() as conn:
-            await conn.execute(
-                text(
-                    "INSERT INTO "
-                    f"'{DB_TABLE_PREFIX}bad_help_thread_data' AS bad_help_thread_data "
-                    f"({', '.join(target_columns)}) "
-                    f"VALUES ({', '.join(':'+colname for colname in target_columns)}) "
-                    f"ON CONFLICT DO UPDATE SET {target_update_set_columns} "
-                    "WHERE bad_help_thread_data.thread_id == :thread_id"
-                ),
-                [
-                    data
-                    | dict(caution_message_ids=pickle.dumps(data["alert_message_ids"]))
-                    for data in old_helpforums_data["bad_help_thread_data"].values()
-                ],
-            )
-
-        target_columns = (
-            "thread_id",
-            "last_active_ts",
-            "alert_message_id",
-        )
-        target_update_set_columns = ", ".join((f"{k} = :{k}" for k in target_columns))
-
-        conn: AsyncConnection
-        async with db_engine.begin() as conn:
-            await conn.execute(
-                text(
-                    "INSERT INTO "
-                    f"'{DB_TABLE_PREFIX}inactive_help_thread_data' AS inactive_help_thread_data "
-                    f"({', '.join(target_columns)}) "
-                    f"VALUES ({', '.join(':'+colname for colname in target_columns)}) "
-                    f"ON CONFLICT DO UPDATE SET {target_update_set_columns} "
-                    "WHERE inactive_help_thread_data.thread_id == :thread_id "
-                ),
-                [
-                    data | dict(alert_message_id=data.get("alert_message_id", None))
-                    for data in old_helpforums_data[
-                        "inactive_help_thread_data"
-                    ].values()
-                ],
-            )
+        await bot.update_extension_data(**extension_data)  # type: ignore
 
     await bot.add_cog(HelpForumsPre(bot, db_engine, theme_color=int(color)))
