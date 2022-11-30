@@ -1139,7 +1139,9 @@ class Messaging(BaseCommandCog, name="messaging"):
             if embeds and msg.embeds:
                 embed_data_strios = []
                 for embed in msg.embeds:
-                    embed_data_strio = io.StringIO(json.dumps(embed.to_dict(), indent=4))
+                    embed_data_strio = io.StringIO(
+                        json.dumps(embed.to_dict(), indent=4)
+                    )
                     embed_data_strio.seek(0)
                     embed_data_strios.append(embed_data_strio)
 

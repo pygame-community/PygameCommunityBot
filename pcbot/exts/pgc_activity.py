@@ -167,7 +167,14 @@ class PGCActivity(BaseCommandCog, name="pgc-activity"):
 
     @commands.Cog.listener()
     async def on_member_join(self, member: discord.Member):
-        if not (member.guild.id == PGC_GUILD_ID and member.guild.system_channel):
+        if not (
+            member.guild.id == PGC_GUILD_ID
+            and member.guild.system_channel
+            and member.guild.system_channel.permissions_for(
+                member.guild.get_member(self.bot.user.id)  # type: ignore
+                or await member.guild.fetch_member(self.bot.user.id)  # type: ignore
+            ).send_messages
+        ):
             return
 
         if member.pending:
@@ -177,14 +184,12 @@ class PGCActivity(BaseCommandCog, name="pgc-activity"):
         check = random.choice(BOT_WELCOME_MSG["check"])
         grab = random.choice(BOT_WELCOME_MSG["grab"])
         end = random.choice(BOT_WELCOME_MSG["end"])
-        try:
-            await member.guild.system_channel.send(
-                f"{greet} {member.mention}! {check} "
-                + f"<#{SERVER_GUIDE_CHANNEL_ID}>{grab} "
-                + f"<#{ROLES_CHANNEL_ID}>{end}"
-            )
-        except discord.HTTPException:
-            pass
+
+        await member.guild.system_channel.send(
+            f"{greet} {member.mention}! {check} "
+            + f"<#{SERVER_GUIDE_CHANNEL_ID}>{grab} "
+            + f"<#{ROLES_CHANNEL_ID}>{end}"
+        )
 
 
 @snakecore.commands.decorators.with_config_kwargs
