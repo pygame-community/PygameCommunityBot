@@ -562,9 +562,10 @@ class PygameCommunityBot(snakecore.commands.Bot):
         """Get an `sqlachemy.ext.asyncio.AsyncEngine` object for the primary
         database of this bot.
 
-        Returns:
-            Optional[AsyncEngine]: The engine, or None if nothing was
-              loaded/configured.
+        Returns
+        -------
+        Optional[AsyncEngine]
+            The engine, or None if nothing was loaded/configured.
         """
 
         return self._main_database.get("engine")
@@ -584,13 +585,13 @@ class PygameCommunityBot(snakecore.commands.Bot):
 
         Parameters
         ----------
-            *names: :class:`str`
-                The database name.
+        *names: :class:`str`
+            The database name.
 
         Returns
         -------
-            :class:`list`[:class:`dict`]
-                The dictionaries.
+        :class:`list`[:class:`dict`]
+            The dictionaries.
         """
 
         db_dicts = []

@@ -86,8 +86,9 @@ class ShowcasePre(BaseCommandCog, name="showcase-pre"):
     ):
         """Checks if a message posted in a showcase channel for projects has the right format.
 
-        Returns:
-            bool: True/False
+            Returns
+        -------
+                bool: True/False
         """
         search_obj = re.search(
             snakecore.utils.regex_patterns.URL, message.content or ""
