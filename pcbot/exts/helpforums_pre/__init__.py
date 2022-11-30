@@ -53,9 +53,9 @@ class InactiveHelpThreadData(TypedDict):
 
 
 HELP_FORUM_CHANNEL_IDS = {
-    "newbies": 1041865351257935922,  # newbies-help-🔰
-    "regulars": 1041865421093093536,  # regulars-pygame-help
-    "python": 1041865590568128542,  # python-help
+    "newbies": 1022292223708110929,  # newbies-help-🔰
+    "regulars": 1019741232810954842,  # regulars-pygame-help
+    "python": 1022244052088934461,  # python-help
 }
 
 INVALID_HELP_THREAD_TITLE_TYPES = {
