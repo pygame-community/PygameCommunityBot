@@ -39,30 +39,36 @@ body:
         Does your proposal involve the creation of new bot commands? If so, describe them here.
       value: "*Commands should be defined in a checklist, to better keep track of them.*
         
+      - [ ] **`command`** : Brief description.
+        
+      - [ ] **`command subcommand`**: Brief description.
+        
+      *If certain commands are being implemented in a specific (PR) (pull request), the PR can be added to the checklist, with commands defined in a sub-checklist beneath it.*
+        
+      - [ ] #XYZ
+         
         - [ ] **`command`** : Brief description.
-        
+         
         - [ ] **`command subcommand`**: Brief description.
-        
-        *If certain commands are being implemented in a specific (PR) (pull request), the PR can be added to the checklist, with commands defined in a sub-checklist beneath it.*
-        
-        - [ ] #XYZ
-         
-         - [ ] **`command`** : Brief description.
-         
-         - [ ] **`command subcommand`**: Brief description.
         "
   - type: textarea
     attributes:
       label: Changed Bot Commands
       description: >
         Does your proposal involve changing/deleting any existing bot commands? If so, describe them here.
-      value: "*Commands should be defined in a checklist, to better keep track of them. Commands to remove should be striked through using markdown.*
-        - [ ] **`command`** : Brief description.
-        - [ ] **`command subcommand`**: Brief description.
+      value: "*Commands should be defined in a checklist, to better keep track of them.
+       Commands to remove should be striked through using markdown.*
         
-        *If certain commands are being updated/removed in a specific (PR) (pull request), the PR can be added to the checklist, with commands defined in a sub-checklist beneath it.*
-        - [ ] #XYZ
+       - [ ] **`command`** : Brief description.
+       
+       - [ ] **`command subcommand`**: Brief description.
+        
+       *If certain commands are being updated/removed in a specific (PR) (pull request), the PR can be added to the checklist, with commands defined in a sub-checklist beneath it.*
+       
+       - [ ] #XYZ
+       
          - [ ] **`command`** : Brief description.
+       
          - [ ] ~~**`command subcommand`**: Brief description.~~
         "
 
