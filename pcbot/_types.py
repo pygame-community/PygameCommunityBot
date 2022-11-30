@@ -3,7 +3,7 @@ This project has been licensed under the MIT license.
 Copyright (c) 2022-present pygame-community.
 """
 
-from typing import Any, TypedDict
+from typing import Any, Optional, TypedDict
 from typing_extensions import NotRequired
 
 from sqlalchemy.ext.asyncio import AsyncEngine
@@ -20,3 +20,10 @@ class _DatabaseDict(TypedDict):
     engine: AsyncEngine
     url: NotRequired[str]
     connect_args: NotRequired[dict[str, Any]]
+
+
+class ExtensionData(TypedDict):
+    name: str
+    version: str
+    db_table_prefix: str
+    data: Optional[bytes]
