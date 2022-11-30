@@ -250,8 +250,13 @@ class BotManagement(BaseCommandCog, name="bot-management"):
             )
 
         while self.short_log_record_error_queue:
-            await self.status_message.reply(  # announce errors in extra separate messages
-                content=f"```ansi\n{ANSI_FORMATTER.format(self.short_log_record_error_queue.popleft())}\n```"
+            raw_content = ANSI_FORMATTER.format(
+                self.short_log_record_error_queue.popleft()
+            )
+            if len(raw_content) >= 4000:
+                raw_content = raw_content[:3993] + "..."
+            await self.status_message.reply(
+                content=f"```ansi\n{raw_content}```"  # announce errors in extra separate messages
             )
 
     async def prepare_status_reporting(self):
