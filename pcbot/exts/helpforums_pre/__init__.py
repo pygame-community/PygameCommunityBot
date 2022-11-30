@@ -17,30 +17,33 @@ import discord
 from discord.ext import commands, tasks
 from packaging.version import Version
 import snakecore
-from sqlalchemy.ext.asyncio import AsyncEngine
+from sqlalchemy import text
+from sqlalchemy.engine import Result
+from sqlalchemy.ext.asyncio import AsyncEngine, AsyncConnection
 
-from .. import __version__
-from .base import BaseCommandCog
-from ..bot import PygameCommunityBot
+from .migrations import MIGRATIONS
+
+from .constants import (
+    DB_TABLE_PREFIX,
+    FORUM_THREAD_TAG_LIMIT,
+    THREAD_TITLE_MINIMUM_LENGTH,
+    THREAD_TITLE_TOO_SHORT_SLOWMODE_DELAY,
+)
+
+from ... import __version__
+from ..base import BaseCommandCog
+from ...bot import PygameCommunityBot
 
 if TYPE_CHECKING:
     from typing_extensions import NotRequired
 
 BotT = PygameCommunityBot
 
-DB_TABLE_PREFIX = f"{__name__}:"
-
-
-CAUTION_WHILE_MESSAGING_COOLDOWN: int = 900
-THREAD_TITLE_TOO_SHORT_SLOWMODE_DELAY: int = 300
-THREAD_TITLE_MINIMUM_LENGTH: int = 16
-FORUM_THREAD_TAG_LIMIT = 5
-
 
 class BadHelpThreadData(TypedDict):
     thread_id: int
     last_cautioned_ts: float
-    alert_message_ids: set[int]
+    caution_message_ids: set[int]
 
 
 class InactiveHelpThreadData(TypedDict):
@@ -50,9 +53,9 @@ class InactiveHelpThreadData(TypedDict):
 
 
 HELP_FORUM_CHANNEL_IDS = {
-    "newbies": 1022292223708110929,  # newbies-help-🔰
-    "regulars": 1019741232810954842,  # regulars-pygame-help
-    "python": 1022244052088934461,  # python-help
+    "newbies": 1041865351257935922,  # newbies-help-🔰
+    "regulars": 1041865421093093536,  # regulars-pygame-help
+    "python": 1041865590568128542,  # python-help
 }
 
 INVALID_HELP_THREAD_TITLE_TYPES = {
@@ -179,31 +182,20 @@ INVALID_HELP_THREAD_TITLE_EMBEDS = {
 
 
 class HelpForumsPre(BaseCommandCog, name="helpforums-pre"):
-    def __init__(self, bot: BotT, theme_color: Union[int, discord.Color] = 0) -> None:
+    def __init__(
+        self,
+        bot: BotT,
+        db_engine: AsyncEngine,
+        theme_color: Union[int, discord.Color] = 0,
+    ) -> None:
         super().__init__(bot, theme_color=theme_color)
         self.bot: BotT
-        self.bad_help_thread_data: dict[int, BadHelpThreadData] = {}
-        self.inactive_help_thread_data: dict[int, InactiveHelpThreadData] = {}
-
-    async def cog_load(self) -> None:
-        help_thread_data = await self.bot.read_extension_data(__name__)
-        self.bad_help_thread_data = help_thread_data.get("bad_help_thread_data", {})  # type: ignore
-        self.inactive_help_thread_data = help_thread_data.get("bad_help_thread_data", {})  # type: ignore
-        self.save_help_thread_data.start()
+        self.db_engine = db_engine
 
     async def cog_unload(self) -> None:
         self.inactive_help_thread_alert.stop()
         self.force_help_thread_archive_after_timeout.stop()
         self.delete_help_threads_without_starter_message.stop()
-        self.save_help_thread_data.stop()
-
-        dumped_help_thread_data = pickle.dumps(
-            {
-                "bad_help_thread_data": self.bad_help_thread_data,
-                "inactive_help_thread_data": self.inactive_help_thread_data,
-            }
-        )
-        await self.bot.update_extension_data(__name__, data=dumped_help_thread_data)
 
     @commands.Cog.listener()
     async def on_ready(self):
@@ -224,15 +216,161 @@ class HelpForumsPre(BaseCommandCog, name="helpforums-pre"):
         ):
             await self.help_thread_deletion_checks(msg.channel)
 
-    @tasks.loop(hours=1)
-    async def save_help_thread_data(self):
-        dumped_help_thread_data = pickle.dumps(
-            {
-                "bad_help_thread_data": self.bad_help_thread_data,
-                "inactive_help_thread_data": self.inactive_help_thread_data,
-            }
+    async def bad_help_thread_data_exists(self, thread_id: int) -> bool:
+        conn: AsyncConnection
+        async with self.db_engine.connect() as conn:
+            return bool(
+                (
+                    await conn.execute(
+                        text(
+                            f"SELECT EXISTS(SELECT 1 FROM '{DB_TABLE_PREFIX}bad_help_thread_data' "
+                            "WHERE thread_id == :thread_id LIMIT 1)"
+                        ),
+                        dict(thread_id=thread_id),
+                    )
+                ).first()[0]
+            )
+
+    async def fetch_bad_help_thread_data(self, thread_id: int) -> BadHelpThreadData:
+        conn: AsyncConnection
+        async with self.db_engine.connect() as conn:
+            result: Result = await conn.execute(
+                text(
+                    f"SELECT * FROM '{DB_TABLE_PREFIX}bad_help_thread_data' "
+                    "WHERE thread_id == :thread_id"
+                ),
+                dict(thread_id=thread_id),
+            )
+
+            row = result.first()
+            if not row:
+                raise LookupError(
+                    f"No bad help thread data found for thread with ID {thread_id}"
+                )
+
+            row_dict = row._asdict()  # type: ignore
+
+            return BadHelpThreadData(
+                thread_id=thread_id,
+                last_cautioned_ts=row_dict["last_cautioned_ts"],
+                caution_message_ids=pickle.loads(row_dict["caution_message_ids"]),
+            )
+
+    async def save_bad_help_thread_data(self, data: BadHelpThreadData) -> None:
+        target_columns = (
+            "thread_id",
+            "last_cautioned_ts",
+            "caution_message_ids",
         )
-        await self.bot.update_extension_data(__name__, data=dumped_help_thread_data)
+        target_update_set_columns = ", ".join((f"{k} = :{k}" for k in target_columns))
+
+        conn: AsyncConnection
+        async with self.db_engine.begin() as conn:
+            await conn.execute(
+                text(
+                    "INSERT INTO "
+                    f"'{DB_TABLE_PREFIX}bad_help_thread_data' AS bad_help_thread_data "
+                    f"({', '.join(target_columns)}) "
+                    f"VALUES ({', '.join(':'+colname for colname in target_columns)}) "
+                    f"ON CONFLICT DO UPDATE SET {target_update_set_columns} "
+                    "WHERE bad_help_thread_data.thread_id == :thread_id"
+                ),
+                data
+                | dict(caution_message_ids=pickle.dumps(data["caution_message_ids"])),
+            )
+
+    async def delete_bad_help_thread_data(self, thread_id: int) -> None:
+        conn: AsyncConnection
+        async with self.db_engine.connect() as conn:
+            await conn.execute(
+                text(
+                    f"DELETE FROM '{DB_TABLE_PREFIX}bad_help_thread_data' "
+                    "AS bad_help_thread_data "
+                    "WHERE bad_help_thread_data.thread_id == :thread_id"
+                ),
+                dict(thread_id=thread_id),
+            )
+
+    async def inactive_help_thread_data_exists(self, thread_id: int) -> bool:
+        conn: AsyncConnection
+        async with self.db_engine.connect() as conn:
+            return bool(
+                (
+                    await conn.execute(
+                        text(
+                            f"SELECT EXISTS(SELECT 1 FROM '{DB_TABLE_PREFIX}inactive_help_thread_data' "
+                            "WHERE thread_id == :thread_id LIMIT 1)"
+                        ),
+                        dict(thread_id=thread_id),
+                    )
+                ).first()[0]
+            )
+
+    async def fetch_inactive_help_thread_data(
+        self, thread_id: int
+    ) -> InactiveHelpThreadData:
+        conn: AsyncConnection
+        async with self.db_engine.connect() as conn:
+            result: Result = await conn.execute(
+                text(
+                    f"SELECT * FROM '{DB_TABLE_PREFIX}inactive_help_thread_data' "
+                    "WHERE thread_id == :thread_id"
+                ),
+                dict(thread_id=thread_id),
+            )
+
+            row = result.first()
+            if not row:
+                raise LookupError(
+                    f"No inactive help thread data found for thread with ID {thread_id}"
+                )
+
+            row_dict = row._asdict()  # type: ignore
+
+            output = InactiveHelpThreadData(
+                thread_id=thread_id, last_active_ts=row_dict["last_active_ts"]
+            )
+
+            if "alert_message_id" in row_dict:
+                output["alert_message_id"] = row_dict["alert_message_id"]
+
+            return output
+
+    async def save_inactive_help_thread_data(
+        self, data: InactiveHelpThreadData
+    ) -> None:
+        target_columns = (
+            "thread_id",
+            "last_active_ts",
+            "alert_message_id",
+        )
+        target_update_set_columns = ", ".join((f"{k} = :{k}" for k in target_columns))
+
+        conn: AsyncConnection
+        async with self.db_engine.begin() as conn:
+            await conn.execute(
+                text(
+                    "INSERT INTO "
+                    f"'{DB_TABLE_PREFIX}inactive_help_thread_data' AS inactive_help_thread_data "
+                    f"({', '.join(target_columns)}) "
+                    f"VALUES ({', '.join(':'+colname for colname in target_columns)}) "
+                    f"ON CONFLICT DO UPDATE SET {target_update_set_columns} "
+                    "WHERE inactive_help_thread_data.thread_id == :thread_id "
+                ),
+                data | dict(alert_message_id=data.get("alert_message_id", None)),
+            )
+
+    async def delete_inactive_help_thread_data(self, thread_id: int) -> None:
+        conn: AsyncConnection
+        async with self.db_engine.connect() as conn:
+            await conn.execute(
+                text(
+                    f"DELETE FROM '{DB_TABLE_PREFIX}inactive_help_thread_data' "
+                    "AS inactive_help_thread_data "
+                    "WHERE inactive_help_thread_data.thread_id == :thread_id"
+                ),
+                dict(thread_id=thread_id),
+            )
 
     @commands.Cog.listener()
     async def on_thread_create(self, thread: discord.Thread):
@@ -300,14 +438,20 @@ class HelpForumsPre(BaseCommandCog, name="helpforums-pre"):
                             )
                         )
 
-                if issues_found and thread.id not in self.bad_help_thread_data:
-                    self.bad_help_thread_data[thread.id] = {
-                        "thread_id": thread.id,
-                        "last_cautioned_ts": time.time(),
-                        "alert_message_ids": set(msg.id for msg in caution_messages),
-                    }
+                if issues_found and not await self.bad_help_thread_data_exists(
+                    thread.id
+                ):
+                    await self.save_bad_help_thread_data(
+                        {
+                            "thread_id": thread.id,
+                            "last_cautioned_ts": time.time(),
+                            "caution_message_ids": set(
+                                msg.id for msg in caution_messages
+                            ),
+                        }
+                    )
 
-                owner_id_suffix = f" | {thread.owner_id}"
+                owner_id_suffix = f"│{thread.owner_id}"
                 if not (
                     thread.name.endswith(owner_id_suffix)
                     or str(thread.owner_id) in thread.name
@@ -329,7 +473,7 @@ class HelpForumsPre(BaseCommandCog, name="helpforums-pre"):
         if after.parent_id in HELP_FORUM_CHANNEL_IDS.values():
             try:
                 assert self.bot.user
-                owner_id_suffix = f" | {after.owner_id}"
+                owner_id_suffix = f"│{after.owner_id}"
                 if not (after.archived or after.locked):
                     thread_edits = {}
                     caution_messages: list[discord.Message] = []
@@ -369,7 +513,8 @@ class HelpForumsPre(BaseCommandCog, name="helpforums-pre"):
                                     )
                                 )
                             elif (
-                                after.slowmode_delay
+                                "thread_title_too_short" not in caution_types
+                                and after.slowmode_delay
                                 == THREAD_TITLE_TOO_SHORT_SLOWMODE_DELAY
                             ):
                                 thread_edits.update(
@@ -401,25 +546,46 @@ class HelpForumsPre(BaseCommandCog, name="helpforums-pre"):
                                 )
 
                     if bad_thread_name or bad_thread_tags:
-                        if after.id not in self.bad_help_thread_data:
-                            self.bad_help_thread_data[after.id] = {
+                        if not await self.bad_help_thread_data_exists(after.id):
+                            await self.save_bad_help_thread_data(
+                                {
+                                    "thread_id": after.id,
+                                    "last_cautioned_ts": time.time(),
+                                    "caution_message_ids": set(
+                                        msg.id for msg in caution_messages
+                                    ),
+                                }
+                            )
+
+                        bad_thread_data = await self.fetch_bad_help_thread_data(
+                            after.id
+                        )
+
+                        await self.save_bad_help_thread_data(
+                            {
                                 "thread_id": after.id,
                                 "last_cautioned_ts": time.time(),
-                                "alert_message_ids": set(
-                                    msg.id for msg in caution_messages
-                                ),
+                                "caution_message_ids": bad_thread_data.get(
+                                    "caution_message_ids", set()
+                                )
+                                | set(msg.id for msg in caution_messages),
                             }
-                        self.bad_help_thread_data[after.id][
-                            "last_cautioned_ts"
-                        ] = time.time()
-                        self.bad_help_thread_data[after.id]["alert_message_ids"].update(
-                            (msg.id for msg in caution_messages)
                         )
                     else:
                         if (
-                            after.id in self.bad_help_thread_data
+                            await self.bad_help_thread_data_exists(after.id)
                             and updater_id != self.bot.user.id
-                        ):
+                        ) and not (
+                            caution_types := self.get_help_forum_channel_thread_name_cautions(
+                                after
+                            )
+                            or (
+                                after.parent_id == HELP_FORUM_CHANNEL_IDS["regulars"]
+                                and not self.validate_regulars_help_forum_channel_thread_tags(
+                                    after
+                                )
+                            )
+                        ):  # help thread doesn't have issues anymore
                             if (
                                 after.slowmode_delay
                                 == THREAD_TITLE_TOO_SHORT_SLOWMODE_DELAY
@@ -437,18 +603,17 @@ class HelpForumsPre(BaseCommandCog, name="helpforums-pre"):
                                     )
                                 )
 
-                            for msg_id in tuple(
-                                self.bad_help_thread_data[after.id]["alert_message_ids"]
-                            ):
+                            bad_thread_data = await self.fetch_bad_help_thread_data(
+                                after.id
+                            )
+
+                            for msg_id in bad_thread_data["caution_message_ids"]:
                                 try:
                                     await after.get_partial_message(msg_id).delete()
                                 except discord.NotFound:
                                     pass
 
-                            if (
-                                after.id in self.bad_help_thread_data
-                            ):  # fix concurrency bugs where key was already deleted
-                                del self.bad_help_thread_data[after.id]
+                            await self.delete_bad_help_thread_data(after.id)
 
                         solved_in_before = any(
                             tag.name.lower().startswith("solved")
@@ -473,11 +638,12 @@ class HelpForumsPre(BaseCommandCog, name="helpforums-pre"):
                                 )
                             )
 
-                            if after.id in self.inactive_help_thread_data:
+                            if await self.inactive_help_thread_data_exists(after.id):
+                                inactive_thread_data = (
+                                    await self.fetch_inactive_help_thread_data(after.id)
+                                )
                                 try:
-                                    if alert_message_id := self.inactive_help_thread_data[
-                                        after.id
-                                    ].get(
+                                    if alert_message_id := inactive_thread_data.get(
                                         "alert_message_id", None
                                     ):
                                         try:
@@ -487,7 +653,9 @@ class HelpForumsPre(BaseCommandCog, name="helpforums-pre"):
                                         except discord.NotFound:
                                             pass
                                 finally:
-                                    del self.inactive_help_thread_data[after.id]
+                                    await self.delete_inactive_help_thread_data(
+                                        after.id
+                                    )
 
                         elif solved_in_before and not solved_in_after:
                             parent = (
@@ -564,8 +732,8 @@ class HelpForumsPre(BaseCommandCog, name="helpforums-pre"):
 
     @commands.Cog.listener()
     async def on_raw_thread_delete(self, payload: discord.RawThreadDeleteEvent):
-        if payload.thread_id in self.inactive_help_thread_data:
-            del self.inactive_help_thread_data[payload.thread_id]
+        if await self.inactive_help_thread_data_exists(payload.thread_id):
+            await self.delete_inactive_help_thread_data(payload.thread_id)
 
     @commands.Cog.listener()
     async def on_raw_reaction_add(self, payload: discord.RawReactionActionEvent):
@@ -752,12 +920,16 @@ class HelpForumsPre(BaseCommandCog, name="helpforums-pre"):
 
                         if (now_ts - last_active_ts) > (3600 * 23 + 1800):  # 23h30m
                             if (
-                                help_thread.id not in self.inactive_help_thread_data
-                                or self.inactive_help_thread_data[help_thread.id][
-                                    "last_active_ts"
-                                ]
-                                < last_active_ts
-                            ):
+                                not await self.inactive_help_thread_data_exists(
+                                    help_thread.id
+                                )
+                            ) or (
+                                inactive_thread_data := await self.fetch_inactive_help_thread_data(
+                                    help_thread.id
+                                )
+                            )[
+                                "last_active_ts"
+                            ] < last_active_ts:
                                 if (
                                     help_thread.archived
                                     and help_thread.archiver_id
@@ -773,10 +945,12 @@ class HelpForumsPre(BaseCommandCog, name="helpforums-pre"):
                                         ).manage_threads
                                     )  # allow alert supression by help thread owner/OP or forum channel moderator
                                 ):
-                                    self.inactive_help_thread_data[help_thread.id] = {
-                                        "thread_id": help_thread.id,
-                                        "last_active_ts": time.time(),
-                                    }
+                                    await self.save_inactive_help_thread_data(
+                                        {
+                                            "thread_id": help_thread.id,
+                                            "last_active_ts": time.time(),
+                                        }
+                                    )
                                 else:
                                     alert_message = await help_thread.send(
                                         f"help-post-inactive(<@{help_thread.owner_id}>, **{help_thread.name}**)",
@@ -795,17 +969,21 @@ class HelpForumsPre(BaseCommandCog, name="helpforums-pre"):
                                             color=0x888888,
                                         ),
                                     )
-                                    self.inactive_help_thread_data[help_thread.id] = {
-                                        "thread_id": help_thread.id,
-                                        "last_active_ts": alert_message.created_at.timestamp(),
-                                        "alert_message_id": alert_message.id,
-                                    }
+                                    await self.save_inactive_help_thread_data(
+                                        {
+                                            "thread_id": help_thread.id,
+                                            "last_active_ts": time.time(),
+                                            "alert_message_id": alert_message.id,
+                                        }
+                                    )
                         elif (
-                            help_thread.id in self.inactive_help_thread_data
+                            await self.inactive_help_thread_data_exists(help_thread.id)
                             and (
-                                alert_message_id := self.inactive_help_thread_data[
-                                    help_thread.id
-                                ].get("alert_message_id", None)
+                                alert_message_id := (
+                                    inactive_thread_data := await self.fetch_inactive_help_thread_data(
+                                        help_thread.id
+                                    )
+                                ).get("alert_message_id", None)
                             )
                         ) and (
                             (
@@ -825,9 +1003,15 @@ class HelpForumsPre(BaseCommandCog, name="helpforums-pre"):
                                     except discord.NotFound:
                                         pass
                                     finally:
-                                        del self.inactive_help_thread_data[
-                                            help_thread.id
-                                        ]["alert_message_id"]
+                                        await self.save_inactive_help_thread_data(
+                                            {
+                                                "thread_id": help_thread.id,
+                                                "last_active_ts": inactive_thread_data[
+                                                    "last_active_ts"
+                                                ],
+                                                # delete alert_message_id
+                                            }
+                                        )
                             except discord.NotFound:
                                 pass
 
@@ -900,7 +1084,7 @@ class HelpForumsPre(BaseCommandCog, name="helpforums-pre"):
 
                             if not (
                                 help_thread.name.endswith(
-                                    owner_id_suffix := f" | {help_thread.owner_id}"
+                                    owner_id_suffix := f"│{help_thread.owner_id}"
                                 )
                                 or str(help_thread.owner_id) in help_thread.name
                             ):  # wait for a few event loop iterations, before doing a second,
@@ -959,7 +1143,7 @@ class HelpForumsPre(BaseCommandCog, name="helpforums-pre"):
             (
                 INVALID_HELP_THREAD_TITLE_SCANNING_ENABLED[caution_type]
                 and INVALID_HELP_THREAD_TITLE_REGEX_PATTERNS[caution_type].search(
-                    thread.name.replace(f" | {thread.owner_id}", "")
+                    " ".join(thread.name.replace(f"│{thread.owner_id}", "").split())
                 )
                 is not None
                 for caution_type in INVALID_HELP_THREAD_TITLE_TYPES
@@ -976,7 +1160,7 @@ class HelpForumsPre(BaseCommandCog, name="helpforums-pre"):
                 for caution_type in INVALID_HELP_THREAD_TITLE_TYPES
                 if INVALID_HELP_THREAD_TITLE_SCANNING_ENABLED[caution_type]
                 and INVALID_HELP_THREAD_TITLE_REGEX_PATTERNS[caution_type].search(
-                    " ".join(thread.name.replace(f" | {thread.owner_id}", "").split())
+                    " ".join(thread.name.replace(f"│{thread.owner_id}", "").split())
                 )  # normalize whitespace
                 is not None
             )
@@ -1142,20 +1326,29 @@ class HelpForumsPre(BaseCommandCog, name="helpforums-pre"):
 
 @snakecore.commands.decorators.with_config_kwargs
 async def setup(bot: BotT, color: Union[int, discord.Color] = 0):
+    db_engine = bot.get_database()
+    if not isinstance(db_engine, AsyncEngine):
+        raise RuntimeError(
+            "Could not find primary database interface of type "
+            "'sqlalchemy.ext.asyncio.AsyncEngine'"
+        )
+    elif db_engine.name not in ("sqlite", "postgresql"):
+        raise RuntimeError(f"Unsupported database engine: {db_engine.name}")
+
     first_setup = False
     try:
-        extension_data = await bot.read_extension_data(__name__)
+        extension_data = await bot.read_extension_data(__package__)
     except LookupError:
         first_setup = True
         extension_data = dict(
             name=__name__,
             version=__version__,
             db_table_prefix=DB_TABLE_PREFIX,
-            initial_data=pickle.dumps(
-                {"bad_help_thread_data": {}, "inactive_help_thread_data": {}}
-            ),
+            initial_data=pickle.dumps({}),
         )
         await bot.create_extension_data(**extension_data)  # type: ignore
+        extension_data["data"] = extension_data["initial_data"]
+        del extension_data["initial_data"]
 
     extension_version = Version(__version__)
     stored_version = Version("0.0.0" if first_setup else str(extension_data["version"]))
@@ -1166,6 +1359,70 @@ async def setup(bot: BotT, color: Union[int, discord.Color] = 0):
         )
 
     elif stored_version < extension_version:
-        await bot.update_extension_data(__name__, version=__version__)  # type: ignore
+        conn: AsyncConnection
+        async with db_engine.begin() as conn:
+            for vi in MIGRATIONS[db_engine.name]:
+                if Version(vi) > stored_version:
+                    if isinstance(MIGRATIONS[db_engine.name][vi], tuple):
+                        for stmt in MIGRATIONS[db_engine.name][vi]:
+                            await conn.execute(text(stmt))
+                    else:
+                        await conn.execute(text(MIGRATIONS[db_engine.name][vi]))
 
-    await bot.add_cog(HelpForumsPre(bot, theme_color=int(color)))
+        extension_data["version"] = __version__
+        await bot.update_extension_data(**(extension_data | dict(data=pickle.dumps({}))))  # type: ignore
+
+    if bool(extension_data["data"]) and (old_helpforums_data := pickle.loads(extension_data["data"])):  # type: ignore
+        # transfer
+        target_columns = (
+            "thread_id",
+            "last_cautioned_ts",
+            "caution_message_ids",
+        )
+        target_update_set_columns = ", ".join((f"{k} = :{k}" for k in target_columns))
+
+        conn: AsyncConnection
+        async with db_engine.begin() as conn:
+            await conn.execute(
+                text(
+                    "INSERT INTO "
+                    f"'{DB_TABLE_PREFIX}bad_help_thread_data' AS bad_help_thread_data "
+                    f"({', '.join(target_columns)}) "
+                    f"VALUES ({', '.join(':'+colname for colname in target_columns)}) "
+                    f"ON CONFLICT DO UPDATE SET {target_update_set_columns} "
+                    "WHERE bad_help_thread_data.thread_id == :thread_id"
+                ),
+                [
+                    data
+                    | dict(caution_message_ids=pickle.dumps(data["alert_message_ids"]))
+                    for data in old_helpforums_data["bad_help_thread_data"].values()
+                ],
+            )
+
+        target_columns = (
+            "thread_id",
+            "last_active_ts",
+            "alert_message_id",
+        )
+        target_update_set_columns = ", ".join((f"{k} = :{k}" for k in target_columns))
+
+        conn: AsyncConnection
+        async with db_engine.begin() as conn:
+            await conn.execute(
+                text(
+                    "INSERT INTO "
+                    f"'{DB_TABLE_PREFIX}inactive_help_thread_data' AS inactive_help_thread_data "
+                    f"({', '.join(target_columns)}) "
+                    f"VALUES ({', '.join(':'+colname for colname in target_columns)}) "
+                    f"ON CONFLICT DO UPDATE SET {target_update_set_columns} "
+                    "WHERE inactive_help_thread_data.thread_id == :thread_id "
+                ),
+                [
+                    data | dict(alert_message_id=data.get("alert_message_id", None))
+                    for data in old_helpforums_data[
+                        "inactive_help_thread_data"
+                    ].values()
+                ],
+            )
+
+    await bot.add_cog(HelpForumsPre(bot, db_engine, theme_color=int(color)))
