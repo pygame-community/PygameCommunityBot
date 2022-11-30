@@ -75,7 +75,7 @@ class BotManagement(BaseCommandCog, name="bot-management"):
         invocation_log_channel_id: Optional[int] = None,
     ) -> None:
         super().__init__(bot, theme_color)
-        self.bot: BotT = bot
+        self.bot: BotT
         self.dummy_handler = DummyHandler()  # helper handler for queuing filters
         self.short_log_record_filter = QueuingFilter(maxlen=200)
         self.log_record_error_filter = QueuingFilter(

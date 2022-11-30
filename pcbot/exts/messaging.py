@@ -967,7 +967,7 @@ class Messaging(BaseCommandCog, name="messaging"):
         **`[content: yes|no]`**
         > A flag for whether to extract message content, in the form of an embed containing a code block.
         > Defaults to 'yes'.
-        
+
         **`[content_attachment: yes|no]`**
         > A flag for whether to extract message content, in the form of a text attachment.
         > This flag overrides the `content:` flag if set to 'yes'.
@@ -976,16 +976,16 @@ class Messaging(BaseCommandCog, name="messaging"):
         **`[attachments: yes|no]`**
         > A flag for whether to extract message attachments.
         > Defaults to 'yes'.
-        
+
         **`[embeds: yes|no]`**
         > A flag for whether to extract message embeds as JSON files.
         > Defaults to 'yes'.
-        
+
         **`[info: yes|no]`**
         > A flag for whether to send an informational embed containing details about a message.
         > If set to 'no', this flag will supress the `author_info:` flag.
         > Defaults to 'no'.
-        
+
         **`[author_info: yes|no]`**
         > A flag for whether to send an informational embed containing details about a message author.
         > Defaults to 'yes'.
@@ -1200,23 +1200,23 @@ class Messaging(BaseCommandCog, name="messaging"):
         **`[attachments: yes|no]`**
         > A flag for whether to incude message attachments in the cloned messages.
         > Defaults to 'yes'.
-        
+
         **`[embeds: yes|no]`**
         > A flag for whether to include message embeds in the cloned messages.
         > Defaults to 'yes'.
-        
+
         **`[info: yes|no]`**
         > A flag for whether to send an informational embed containing details about a message.
         > If set to 'no', this flag will supress the `author_info:` flag.
         > Defaults to 'no'.
-        
+
         **`[author_info: yes|no]`**
         > A flag for whether to send an informational embed containing details about a message author.
         > Defaults to 'yes'.
 
         **`[skip_empty: yes|no]`**
         > A flag for whether to automatically ignore messages without content, embeds or attachments.
-        > Defaults to 'yes'.        
+        > Defaults to 'yes'.
         """
         assert (
             ctx.guild
@@ -1292,7 +1292,9 @@ class Messaging(BaseCommandCog, name="messaging"):
                         for a in msg.attachments
                     ]
             for destination in destinations:
-                if (content or embeds or attachments) and (msg.content or msg.embeds or attached_files):
+                if (content or embeds or attachments) and (
+                    msg.content or msg.embeds or attached_files
+                ):
                     if len(msg.content) > 2000:
                         start_idx = 0
                         stop_idx = 0
@@ -1336,7 +1338,9 @@ class Messaging(BaseCommandCog, name="messaging"):
                             allowed_mentions=no_mentions,
                         )
 
-                elif not (msg.content or msg.embeds or attached_files) and not skip_empty:
+                elif (
+                    not (msg.content or msg.embeds or attached_files) and not skip_empty
+                ):
                     raise commands.CommandInvokeError(
                         commands.CommandError("Cannot clone an empty message")
                     )
@@ -1821,11 +1825,11 @@ class Messaging(BaseCommandCog, name="messaging"):
 
         **`<messages>...`**
         > The messages to pin.
-        
+
         **`[delete_system_message: yes|no]`**
         > A flag for whether any system messages about pinning should be automatically deleted.
         > Defaults to 'no'.
-        
+
         **`[unpin_last: yes|no]`**
         > Whether to unpin the least recently pinned message(s) if the maximum pin limit of 50 is being approached.
         > Defaults to 'no'.
@@ -1970,15 +1974,15 @@ class Messaging(BaseCommandCog, name="messaging"):
 
         **`<messages>...`**
         > The messages to pin.
-        
+
         **`[channel: TextChannel/Thread]`**
         > A flag for the channel the messages are contained in.
         > Defaults to the invocation channel.
-        
+
         **`[delete_system_message: yes|no]`**
         > A flag for whether any system messages about pinning should be automatically deleted.
         > Defaults to 'no'.
-        
+
         **`[unpin_last: yes|no]`**
         > Whether to unpin the least recently pinned message(s) if the maximum pin limit of 50 is being approached.
         > Defaults to 'no'.
@@ -2008,7 +2012,7 @@ class Messaging(BaseCommandCog, name="messaging"):
         _channel: Optional[MessageableGuildChannel] = None,
     ):
         """Unpin the specified messages.
-        
+
         __**Parameters:**__
 
         **`<messages>...`**
@@ -2130,7 +2134,7 @@ class Messaging(BaseCommandCog, name="messaging"):
         *messages: discord.PartialMessage,
     ):
         """Unpin the specified messages in the specified channel.
-        
+
         __**Parameters:**__
 
         **`<messages>...`**
