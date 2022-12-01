@@ -1,0 +1,5 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Pygame Community Discord Server
+    url: https://discord.gg/pygame
+    about: Check out our Discord server!
