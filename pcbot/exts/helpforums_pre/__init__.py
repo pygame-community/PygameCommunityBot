@@ -1219,7 +1219,10 @@ class HelpForumsPre(BaseCommandCog, name="helpforums-pre"):
                     "it (desktop/web) or click and hold on it (mobile), then click "
                     "on **'Edit Tags'** to see a tag selection menu. Remember to save "
                     "your changes after selecting the correct tag(s).\n\n"
-                    "Thank you for helping us maintain clean help forum channels "
+                    "*Why is there no aspect tag for Python?*\n> "
+                    f"We recommend using <#{HELP_FORUM_CHANNEL_IDS['python']}> for "
+                    "Python-focused questions instead.\n\n"
+                    "**Thank you for helping us maintain clean help forum channels** "
                     "<:pg_robot:837389387024957440>\n\n"
                     "This alert should disappear after you have made appropriate changes."
                 ),
