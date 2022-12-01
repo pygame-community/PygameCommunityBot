@@ -13,7 +13,7 @@ import discord
 from discord.ext import commands
 import snakecore
 from snakecore.commands.decorators import flagconverter_kwargs
-from snakecore.commands.converters import String
+from snakecore.commands.converters import String, StringExpr, UnicodeEmoji, Parens
 
 from .base import BaseCommandCog
 
@@ -106,7 +106,7 @@ class PollsPre(BaseCommandCog, name="polls-pre"):
         self,
         ctx: commands.Context[BotT],
         description: str,
-        *emojis: tuple[discord.PartialEmoji, str],
+        *emojis: tuple[Union[str, discord.PartialEmoji], str],
         multiple_votes: bool = True,
         _destination: Optional[
             Union[discord.TextChannel, discord.VoiceChannel, discord.Thread]
@@ -332,7 +332,7 @@ class PollsPre(BaseCommandCog, name="polls-pre"):
 
     @commands.group(
         invoke_without_command=True,
-        usage="<description> <<option: Emoji Text>... [multiple_votes: yes|no]>",
+        usage="<description> <option: Emoji Text>... [multiple_votes: yes|no]",
     )
     @flagconverter_kwargs()
     async def poll(
@@ -340,7 +340,7 @@ class PollsPre(BaseCommandCog, name="polls-pre"):
         ctx: commands.Context[BotT],
         description: String,
         *,
-        option: list[tuple[discord.PartialEmoji, String]],
+        option: list[tuple[Union[UnicodeEmoji, discord.PartialEmoji], String]],
         multiple_votes: bool = True,
     ):
         """Create a poll, powered by Discord message embeds and reactions.
@@ -396,24 +396,67 @@ class PollsPre(BaseCommandCog, name="polls-pre"):
 
         return await self.poll_close_func(ctx, message)
 
-    @commands.group(invoke_without_command=True)
+    @commands.group(
+        invoke_without_command=True,
+        usage="<description> <option: Emoji Text>... [destination: Channel] "
+        "[multiple_votes: yes|no] [author: Text] [color: Color] [url: URL] "
+        "[image_url: URL] [thumbnail: URL]",
+    )
     @flagconverter_kwargs()
     async def richpoll(
         self,
         ctx: commands.Context[BotT],
         description: String,
         *,
-        option: list[tuple[discord.PartialEmoji, String]],
+        option: list[tuple[Union[UnicodeEmoji, discord.PartialEmoji], String]],
         destination: Optional[
             Union[discord.TextChannel, discord.VoiceChannel, discord.Thread]
         ] = None,
         author: Optional[String] = None,
         color: Optional[discord.Color] = None,
-        url: Optional[String] = None,
-        image_url: Optional[String] = None,
+        url: Optional[StringExpr[snakecore.utils.regex_patterns.HTTP_URL]] = None,
+        image_url: Optional[StringExpr[snakecore.utils.regex_patterns.HTTP_URL]] = None,
         thumbnail: Optional[String] = None,
         multiple_votes: bool = True,
     ):
+        """Create a poll, powered by Discord message embeds and reactions.
+
+        __**Parameters:**__
+
+        **`<description>`**
+        > A description of the poll.
+
+        **`<option: Emoji Text>...`**
+        > A flag representing a poll option as an emoji, followed by description text.
+        > Can be specified up to 20 times.
+
+        **`[multiple_votes: yes|no]`**
+        > A flag for setting whether voting for multiple options should be allowed.
+        > Defaults to 'yes' if omitted.
+
+        **`[author: Text]`**
+        > A flag for setting the text of the poll embed author field.
+
+        **`[color: Color]`**
+        > A flag for setting the color of the poll embed.
+
+        **`[url: URL]`**
+        > A flag for setting the URL of the poll embed.
+
+        **`[thumbnail: URL]`**
+        > A flag for setting the URL of the poll embed thumbnail.
+
+        **`[image_url: URL]`**
+        > A flag for setting the URL of the poll embed image.
+
+
+        __**Examples:**__
+
+        poll "Which apple is better?"
+        option: 🍎 "Red apple"
+        option: 🍏 "Green apple"
+        url: https://www.youtube.com/watch?v=dQw4w9WgXcQ
+        """
         if not isinstance(
             destination, (discord.TextChannel, discord.VoiceChannel, discord.Thread)
         ):
@@ -457,7 +500,7 @@ class PollsPre(BaseCommandCog, name="polls-pre"):
 
     @richpoll.command(
         name="close",
-        usage="<message> [[color: Color]]",
+        usage="<message> [color: Color]",
         extras=dict(inject_reference_as_first_argument=True),
     )
     async def richpoll_close(

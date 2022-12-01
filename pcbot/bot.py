@@ -405,7 +405,9 @@ class PygameCommunityBot(snakecore.commands.Bot):
                 isinstance(exception, commands.BadFlagArgument)
                 and exception.original.args
             ):
-                description = exception.original.args[0]
+                description = (
+                    f"\n> Flag '{exception.flag.name}': {exception.original.args[0]}"
+                )
             title = "Invalid argument(s)"
             description = (
                 (
