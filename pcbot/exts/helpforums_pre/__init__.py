@@ -910,9 +910,13 @@ class HelpForumsPre(BaseCommandCog, name="helpforums-pre"):
                         continue
                     last_active_ts = help_thread.created_at.timestamp()
 
-                    if not (help_thread.locked or help_thread.flags.pinned) and not any(
-                        tag.name.lower().startswith("solved")
-                        for tag in help_thread.applied_tags
+                    if not (
+                        help_thread.locked
+                        or help_thread.flags.pinned
+                        or any(
+                            tag.name.lower().startswith("solved")
+                            for tag in help_thread.applied_tags
+                        )
                     ):
                         last_active_ts = (
                             await self.fetch_last_thread_activity_dt(help_thread)
@@ -930,7 +934,7 @@ class HelpForumsPre(BaseCommandCog, name="helpforums-pre"):
                             )[
                                 "last_active_ts"
                             ] < last_active_ts:
-                                if (
+                                if not (
                                     help_thread.archived
                                     and help_thread.archiver_id
                                     and (
@@ -945,13 +949,6 @@ class HelpForumsPre(BaseCommandCog, name="helpforums-pre"):
                                         ).manage_threads
                                     )  # allow alert supression by help thread owner/OP or forum channel moderator
                                 ):
-                                    await self.save_inactive_help_thread_data(
-                                        {
-                                            "thread_id": help_thread.id,
-                                            "last_active_ts": time.time(),
-                                        }
-                                    )
-                                else:
                                     alert_message = await help_thread.send(
                                         f"help-post-inactive(<@{help_thread.owner_id}>, **{help_thread.name}**)",
                                         embed=discord.Embed(
@@ -972,7 +969,7 @@ class HelpForumsPre(BaseCommandCog, name="helpforums-pre"):
                                     await self.save_inactive_help_thread_data(
                                         {
                                             "thread_id": help_thread.id,
-                                            "last_active_ts": time.time(),
+                                            "last_active_ts": alert_message.created_at.timestamp(),
                                             "alert_message_id": alert_message.id,
                                         }
                                     )
@@ -991,7 +988,7 @@ class HelpForumsPre(BaseCommandCog, name="helpforums-pre"):
                                     alert_message_id
                                 )
                             ).created_at.timestamp()
-                            < last_active_ts  # someone messaged into the channel
+                            < last_active_ts  # someone messaged into the thread, prepare to delete alert message
                         ):
                             try:
                                 last_message = await self.fetch_last_thread_message(
@@ -1006,10 +1003,8 @@ class HelpForumsPre(BaseCommandCog, name="helpforums-pre"):
                                         await self.save_inactive_help_thread_data(
                                             {
                                                 "thread_id": help_thread.id,
-                                                "last_active_ts": inactive_thread_data[
-                                                    "last_active_ts"
-                                                ],
-                                                # delete alert_message_id
+                                                "last_active_ts": last_message.created_at.timestamp(),
+                                                # erase alert_message_id by omitting it
                                             }
                                         )
                             except discord.NotFound:
