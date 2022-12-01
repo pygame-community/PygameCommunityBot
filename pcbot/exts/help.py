@@ -111,7 +111,14 @@ class EmbedHelpCommand(commands.HelpCommand):
                     filtered = await self.filter_commands(cmds, sort=True)
                 if filtered:
                     value = "\u2002".join(
-                        f"`{self.get_command_signature(c)}`" for c in filtered
+                        "`"
+                        + (
+                            self.get_command_signature(c)
+                            if len((sig := self.get_command_signature(c))) < 16
+                            else c.qualified_name + " ..."
+                        )
+                        + "`"
+                        for c in filtered
                     )
                     if cog and cog.description:
                         value = f"{cog.description}\n\n**Commands**\n{value}"

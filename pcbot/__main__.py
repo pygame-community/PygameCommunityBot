@@ -525,8 +525,8 @@ async def delete_bot_extension_data(
 
                 await conn.execute(
                     text(
-                        "DELETE FROM bot_extension_data as bes "
-                        "WHERE bes.name == :extension"
+                        "DELETE FROM bot_extension_data as bed "
+                        "WHERE bed.name == :extension"
                     ),
                     dict(extension=row_dict["name"]),
                 )
@@ -560,8 +560,8 @@ async def delete_bot_extension_data(
 
                 await conn.execute(
                     text(
-                        "DELETE FROM bot_extension_data as bes "
-                        "WHERE bes.name == :extension"
+                        "DELETE FROM bot_extension_data as bed "
+                        "WHERE bed.name == :extension"
                     ),
                     dict(extension=row_dict["name"]),
                 )
