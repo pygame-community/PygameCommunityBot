@@ -25,7 +25,7 @@ from snakecore.constants import UNSET
 from snakecore.utils.pagination import EmbedPaginator
 
 from . import utils
-from ._types import _DatabaseDict, ExtensionData
+from ._types import DatabaseDict, ExtensionData
 
 _logger = logging.getLogger(__name__)
 
@@ -51,8 +51,8 @@ class PygameCommunityBot(snakecore.commands.Bot):
 
         self._cached_embed_paginators_maxsize = 1000
 
-        self._main_database: _DatabaseDict = {}  # type: ignore
-        self._databases: dict[str, _DatabaseDict] = {}
+        self._main_database: DatabaseDict = {}  # type: ignore
+        self._databases: dict[str, DatabaseDict] = {}
         self._extension_data_storage_is_init = False
 
         self.before_invoke(self.bot_before_invoke)
@@ -609,28 +609,7 @@ class PygameCommunityBot(snakecore.commands.Bot):
     async def _init_extension_data_storage(self):
         if not self._main_database:
             return
-
-        engine: AsyncEngine = self._main_database["engine"]
-        conn: AsyncConnection
-        async with engine.begin() as conn:
-            if engine.name == "sqlite":
-                await conn.execute(
-                    text(
-                        "CREATE TABLE IF NOT EXISTS "
-                        "bot_extension_data"
-                        "(name VARCHAR(1000), version VARCHAR(1000), db_table_prefix VARCHAR(1000), data BLOB)"
-                    )
-                )
-
-            elif engine.name == "postgresql":
-                await conn.execute(
-                    text(
-                        "CREATE TABLE IF NOT EXISTS "
-                        "bot_extension_data"
-                        "(name VARCHAR(1000), version VARCHAR(1000), db_table_prefix VARCHAR(1000), data BYTEA)"
-                    )
-                )
-
+        await utils.create_bot_extension_data_table(self._main_database)
         self._extension_data_storage_is_init = True
 
     async def _uninit_extension_data_storage(self):

@@ -7,12 +7,12 @@ from . import DB_TABLE_PREFIX
 
 MIGRATIONS = {
     "sqlite": {
-        # Map extension version strings to and SQL statement strings or tuples of SQL
+        # Map extension version strings to SQL statement strings or tuples of SQL
         # statement strings here. Make sure to prefix tables with DB_TABLE_PREFIX
         # (to avoid database table name collisions)
     },
     "postgresql": {
-        # Map extension version strings to and SQL statement strings or tuples of SQL
+        # Map extension version strings to SQL statement strings or tuples of SQL
         # statement strings here. Make sure to prefix tables with DB_TABLE_PREFIX
         # (to avoid database table name collisions)
     },
