@@ -177,8 +177,12 @@ class PGCActivity(BaseCommandCog, name="pgc-activity"):
         ):
             return
 
-        if member.pending:
-            await asyncio.sleep(60)  # wait a minute
+        for _ in range(1080):
+            if not member.pending:
+                break
+            await asyncio.sleep(20)
+            # wait for a maximum of six hours for members stuck on the membership/rules
+            # screening prompt
 
         greet = random.choice(BOT_WELCOME_MSG["greet"])
         check = random.choice(BOT_WELCOME_MSG["check"])
