@@ -92,7 +92,7 @@ class TextCommandManager(BaseCommandCog, name="text-command-manager"):
         if not (
             ctx.guild
             and isinstance(ctx.author, discord.Member)
-            and isinstance(ctx.channel, discord.abc.GuildChannel)
+            and isinstance(ctx.channel, (discord.abc.GuildChannel, discord.Thread))
             and ctx.command
         ):
             return False
