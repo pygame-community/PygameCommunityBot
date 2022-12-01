@@ -15,7 +15,7 @@ class _InputDatabaseDict(TypedDict):
     connect_args: NotRequired[dict[str, Any]]
 
 
-class _DatabaseDict(TypedDict):
+class DatabaseDict(TypedDict):
     name: str
     engine: AsyncEngine
     url: NotRequired[str]

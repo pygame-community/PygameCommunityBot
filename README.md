@@ -85,7 +85,7 @@ config = {
 ```
 
 ## CLI
-The CLI is used to launch the bot application, whilst also allowing for selective overriding of the `config` dictionary specified inside `config.py` or `localconfig.py` using command line options.
+The CLI is used to launch the bot application, whilst also allowing for selective overriding of the `config` dictionary specified inside `config.py` or `localconfig.py` using command line options. Subcommands like `extdata` allow for viewing the extensions which are currently occupying database storage, as well as deleting their data.
 
 ```
 Usage: python -m pcbot [OPTIONS] COMMAND [ARGS]...
@@ -137,5 +137,9 @@ Options:
   --log-level, --bot-log-level [NOTSET|DEBUG|INFO|WARNING|WARN|ERROR|FATAL|CRITICAL]
                                   The log level to use for the bot's default
                                   logging system.
+  -quiet                          Supress informational (non-error) output.
   -h, --help                      Show this message and exit.
+
+Commands:
+  extdata  Show info about all/specific bot extensions with data stored.
 ```

@@ -33,7 +33,7 @@ import sqlalchemy.exc
 import sqlalchemy.ext.asyncio
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncEngine, AsyncConnection
 
-from ._types import _DatabaseDict, _InputDatabaseDict
+from ._types import DatabaseDict, _InputDatabaseDict
 
 
 class DefaultFormatter(logging.Formatter):
@@ -290,7 +290,7 @@ async def load_databases(
     db_info_data: Sequence[_InputDatabaseDict],
     raise_exceptions: bool = True,
     logger: Optional[logging.Logger] = None,
-) -> list[_DatabaseDict]:
+) -> list[DatabaseDict]:
     dbs = []
 
     for db_info_dict in db_info_data:
@@ -339,7 +339,7 @@ async def load_databases(
 
 
 async def unload_databases(
-    dbs: Iterable[_DatabaseDict],
+    dbs: Iterable[DatabaseDict],
     raise_exceptions: bool = True,
     logger: Optional[logging.Logger] = None,
 ):
@@ -368,6 +368,31 @@ async def unload_databases(
                 logger.info(
                     f"Successfully disposed connection pool of engine '{engine.name}+{engine.driver}' of database '{db_name}'"
                 )
+
+
+async def create_bot_extension_data_table(db: DatabaseDict):
+    engine = db["engine"]
+    conn: AsyncConnection
+    async with engine.begin() as conn:
+        if engine.name == "sqlite":
+            await conn.execute(
+                sqlalchemy.text(
+                    "CREATE TABLE IF NOT EXISTS "
+                    "bot_extension_data"
+                    "(name VARCHAR(1000), version VARCHAR(1000), db_table_prefix VARCHAR(1000), data BLOB)"
+                )
+            )
+
+        elif engine.name == "postgresql":
+            await conn.execute(
+                sqlalchemy.text(
+                    "CREATE TABLE IF NOT EXISTS "
+                    "bot_extension_data"
+                    "(name VARCHAR(1000), version VARCHAR(1000), db_table_prefix VARCHAR(1000), data BYTEA)"
+                )
+            )
+        else:
+            raise RuntimeError(f"Unsupported database engine: {engine.name}")
 
 
 async def message_delete_reaction_listener(
