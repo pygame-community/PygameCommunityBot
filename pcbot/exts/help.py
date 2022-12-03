@@ -194,7 +194,11 @@ class EmbedHelpCommand(commands.HelpCommand):
             return
 
         start_embed_dict = {}
-        start_embed_dict["title"] = f"Help for `{group.qualified_name}`"
+        start_embed_dict["title"] = f"Help for `{group.qualified_name}`" + (
+            " (a.k.a. " + ", ".join(f"`{alias}`" for alias in group.aliases) + " )"
+            if group.aliases
+            else ""
+        )
         start_embed_dict["color"] = int(self.theme_color)
         if isinstance(group.cog, commands.Cog):
             start_embed_dict["author"] = dict(name=f"{group.cog.qualified_name}")
