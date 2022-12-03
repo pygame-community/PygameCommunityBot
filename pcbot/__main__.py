@@ -6,18 +6,16 @@ This file represents the main entry point into the bot application.
 """
 import asyncio
 import contextlib
-import copy
 from importlib.util import resolve_name
 import logging
 import logging.handlers
 from math import log10
 import os
-from typing import Any, Optional, Union
+from typing import Any, Optional
 
 import click
 import discord
 from discord.ext import commands
-from discord.utils import _ColourFormatter
 import snakecore
 from sqlalchemy import text
 from sqlalchemy.engine.result import Result
@@ -347,14 +345,19 @@ async def print_bot_extension_info(
     engine = db["engine"]
     info: list[dict[str, str]] = []
     max_name_width = 4
-    max_version_width = 7
+    max_last_session_version_width = 20
+    max_revision_number_width = 15
+    max_auto_migrate_width = 12
     max_db_table_prefix_width = 15
+
+    conn: AsyncConnection
     async with engine.connect() as conn:
         if extensions:
             for ext_name in sorted(set(extensions)):
                 result: Result = await conn.execute(
                     text(
-                        "SELECT name, version, db_table_prefix FROM bot_extension_data "
+                        "SELECT name, last_session_version, revision_number, "
+                        "auto_migrate, db_table_prefix FROM bot_extension_data "
                         "WHERE name == :name"
                     ),
                     dict(name=ext_name),
@@ -363,26 +366,42 @@ async def print_bot_extension_info(
                 row = result.one_or_none()
                 if not row:
                     click.secho(
-                        f"No extension data could be found for an extension named '{ext_name}'",
+                        "No extension data could be found for an extension named "
+                        f"'{ext_name}'",
                         fg="red",
                     )
                     raise click.Abort()
 
                 row_dict = dict(row)
                 max_name_width = max(max_name_width, len(row_dict["name"]))
-                max_version_width = max(max_version_width, len(row_dict["version"]))
+                max_last_session_version_width = max(
+                    max_last_session_version_width,
+                    len(row_dict["last_session_version"]),
+                )
+                max_revision_number_width = max(
+                    max_revision_number_width, len(str(row_dict["revision_number"]))
+                )
                 max_db_table_prefix_width = max(
                     max_db_table_prefix_width, len(row_dict["db_table_prefix"])
                 )
                 info.append(row_dict)
         else:
             result: Result = await conn.execute(
-                text("SELECT name, version, db_table_prefix FROM bot_extension_data"),
+                text(
+                    "SELECT name, last_session_version, revision_number, "
+                    "auto_migrate, db_table_prefix FROM bot_extension_data"
+                ),
             )
             for row in result.all():
                 row_dict = dict(row)
                 max_name_width = max(max_name_width, len(row_dict["name"]))
-                max_version_width = max(max_version_width, len(row_dict["version"]))
+                max_last_session_version_width = max(
+                    max_last_session_version_width,
+                    len(row_dict["last_session_version"]),
+                )
+                max_revision_number_width = max(
+                    max_revision_number_width, len(str(row_dict["revision_number"]))
+                )
                 max_db_table_prefix_width = max(
                     max_db_table_prefix_width, len(row_dict["db_table_prefix"])
                 )
@@ -397,14 +416,31 @@ async def print_bot_extension_info(
 
     click.echo(
         " "
-        + "_" * (max_name_width + max_version_width + max_db_table_prefix_width + 8)
+        + "_"
+        * (
+            max_name_width
+            + 3
+            + max_last_session_version_width
+            + 3
+            + max_revision_number_width
+            + 3
+            + max_auto_migrate_width
+            + 3
+            + max_db_table_prefix_width
+            + 3
+            - 1
+        )
         + " "
     )
     click.echo(
         "|"
         + f"{'Name': ^{max_name_width+2}}"
         + "|"
-        + f"{'Version': ^{max_version_width+2}}"
+        + f"{'Last Session Version': ^{max_last_session_version_width+2}}"
+        + "|"
+        + f"{'Revision Number': ^{max_revision_number_width+2}}"
+        + "|"
+        + f"{'Auto Migrate': ^{max_auto_migrate_width+2}}"
         + "|"
         + f"{'DB Table Prefix': ^{max_db_table_prefix_width+2}}"
         + "|"
@@ -413,7 +449,11 @@ async def print_bot_extension_info(
         "|"
         + "_" * (max_name_width + 2)
         + "|"
-        + "_" * (max_version_width + 2)
+        + "_" * (max_last_session_version_width + 2)
+        + "|"
+        + "_" * (max_revision_number_width + 2)
+        + "|"
+        + "_" * (max_auto_migrate_width + 2)
         + "|"
         + "_" * (max_db_table_prefix_width + 2)
         + "|"
@@ -422,7 +462,9 @@ async def print_bot_extension_info(
     for row_dict in info:
         click.echo(
             f"| {row_dict['name']: <{max_name_width+1}}"
-            f"| {row_dict['version']: <{max_version_width+1}}"
+            f"| {row_dict['last_session_version']: <{max_last_session_version_width+1}}"
+            f"| {row_dict['revision_number']: <{max_revision_number_width+1}}"
+            f"| {str(bool(row_dict['auto_migrate'])): <{max_auto_migrate_width+1}}"
             f"| {row_dict['db_table_prefix']: <{max_db_table_prefix_width+1}}|"
         )
 
@@ -430,7 +472,11 @@ async def print_bot_extension_info(
         "|"
         + "_" * (max_name_width + 2)
         + "|"
-        + "_" * (max_version_width + 2)
+        + "_" * (max_last_session_version_width + 2)
+        + "|"
+        + "_" * (max_revision_number_width + 2)
+        + "|"
+        + "_" * (max_auto_migrate_width + 2)
         + "|"
         + "_" * (max_db_table_prefix_width + 2)
         + "|"
@@ -446,12 +492,14 @@ async def delete_bot_extension_data(
     engine = db["engine"]
     extname_row_map: dict[str, dict[str, str]] = {}
 
+    conn: AsyncConnection
     async with engine.connect() as conn:
         if extensions:
             for ext_name in sorted(set(extensions)):
                 result: Result = await conn.execute(
                     text(
-                        "SELECT name, version, db_table_prefix FROM bot_extension_data "
+                        "SELECT name, last_session_version, revision_number, "
+                        "auto_migrate, db_table_prefix FROM bot_extension_data "
                         "WHERE name == :name"
                     ),
                     dict(name=ext_name),
@@ -460,7 +508,8 @@ async def delete_bot_extension_data(
                 row = result.one_or_none()
                 if not row:
                     click.secho(
-                        f"No extension data could be found for an extension named '{ext_name}'",
+                        "No extension data could be found for an extension named "
+                        f"'{ext_name}'",
                         fg="red",
                     )
                     raise click.Abort()
@@ -469,7 +518,10 @@ async def delete_bot_extension_data(
                 extname_row_map[ext_name] = row_dict
         else:
             result: Result = await conn.execute(
-                text("SELECT name, version, db_table_prefix FROM bot_extension_data"),
+                text(
+                    "SELECT name, last_session_version, revision_number, "
+                    "auto_migrate, db_table_prefix FROM bot_extension_data"
+                ),
             )
             for row in result.all():
                 row_dict = dict(row)
@@ -485,12 +537,15 @@ async def delete_bot_extension_data(
         )
 
     deletions = 0
+    conn: AsyncConnection
     async with engine.begin() as conn:
         for row_dict in extname_row_map.values():
             click.echo(
                 "Preparing to delete extension data for extension:\n"
-                f"  - Name:            {row_dict['name']}\n"
-                f"  - Version:         {row_dict['version']}\n"
+                f"  - Name:                 {row_dict['name']}\n"
+                f"  - Last Session Version: {row_dict['last_session_version']}\n"
+                f"  - Revision Number: {row_dict['revision_number']}\n"
+                f"  - Auto Migrate: {bool(row_dict['auto_migrate'])}\n"
                 f"  - DB Table Prefix: '{row_dict['db_table_prefix']}'"
             )
             if not yes:

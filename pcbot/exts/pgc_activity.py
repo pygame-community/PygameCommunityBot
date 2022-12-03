@@ -13,7 +13,7 @@ import snakecore
 from snakecore.commands.decorators import flagconverter_kwargs
 from snakecore.commands.converters import CodeBlock, String, Parens
 
-from .base import BaseCommandCog
+from .bases import ExtSpecCog
 
 BotT = Union[snakecore.commands.Bot, snakecore.commands.AutoShardedBot]
 MessageableGuildChannel = Union[
@@ -100,7 +100,7 @@ BOT_WELCOME_MSG = {
 }
 
 
-class PGCActivity(BaseCommandCog, name="pgc-activity"):
+class PGCActivity(ExtSpecCog, name="pgc-activity"):
     def __init__(self, bot: BotT, theme_color: Union[int, discord.Color] = 0) -> None:
         super().__init__(bot, theme_color)
 

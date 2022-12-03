@@ -82,14 +82,14 @@ import discord
 from discord.ext import commands
 import snakecore
 
-from .base import BaseCommandCog
+from .bases import ExtSpecCog
 
 BotT = Union[snakecore.commands.Bot, snakecore.commands.AutoShardedBot]
 
 DOC_EMBED_LIMIT = 3
 
 
-class DocsPre(BaseCommandCog, name="docs-pre"):
+class DocsPre(ExtSpecCog, name="docs-pre"):
     async def put_main_doc(self, ctx: commands.Context[BotT], name: str):
         """
         Put main part of the doc into embed(s)

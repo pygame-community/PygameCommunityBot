@@ -26,16 +26,12 @@ from sqlalchemy import text
 
 from ... import __version__
 from ...bot import PygameCommunityBot
-from ..base import BaseCommandCog
+from ..bases import ExtSpec, ExtSpecCog
 from .constants import DB_TABLE_PREFIX, ZERO_UUID, UUID_PATTERN
 from ._types import GuildTextCommandState
-from .migrations import MIGRATIONS
+from .migrations import REVISIONS, ROLLBACKS
 
 BotT = PygameCommunityBot
-
-if TYPE_CHECKING:
-    Parens = tuple
-
 
 ChannelOrRoleOverrides = list[
     tuple[
@@ -69,15 +65,22 @@ class TCMDCantRunReason(enum.Enum):
     MISSING_CHANNEL_PERMISSIONS = enum.auto()
 
 
-class TextCommandManager(BaseCommandCog, name="text-command-manager"):
+class TextCommandManagerCog(ExtSpecCog, name="text-command-manager"):
     """A text command manager to meet all your text
     command management needs, from enabling/disabling commands
     and/or their subcommands to setting channel or role-specific permissions
     and applying mock roles for testing."""
 
-    def __init__(self, bot: BotT, db_engine: AsyncEngine, theme_color: int = 0) -> None:
+    def __init__(
+        self,
+        bot: BotT,
+        db_engine: AsyncEngine,
+        revision_number: int,
+        theme_color: int = 0,
+    ) -> None:
         super().__init__(bot)
         self.db_engine = db_engine
+        self.revisiob_number = revision_number
         self.cached_guild_tcmd_state_maps: OrderedDict[
             int, dict[str, GuildTextCommandState]
         ] = OrderedDict()
@@ -166,7 +169,7 @@ class TextCommandManager(BaseCommandCog, name="text-command-manager"):
                         ),
                         dict(guild_id=guild_id),
                     )
-                ).first()[0]
+                ).scalar()
             )
 
     async def tcmd_cannot_run_reason(
@@ -632,7 +635,8 @@ class TextCommandManager(BaseCommandCog, name="text-command-manager"):
         **`[roles (Role)...]`**
         > A role or sequence of roles to apply as mock roles.
         > If omitted, an embed of currently set mock roles will be sent.
-        > 'everyone' can be speficied to refer to the default @everyone role (hidden guild ID role that applies to every server member).
+        > 'everyone' can be speficied to refer to the default @everyone role
+        (hidden guild ID role that applies to every server member).
         """
         assert ctx.guild and isinstance(ctx.author, discord.Member)
 
@@ -1430,45 +1434,32 @@ class TextCommandManager(BaseCommandCog, name="text-command-manager"):
             )
 
 
+ext_spec = ExtSpec(
+    __name__,
+    REVISIONS,
+    ROLLBACKS,
+    True,  # Always set to True until CLI supports manual migration
+    DB_TABLE_PREFIX,
+)
+
+# both will be needed for the CLI
+migrate = ext_spec.migrate
+rollback = ext_spec.rollback
+
+
 @snakecore.commands.decorators.with_config_kwargs
-async def setup(bot: BotT, color: Union[int, discord.Color] = 0):
-    db_engine = bot.get_database()
-    if not isinstance(db_engine, AsyncEngine):
-        raise RuntimeError(
-            "Could not find primary database interface of type "
-            "'sqlalchemy.ext.asyncio.AsyncEngine'"
+async def setup(
+    bot: BotT,
+    color: Union[int, discord.Color] = 0
+    # add more optional parameters as desired
+):
+    await ext_spec.prepare_setup(bot)
+    extension_data = await bot.read_extension_data(ext_spec.name)
+    await bot.add_cog(
+        TextCommandManagerCog(
+            bot,
+            bot.get_database(),  # type: ignore
+            extension_data["revision_number"],
+            theme_color=int(color),
         )
-    elif db_engine.name not in ("sqlite", "postgresql"):
-        raise RuntimeError(f"Unsupported database engine: {db_engine.name}")
-
-    first_setup = False
-    try:
-        extension_data = await bot.read_extension_data(__package__)
-    except LookupError:
-        first_setup = True
-        extension_data = dict(name=__name__, db_table_prefix=DB_TABLE_PREFIX)
-        await bot.create_extension_data(**extension_data, version=__version__)
-
-    extension_version = Version(__version__)
-    stored_version = Version("0.0.0" if first_setup else str(extension_data["version"]))
-    if stored_version > extension_version:
-        raise RuntimeError(
-            f'Extension data is incompatible: Stored data version "{stored_version}"'
-            f' exceeds extension version "{extension_version}"'
-        )
-
-    elif stored_version < extension_version:
-        conn: AsyncConnection
-        async with db_engine.begin() as conn:
-            for vi in MIGRATIONS[db_engine.name]:
-                if Version(vi) > stored_version:
-                    if isinstance(MIGRATIONS[db_engine.name][vi], tuple):
-                        for stmt in MIGRATIONS[db_engine.name][vi]:
-                            await conn.execute(text(stmt))
-                    else:
-                        await conn.execute(text(MIGRATIONS[db_engine.name][vi]))
-
-        extension_data["version"] = __version__
-        await bot.update_extension_data(**extension_data)
-
-    await bot.add_cog(TextCommandManager(bot, db_engine, theme_color=int(color)))
+    )

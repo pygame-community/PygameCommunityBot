@@ -21,7 +21,7 @@ from sqlalchemy import text
 from sqlalchemy.engine import Result
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncConnection
 
-from .migrations import MIGRATIONS
+from .migrations import REVISIONS, ROLLBACKS
 
 from .constants import (
     DB_TABLE_PREFIX,
@@ -31,11 +31,11 @@ from .constants import (
 )
 
 from ... import __version__
-from ..base import BaseCommandCog
+from ..bases import ExtSpec, ExtSpecCog
 from ...bot import PygameCommunityBot
 
 if TYPE_CHECKING:
-    from typing_extensions import NotRequired
+    from typing_extensions import NotRequired  # type: ignore
 
 BotT = PygameCommunityBot
 
@@ -181,16 +181,18 @@ INVALID_HELP_THREAD_TITLE_EMBEDS = {
 }
 
 
-class HelpForumsPre(BaseCommandCog, name="helpforums-pre"):
+class HelpForumsPreCog(ExtSpecCog, name="helpforums-pre"):
     def __init__(
         self,
         bot: BotT,
         db_engine: AsyncEngine,
+        revision_number: int,
         theme_color: Union[int, discord.Color] = 0,
     ) -> None:
         super().__init__(bot, theme_color=theme_color)
         self.bot: BotT
         self.db_engine = db_engine
+        self.revision_number = revision_number
 
     async def cog_unload(self) -> None:
         self.inactive_help_thread_alert.stop()
@@ -228,7 +230,7 @@ class HelpForumsPre(BaseCommandCog, name="helpforums-pre"):
                         ),
                         dict(thread_id=thread_id),
                     )
-                ).first()[0]
+                ).scalar()
             )
 
     async def fetch_bad_help_thread_data(self, thread_id: int) -> BadHelpThreadData:
@@ -303,7 +305,7 @@ class HelpForumsPre(BaseCommandCog, name="helpforums-pre"):
                         ),
                         dict(thread_id=thread_id),
                     )
-                ).first()[0]
+                ).scalar()
             )
 
     async def fetch_inactive_help_thread_data(
@@ -1329,49 +1331,32 @@ class HelpForumsPre(BaseCommandCog, name="helpforums-pre"):
         return last_message
 
 
+ext_spec = ExtSpec(
+    __name__,
+    REVISIONS,
+    ROLLBACKS,
+    True,  # Always set to True until CLI supports manual migration
+    DB_TABLE_PREFIX,
+)
+
+# both will be needed for the CLI
+migrate = ext_spec.migrate
+rollback = ext_spec.rollback
+
+
 @snakecore.commands.decorators.with_config_kwargs
-async def setup(bot: BotT, color: Union[int, discord.Color] = 0):
-    db_engine = bot.get_database()
-    if not isinstance(db_engine, AsyncEngine):
-        raise RuntimeError(
-            "Could not find primary database interface of type "
-            "'sqlalchemy.ext.asyncio.AsyncEngine'"
+async def setup(
+    bot: BotT,
+    color: Union[int, discord.Color] = 0
+    # add more optional parameters as desired
+):
+    await ext_spec.prepare_setup(bot)
+    extension_data = await bot.read_extension_data(ext_spec.name)
+    await bot.add_cog(
+        HelpForumsPreCog(
+            bot,
+            bot.get_database(),  # type: ignore
+            extension_data["revision_number"],
+            theme_color=int(color),
         )
-    elif db_engine.name not in ("sqlite", "postgresql"):
-        raise RuntimeError(f"Unsupported database engine: {db_engine.name}")
-
-    first_setup = False
-    try:
-        extension_data = await bot.read_extension_data(__package__)
-    except LookupError:
-        first_setup = True
-        extension_data = dict(
-            name=__name__,
-            version=__version__,
-            db_table_prefix=DB_TABLE_PREFIX,
-        )
-        await bot.create_extension_data(**extension_data)
-
-    extension_version = Version(__version__)
-    stored_version = Version("0.0.0" if first_setup else str(extension_data["version"]))
-    if stored_version > extension_version:
-        raise RuntimeError(
-            f'Extension data is incompatible: Stored data version "{stored_version}"'
-            f' exceeds extension version "{extension_version}"'
-        )
-
-    elif stored_version < extension_version:
-        conn: AsyncConnection
-        async with db_engine.begin() as conn:
-            for vi in MIGRATIONS[db_engine.name]:
-                if Version(vi) > stored_version:
-                    if isinstance(MIGRATIONS[db_engine.name][vi], tuple):
-                        for stmt in MIGRATIONS[db_engine.name][vi]:
-                            await conn.execute(text(stmt))
-                    else:
-                        await conn.execute(text(MIGRATIONS[db_engine.name][vi]))
-
-        extension_data["version"] = __version__
-        await bot.update_extension_data(**extension_data)  # type: ignore
-
-    await bot.add_cog(HelpForumsPre(bot, db_engine, theme_color=int(color)))
+    )

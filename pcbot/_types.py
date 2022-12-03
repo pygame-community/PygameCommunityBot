@@ -3,10 +3,13 @@ This project has been licensed under the MIT license.
 Copyright (c) 2022-present pygame-community.
 """
 
-from typing import Any, Optional, TypedDict
-from typing_extensions import NotRequired
+from __future__ import annotations
 
+from typing import TYPE_CHECKING, Any, Optional, TypedDict
 from sqlalchemy.ext.asyncio import AsyncEngine
+
+if TYPE_CHECKING:
+    from typing_extensions import NotRequired  # type: ignore
 
 
 class _InputDatabaseDict(TypedDict):
@@ -24,6 +27,8 @@ class DatabaseDict(TypedDict):
 
 class ExtensionData(TypedDict):
     name: str
-    version: str
+    last_session_version: str
+    revision_number: int
+    auto_migrate: bool
     db_table_prefix: str
     data: Optional[bytes]
