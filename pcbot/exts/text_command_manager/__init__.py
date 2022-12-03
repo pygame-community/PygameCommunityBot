@@ -26,7 +26,7 @@ from sqlalchemy import text
 
 from ... import __version__
 from ...bot import PygameCommunityBot
-from ..bases import ExtSpec, ExtSpecCog
+from ..bases import ExtSpec, BaseExtCog
 from .constants import DB_TABLE_PREFIX, ZERO_UUID, UUID_PATTERN
 from ._types import GuildTextCommandState
 from .migrations import REVISIONS, ROLLBACKS
@@ -65,7 +65,7 @@ class TCMDCantRunReason(enum.Enum):
     MISSING_CHANNEL_PERMISSIONS = enum.auto()
 
 
-class TextCommandManagerCog(ExtSpecCog, name="text-command-manager"):
+class TextCommandManagerCog(BaseExtCog, name="text-command-manager"):
     """A text command manager to meet all your text
     command management needs, from enabling/disabling commands
     and/or their subcommands to setting channel or role-specific permissions

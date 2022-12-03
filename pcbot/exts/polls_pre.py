@@ -15,7 +15,7 @@ import snakecore
 from snakecore.commands.decorators import flagconverter_kwargs
 from snakecore.commands.converters import String, StringExpr, UnicodeEmoji, Parens
 
-from .bases import ExtSpecCog
+from .bases import BaseExtCog
 
 BotT = Union[snakecore.commands.Bot, snakecore.commands.AutoShardedBot]
 
@@ -40,7 +40,7 @@ def parse_text_to_mapping(
     return mapping
 
 
-class PollsPre(ExtSpecCog, name="polls-pre"):
+class PollsPre(BaseExtCog, name="polls-pre"):
     @commands.Cog.listener()
     async def on_raw_reaction_add(self, payload: discord.RawReactionActionEvent):
         channel = self.bot.get_channel(payload.channel_id)

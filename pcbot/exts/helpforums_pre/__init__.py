@@ -31,7 +31,7 @@ from .constants import (
 )
 
 from ... import __version__
-from ..bases import ExtSpec, ExtSpecCog
+from ..bases import ExtSpec, BaseExtCog
 from ...bot import PygameCommunityBot
 
 if TYPE_CHECKING:
@@ -181,7 +181,7 @@ INVALID_HELP_THREAD_TITLE_EMBEDS = {
 }
 
 
-class HelpForumsPreCog(ExtSpecCog, name="helpforums-pre"):
+class HelpForumsPreCog(BaseExtCog, name="helpforums-pre"):
     def __init__(
         self,
         bot: BotT,
