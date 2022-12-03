@@ -227,17 +227,6 @@ class BotManagement(ExtSpecCog, name="bot-management"):
                     discord.File(
                         io.StringIO(
                             "\n".join(
-                                DEFAULT_FORMATTER.format(record)
-                                for record in recent_records
-                            )
-                        ),  # type: ignore
-                        filename=f"{self.log_filename}_"
-                        f"{first_record_dt.strftime('%Y-%m-%d %H-%M-%S')}"
-                        f"--{last_record_dt.strftime('%Y-%m-%d %H-%M-%S')}.log",
-                    ),
-                    discord.File(
-                        io.StringIO(
-                            "\n".join(
                                 ANSI_FORMATTER.format(record)
                                 for record in recent_records
                             )
@@ -245,6 +234,17 @@ class BotManagement(ExtSpecCog, name="bot-management"):
                         filename=f"{self.log_filename}_"
                         f"{first_record_dt.strftime('%Y-%m-%d %H-%M-%S')}"
                         f"--{last_record_dt.strftime('%Y-%m-%d %H-%M-%S')}.log.ansi",
+                    ),
+                    discord.File(
+                        io.StringIO(
+                            "\n".join(
+                                DEFAULT_FORMATTER.format(record)
+                                for record in recent_records
+                            )
+                        ),  # type: ignore
+                        filename=f"{self.log_filename}_"
+                        f"{first_record_dt.strftime('%Y-%m-%d %H-%M-%S')}"
+                        f"--{last_record_dt.strftime('%Y-%m-%d %H-%M-%S')}.log",
                     ),
                 ],
             )
