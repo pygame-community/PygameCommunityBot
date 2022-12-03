@@ -16,7 +16,7 @@ import snakecore
 from snakecore.commands.decorators import flagconverter_kwargs
 from snakecore.commands.converters import CodeBlock, String, Parens, TimeDelta
 
-from .bases import ExtSpecCog
+from .bases import BaseExtCog
 
 BotT = Union[snakecore.commands.Bot, snakecore.commands.AutoShardedBot]
 MessageableGuildChannel = Union[
@@ -204,7 +204,7 @@ def get_msg_info_embed(msg: discord.Message, author: bool = True):
     )
 
 
-class Messaging(ExtSpecCog, name="messaging"):
+class Messaging(BaseExtCog, name="messaging"):
     async def message_send_func(
         self,
         ctx: commands.Context[BotT],

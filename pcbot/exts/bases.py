@@ -27,7 +27,7 @@ PCBotT = PygameCommunityBot
 _logger = logging.getLogger(__name__)
 
 
-class ExtSpecCog(commands.Cog):
+class BaseExtCog(commands.Cog):
     __version__ = __version__
 
     def __init__(self, bot: BotT, theme_color: Union[int, discord.Color] = 0) -> None:

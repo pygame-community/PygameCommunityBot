@@ -9,12 +9,12 @@ import discord
 from discord.ext import commands
 import snakecore
 
-from .bases import ExtSpecCog
+from .bases import BaseExtCog
 
 BotT = Union[snakecore.commands.Bot, snakecore.commands.AutoShardedBot]
 
 
-class MyExtCog(ExtSpecCog, name="my-ext"):
+class MyExtCog(BaseExtCog, name="my-ext"):
     """..."""  # describe your extension cog
 
     def __init__(self, bot: BotT, theme_color: Union[int, discord.Color] = 0) -> None:

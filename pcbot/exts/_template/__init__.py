@@ -12,7 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncEngine
 
 from ... import __version__
 from ...bot import PygameCommunityBot
-from ..bases import ExtSpec, ExtSpecCog
+from ..bases import ExtSpec, BaseExtCog
 from .constants import DB_TABLE_PREFIX
 from .migrations import REVISIONS, ROLLBACKS
 
@@ -21,7 +21,7 @@ BotT = PygameCommunityBot
 _logger = logging.getLogger(__name__)
 
 
-class MyExtCog(ExtSpecCog, name="my-ext"):
+class MyExtCog(BaseExtCog, name="my-ext"):
     """..."""  # describe your extension
 
     def __init__(

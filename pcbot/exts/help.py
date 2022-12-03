@@ -12,7 +12,7 @@ import snakecore
 
 from ..bot import PygameCommunityBot
 
-from .bases import ExtSpecCog
+from .bases import BaseExtCog
 from .text_command_manager import TextCommandManagerCog
 
 BotT = PygameCommunityBot
@@ -274,8 +274,8 @@ class EmbedHelpCommand(commands.HelpCommand):
 
         paginator = None
         cog = self.cog
-        if not isinstance(cog, ExtSpecCog):
-            raise RuntimeError("A ExtSpecCog cog instance must be set")
+        if not isinstance(cog, BaseExtCog):
+            raise RuntimeError("A BaseExtCog cog instance must be set")
 
         paginator = None
 
@@ -353,7 +353,7 @@ class EmbedHelpCommand(commands.HelpCommand):
         cog.cached_embed_paginators[response_message.id] = paginator_tuple
 
 
-class HelpCommandCog(ExtSpecCog, name="help-commands"):
+class HelpCommandCog(BaseExtCog, name="help-commands"):
     pass
 
 
