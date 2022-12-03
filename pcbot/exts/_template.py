@@ -9,14 +9,12 @@ import discord
 from discord.ext import commands
 import snakecore
 
-from .base import BaseCommandCog
+from .bases import ExtSpecCog
 
 BotT = Union[snakecore.commands.Bot, snakecore.commands.AutoShardedBot]
 
 
-class MyExt(
-    BaseCommandCog, name="my-ext"
-):  # if multiple cogs are present, use MyExtCog as a name instead
+class MyExtCog(ExtSpecCog, name="my-ext"):
     """..."""  # describe your extension cog
 
     def __init__(self, bot: BotT, theme_color: Union[int, discord.Color] = 0) -> None:
@@ -30,4 +28,4 @@ async def setup(
     bot: BotT,
     color: Union[int, discord.Color] = 0,  # add more optional parameters as desired
 ):
-    await bot.add_cog(MyExt(bot))
+    await bot.add_cog(MyExtCog(bot, theme_color=color))

@@ -12,8 +12,8 @@ import snakecore
 
 from ..bot import PygameCommunityBot
 
-from .base import BaseCommandCog
-from .text_command_manager import TextCommandManager
+from .bases import ExtSpecCog
+from .text_command_manager import TextCommandManagerCog
 
 BotT = PygameCommunityBot
 
@@ -97,7 +97,7 @@ class EmbedHelpCommand(commands.HelpCommand):
                         value="\u200b",
                     )
                 )
-            text_command_manager: TextCommandManager = self.context.bot.get_cog("text-command-manager")  # type: ignore
+            text_command_manager: TextCommandManagerCog = self.context.bot.get_cog("text-command-manager")  # type: ignore
 
             for cog, cmds in mapping.items():
                 name = "No Category" if cog is None else cog.qualified_name
@@ -149,7 +149,7 @@ class EmbedHelpCommand(commands.HelpCommand):
         if cog.description:
             embed_dict["description"] = cog.description
 
-        text_command_manager: TextCommandManager = self.context.bot.get_cog("text-command-manager")  # type: ignore
+        text_command_manager: TextCommandManagerCog = self.context.bot.get_cog("text-command-manager")  # type: ignore
 
         if text_command_manager:
             filtered = [
@@ -210,7 +210,7 @@ class EmbedHelpCommand(commands.HelpCommand):
         if group.help:
             embed_dict["description"] += group.help
 
-        text_command_manager: TextCommandManager = self.context.bot.get_cog("text-command-manager")  # type: ignore
+        text_command_manager: TextCommandManagerCog = self.context.bot.get_cog("text-command-manager")  # type: ignore
         if text_command_manager:
             if not await text_command_manager.tcmd_can_run(self.context, group):
                 return
@@ -270,8 +270,8 @@ class EmbedHelpCommand(commands.HelpCommand):
 
         paginator = None
         cog = self.cog
-        if not isinstance(cog, BaseCommandCog):
-            raise RuntimeError("A BaseCommandCog cog instance must be set")
+        if not isinstance(cog, ExtSpecCog):
+            raise RuntimeError("A ExtSpecCog cog instance must be set")
 
         paginator = None
 
@@ -349,7 +349,7 @@ class EmbedHelpCommand(commands.HelpCommand):
         cog.cached_embed_paginators[response_message.id] = paginator_tuple
 
 
-class HelpCommandCog(BaseCommandCog, name="help-commands"):
+class HelpCommandCog(ExtSpecCog, name="help-commands"):
     pass
 
 
@@ -357,7 +357,7 @@ class HelpCommandCog(BaseCommandCog, name="help-commands"):
 async def setup(
     bot: BotT, bot_help_message: str = "", color: Union[int, discord.Color] = 0
 ):
-    await bot.add_cog((help_command_cog := HelpCommandCog(bot)))
+    await bot.add_cog((help_command_cog := HelpCommandCog(bot)))  # type: ignore
     embed_help_command = EmbedHelpCommand(
         bot_help_message=bot_help_message, theme_color=int(color)
     )

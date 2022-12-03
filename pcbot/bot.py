@@ -323,6 +323,10 @@ class PygameCommunityBot(snakecore.commands.Bot):
             await self._init_extension_data_storage()
 
         for ext_dict in self._config["extensions"]:
+            _logger.info(
+                f"Attempting to load extension "
+                f"'{ext_dict.get('package', '')}{ext_dict['name']}'"
+            )
             try:
                 await self.load_extension_with_config(
                     ext_dict["name"],
@@ -330,6 +334,11 @@ class PygameCommunityBot(snakecore.commands.Bot):
                     config=ext_dict.get("config"),
                 )
             except commands.ExtensionAlreadyLoaded:
+                _logger.info(
+                    f"Extension "
+                    f"'{ext_dict.get('package', '')}{ext_dict['name']}' was already "
+                    "loaded, skipping..."
+                )
                 continue
 
             except (TypeError, commands.ExtensionError) as exc:
@@ -620,11 +629,12 @@ class PygameCommunityBot(snakecore.commands.Bot):
     async def create_extension_data(
         self,
         name: str,
-        version: str,
+        last_session_version: str,
+        revision_number: int,
+        auto_migrate: bool,
         db_table_prefix: str,
-        initial_data: Optional[bytes] = None,
+        data: Optional[bytes] = None,
     ):
-
         if not self._extension_data_storage_is_init:
             raise RuntimeError("Extension data storage was not initialized.")
         elif not isinstance(name, str):
@@ -633,20 +643,30 @@ class PygameCommunityBot(snakecore.commands.Bot):
                 "name of type 'str', not "
                 f"'{name.__class__.__name__}'"
             )
-        elif not isinstance(version, str):
+        elif not isinstance(last_session_version, str):
             raise TypeError(
-                f"argument 'version' must be of type 'str', not "
-                f"'{version.__class__.__name__}'"
+                f"argument 'last_session_version' must be of type 'str', not "
+                f"'{last_session_version.__class__.__name__}'"
+            )
+        elif not isinstance(revision_number, int):
+            raise TypeError(
+                f"argument 'revision_number' must be of type 'int', not "
+                f"'{revision_number.__class__.__name__}'"
+            )
+        elif not isinstance(auto_migrate, bool):
+            raise TypeError(
+                f"argument 'auto_migrate' must be of type 'bool', not "
+                f"'{auto_migrate.__class__.__name__}'"
             )
         elif not isinstance(db_table_prefix, str):
             raise TypeError(
                 f"argument 'db_table_prefix' must be of type 'str', not "
                 f"'{db_table_prefix.__class__.__name__}'"
             )
-        elif initial_data is not None and not isinstance(initial_data, bytes):
+        elif data is not None and not isinstance(data, bytes):
             raise TypeError(
-                f"argument 'initial_data' must be 'None' or of type 'bytes', "
-                f"not '{initial_data.__class__.__name__}'"
+                f"argument 'data' must be 'None' or of type 'bytes', "
+                f"not '{data.__class__.__name__}'"
             )
 
         engine: AsyncEngine = self._main_database["engine"]  # type: ignore
@@ -659,18 +679,21 @@ class PygameCommunityBot(snakecore.commands.Bot):
             await conn.execute(
                 text(
                     "INSERT INTO bot_extension_data "
-                    "(name, version, db_table_prefix, data) "
-                    "VALUES (:name, :version, :db_table_prefix, :initial_data)"
+                    "(name, last_session_version, revision_number, auto_migrate, db_table_prefix, "
+                    "data) VALUES (:name, :last_session_version, :revision_number, :auto_migrate, "
+                    ":db_table_prefix, :data)"
                 ),
                 dict(
                     name=name,
-                    version=version,
+                    last_session_version=last_session_version,
+                    revision_number=revision_number,
+                    auto_migrate=auto_migrate,
                     db_table_prefix=db_table_prefix,
-                    initial_data=initial_data,
+                    data=data,
                 ),
             )
 
-    async def read_extension_data(self, name: str) -> ExtensionData:
+    async def read_extension_data(self, name: str, data: bool = True) -> ExtensionData:
         if not self._extension_data_storage_is_init:
             raise RuntimeError("Extension data storage was not initialized.")
 
@@ -686,9 +709,15 @@ class PygameCommunityBot(snakecore.commands.Bot):
         if engine.name not in ("sqlite", "postgresql"):
             raise RuntimeError(f"Unsupported database dialect '{engine.name}'")
 
+        columns = "*"
+
+        if not data:
+            columns = "name, last_session_version, revision_number, auto_migrate, "
+            "db_table_prefix"
+
         async with engine.connect() as conn:
             result: sqlalchemy.engine.Result = await conn.execute(
-                text("SELECT * FROM bot_extension_data WHERE name == :name"),
+                text(f"SELECT {columns} FROM bot_extension_data WHERE name == :name"),
                 dict(name=name),
             )
 
@@ -701,12 +730,14 @@ class PygameCommunityBot(snakecore.commands.Bot):
 
             return ExtensionData(
                 name=row.name,
-                version=row.version,
+                last_session_version=row.last_session_version,
+                revision_number=row.revision_number,
+                auto_migrate=bool(row.auto_migrate),
                 db_table_prefix=row.db_table_prefix,
                 data=row.data,
             )
 
-    async def check_extension_data_exists(self, name: str):
+    async def extension_data_exists(self, name: str):
         if not self._extension_data_storage_is_init:
             raise RuntimeError("Extension data storage was not initialized.")
 
@@ -732,14 +763,16 @@ class PygameCommunityBot(snakecore.commands.Bot):
                         ),
                         dict(name=name),
                     )
-                ).first()[0]
+                ).scalar()
             )
         return storage_exists
 
     async def update_extension_data(
         self,
         name: str,
-        version: Optional[str] = None,
+        last_session_version: Optional[str] = None,
+        revision_number: Optional[int] = None,
+        auto_migrate: Optional[bool] = None,
         db_table_prefix: Optional[str] = None,
         data: Optional[bytes] = None,
     ):
@@ -754,10 +787,22 @@ class PygameCommunityBot(snakecore.commands.Bot):
                 f"'{name.__class__.__name__}'"
             )
 
-        elif version is not None and not isinstance(version, str):
+        elif last_session_version is not None and not isinstance(
+            last_session_version, str
+        ):
             raise TypeError(
-                f"argument 'version' must be of type 'str', not "
-                f"'{version.__class__.__name__}'"
+                f"argument 'last_session_version' must be of type 'str', not "
+                f"'{last_session_version.__class__.__name__}'"
+            )
+        elif revision_number is not None and not isinstance(revision_number, int):
+            raise TypeError(
+                f"argument 'revision_number' must be of type 'int', not "
+                f"'{revision_number.__class__.__name__}'"
+            )
+        elif auto_migrate is not None and not isinstance(auto_migrate, bool):
+            raise TypeError(
+                f"argument 'auto_migrate' must be of type 'bool', not "
+                f"'{auto_migrate.__class__.__name__}'"
             )
         elif db_table_prefix is not None and not isinstance(db_table_prefix, str):
             raise TypeError(
@@ -770,9 +815,12 @@ class PygameCommunityBot(snakecore.commands.Bot):
                 f"not '{data.__class__.__name__}'"
             )
 
-        if not any((version, db_table_prefix, data)):
+        if not any(
+            (last_session_version, revision_number, auto_migrate, db_table_prefix, data)
+        ):
             raise TypeError(
-                f"'version', 'db_table_prefix' and 'data' cannot all be 'None'"
+                f"arguments 'last_session_version', 'revision_number', 'auto_migrate', 'db_table_prefix' "
+                "and 'data' cannot all be 'None'"
             )
 
         engine: AsyncEngine = self._main_database["engine"]
@@ -782,21 +830,36 @@ class PygameCommunityBot(snakecore.commands.Bot):
             raise RuntimeError(f"Unsupported database dialect '{engine.name}'")
 
         async with engine.begin() as conn:
-            if not (
-                await conn.execute(
-                    text(
-                        "SELECT EXISTS(SELECT 1 FROM bot_extension_data WHERE name == :name)"
-                    ),
-                    dict(name=name),
-                )
-            ).first()[0]:
+            if not bool(
+                (
+                    await conn.execute(
+                        text(
+                            "SELECT EXISTS(SELECT 1 FROM bot_extension_data WHERE name == :name)"
+                        ),
+                        dict(name=name),
+                    )
+                ).scalar()
+            ):
                 raise LookupError(
                     f"Could not find extension storage data for extension named "
                     f"'{name}'"
                 )
 
             params = {}
-            params |= dict(version=version) if version is not None else {}
+            params["name"] = name
+            params |= (
+                dict(last_session_version=last_session_version)
+                if last_session_version is not None
+                else {}
+            )
+            params |= (
+                dict(revision_number=revision_number)
+                if revision_number is not None
+                else {}
+            )
+            params |= (
+                dict(auto_migrate=auto_migrate) if auto_migrate is not None else {}
+            )
             params |= (
                 dict(db_table_prefix=db_table_prefix)
                 if db_table_prefix is not None
@@ -805,8 +868,6 @@ class PygameCommunityBot(snakecore.commands.Bot):
             params |= dict(data=data) if data is not None else {}
 
             target_columns = ", ".join((f"{k} = :{k}" for k in params))
-
-            params["name"] = name
 
             await conn.execute(
                 text(

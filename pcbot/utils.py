@@ -5,7 +5,7 @@ Copyright (c) 2022-present pygame-community.
 
 import asyncio
 from collections import deque
-import importlib
+import importlib.util
 import io
 import logging
 import logging.handlers
@@ -261,7 +261,7 @@ DEFAULT_FORMATTER = DefaultFormatter(
     "[{asctime}] [ {levelname:<8} ] {name} -- {message}", style="{"
 )
 
-DEFAULT_FORMATTER_REGEX = r"\[(\d{4}-\d\d-\d\d.\d\d:\d\d:\d\d\.\d\d\d)\](?:(?!\n\[(\d{4}-\d\d-\d\d.\d\d:\d\d:\d\d\.\d\d\d)\])\n|.)+"
+DEFAULT_FORMATTER_REGEX = r"\[(\d{4}-\d\d-\d\d.\d\d:\d\d:\d\d\.\d\d\d)\] *\[ *(\S+) *\] *(.+) -- ((?:(?!\n\[(\d{4}-\d\d-\d\d.\d\d:\d\d:\d\d\.\d\d\d)\])\n|.)+)"
 # detects formatted output written by DEFAULT_FORMATTER, including appended tracebacks
 # on followup lines
 
@@ -278,12 +278,31 @@ def import_module_from_path(module_name: str, file_path: str) -> types.ModuleTyp
     module = importlib.util.module_from_spec(spec)  # type: ignore
     sys.modules[module_name] = module
     try:
-        spec.loader.exec_module(module)
+        spec.loader.exec_module(module)  # type: ignore
     except FileNotFoundError as fnf:
+        del sys.modules[module_name]
         raise ImportError(
             f"failed to find code for module named '{module_name}' at '{abs_file_path}'"
         ) from fnf
+    except Exception:
+        del sys.modules[module_name]
+        raise
+
     return module
+
+
+def unimport_module(module: types.ModuleType) -> None:
+    """Unimport a module, by deleting it from `sys.modules`.
+    Note that this will not remove any existing outer references
+    to the module.
+
+    Parameters
+    ----------
+    module : ModuleType
+        The module object.
+    """
+    if module.__name__ in sys.modules:
+        del sys.modules[module.__name__]
 
 
 async def load_databases(
@@ -377,18 +396,26 @@ async def create_bot_extension_data_table(db: DatabaseDict):
         if engine.name == "sqlite":
             await conn.execute(
                 sqlalchemy.text(
-                    "CREATE TABLE IF NOT EXISTS "
-                    "bot_extension_data"
-                    "(name VARCHAR(1000), version VARCHAR(1000), db_table_prefix VARCHAR(1000), data BLOB)"
+                    "CREATE TABLE IF NOT EXISTS bot_extension_data ("
+                    "name VARCHAR(1000), "
+                    "last_session_version VARCHAR(1000), "
+                    "revision_number INTEGER, "
+                    "auto_migrate INTEGER, "
+                    "db_table_prefix VARCHAR(1000), "
+                    "data BLOB)"
                 )
             )
 
         elif engine.name == "postgresql":
             await conn.execute(
                 sqlalchemy.text(
-                    "CREATE TABLE IF NOT EXISTS "
-                    "bot_extension_data"
-                    "(name VARCHAR(1000), version VARCHAR(1000), db_table_prefix VARCHAR(1000), data BYTEA)"
+                    "CREATE TABLE IF NOT EXISTS bot_extension_data ("
+                    "name VARCHAR(1000), "
+                    "last_session_version VARCHAR(1000), "
+                    "revision_number INTEGER, "
+                    "auto_migrate SMALLINT, "
+                    "db_table_prefix VARCHAR(1000), "
+                    "data BYTEA)"
                 )
             )
         else:

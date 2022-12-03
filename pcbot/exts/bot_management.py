@@ -34,7 +34,7 @@ from pcbot.utils import (
     QueuingFilter,
 )
 
-from .base import BaseCommandCog
+from .bases import ExtSpecCog
 
 BotT = PygameCommunityBot
 
@@ -60,7 +60,7 @@ def is_bot_manager():
     return commands.check(predicate)
 
 
-class BotManagement(BaseCommandCog, name="bot-management"):
+class BotManagement(ExtSpecCog, name="bot-management"):
     invoke_on_message_edit: bool = True
 
     def __init__(
