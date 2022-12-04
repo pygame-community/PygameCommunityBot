@@ -25,9 +25,14 @@ from .migrations import REVISIONS, ROLLBACKS
 
 from .constants import (
     DB_TABLE_PREFIX,
+    HELP_FORUM_CHANNEL_IDS,
     FORUM_THREAD_TAG_LIMIT,
-    THREAD_TITLE_MINIMUM_LENGTH,
+    INVALID_HELP_THREAD_TITLE_EMBEDS,
+    INVALID_HELP_THREAD_TITLE_REGEX_PATTERNS,
+    INVALID_HELP_THREAD_TITLE_SCANNING_ENABLED,
+    INVALID_HELP_THREAD_TITLE_TYPES,
     THREAD_TITLE_TOO_SHORT_SLOWMODE_DELAY,
+    THREAD_DELETION_MESSAGE_THRESHOLD,
 )
 
 from ... import __version__
@@ -50,136 +55,6 @@ class InactiveHelpThreadData(TypedDict):
     thread_id: int
     last_active_ts: float
     alert_message_id: NotRequired[int]
-
-
-HELP_FORUM_CHANNEL_IDS = {
-    "newbies": 1022292223708110929,  # newbies-help-🔰
-    "regulars": 1019741232810954842,  # regulars-pygame-help
-    "python": 1022244052088934461,  # python-help
-}
-
-INVALID_HELP_THREAD_TITLE_TYPES = {
-    "thread_title_too_short",
-    "member_asking_for_help",
-    "member_exclaiming_about_not_working_code",
-    "member_asking_for_code",
-    "member_asking_about_problem_with_code",
-}
-
-INVALID_HELP_THREAD_TITLE_SCANNING_ENABLED = {
-    "thread_title_too_short": True,
-    "member_asking_for_help": True,
-    "member_exclaiming_about_not_working_code": True,
-    "member_asking_for_code": True,
-    "member_asking_about_problem_with_code": True,
-}
-INVALID_HELP_THREAD_TITLE_REGEX_PATTERNS = {
-    "thread_title_too_short": re.compile(
-        r"^(.){1," f"{THREAD_TITLE_MINIMUM_LENGTH-1}" r"}$", flags=re.IGNORECASE
-    ),
-    "member_asking_for_help": re.compile(
-        r"[\s]*(^help\s*|help\?*?$|(can|does|is\s+)?(pl(ease|s)|(some|any)(one|body)|you|(need|want)|(can|(want|available|around|willing|ready)(\s*to)))\s*help)(?!(s|ed|er|ing))(\s*me(\s*please)?|pl(ease|s)|with)?\s*",
-        re.IGNORECASE,
-    ),
-    "member_exclaiming_about_not_working_code": re.compile(
-        r"[\s]*((why\s+)?(is('nt)?|does(\s+not|'nt)?)?\s*(my|the|this)?)\s*(this|code|game|pygame(\s*(game|program|code|project|assignment)?))\s*(((is|does)(\s*not|n't)?|not)\s*work(s|ed|ing)?)",
-        re.IGNORECASE,
-    ),
-    "member_asking_for_code": re.compile(
-        r"(?<!How\s)(?<!How\sdo\s)(?<!How\sdoes\s)(?<!I\s)((can('t|not)?|will)\s+)?(?<!How\scan\s)(please|pls|(some|any)(one|body)|(available|around|willing|ready|want)(\s*to))(\s*help(\s*me)?)?\s*(write|make|create|code|program|fix|correct|implement)(?!ing|ed)(\s*(a|my|the|this))?\s*(this|code|game|pygame(\s*(game|program|code)?))?\s*(for)?\s*(me(\s*please)?|please)?\s*",
-        re.IGNORECASE,
-    ),
-    "member_asking_about_problem_with_code": re.compile(
-        r"[\s]*((why|what('s)?\s+)(is('nt)?|does(\s+not|'nt)|am\s*i\s*(doing|having))?\s*((wrong|the\s*(problem|issue))?\s*(with(in)?|in(side)?)\s*)?(my|the|this)?)\s*(this|code|game|pygame(\s*(game|program|code)?))\s*",
-        re.IGNORECASE,
-    ),
-}
-INVALID_HELP_THREAD_TITLE_EMBEDS = {
-    "thread_title_too_short": {
-        "title": "Whoops, your post title must be at least "
-        f"{THREAD_TITLE_MINIMUM_LENGTH} characters long (excluding numbers)",
-        "description": "Your post title must be at least "
-        f"**{THREAD_TITLE_MINIMUM_LENGTH}** characters long, so I'm "
-        "forced to put a slowmode delay of "
-        f"{THREAD_TITLE_TOO_SHORT_SLOWMODE_DELAY//60} minute{'s'*(THREAD_TITLE_TOO_SHORT_SLOWMODE_DELAY > 60)} "
-        " on your post (sorry) <:pg_sad:863165920038223912>.\n\n"
-        "To make changes to your post's title, either right-click on it "
-        "(desktop/web) or click and hold on it (mobile), then click on "
-        "**'Edit Post'**. Use the input field called 'POST TITLE' in the "
-        "post settings menu to change your post title. Remember to save "
-        "your changes.\n\n"
-        "**Thank you for helping us maintain clean help forum channels "
-        "<:pg_robot:837389387024957440>**\n\n"
-        "This alert and the slowmode should disappear after you have made appropriate changes.",
-        "color": 0x36393F,
-    },
-    "member_asking_for_help": {
-        "title": "Please don't ask for help in your post title (no need to). "
-        "We'd love to help you either way!",
-        "description": "Instead of asking for help or mentioning that you need "
-        "help, please write a post title and starter message "
-        "that describes the actual issue you're having in more detail.\n"
-        "Also send code snippets (no code screenshots), screenshots and "
-        "other media, error messages, etc."
-        "\n\n**[Here's why!](https://www.dontasktoask.com)**\n\n"
-        "To make changes to your post's title, either right-click on it "
-        "(desktop/web) or click and hold on it (mobile), then click on "
-        "**'Edit Post'**. Use the input field called 'POST TITLE' in the "
-        "post settings menu to change your post title. Remember to save "
-        "your changes.\n\n"
-        "This alert should disappear after you have made appropriate changes.",
-        "color": 0x36393F,
-    },
-    "member_exclaiming_about_not_working_code": {
-        "title": "Something doesn't work? Please tell us what.",
-        "description": "Edit your help post title and your starter message "
-        "to describe the problem that led to that diagnosis. What made your code "
-        "stop working? What are you trying to do?\n"
-        "Remember to send along code snippets (no code screenshots), screenshots "
-        "and other media, error messages, etc.\n\n"
-        "To make changes to your post's title, either right-click on it "
-        "(desktop/web) or click and hold on it (mobile), then click on "
-        "**'Edit Post'**. Use the input field called 'POST TITLE' in the "
-        "post settings menu to change your post title. Remember to save "
-        "your changes.\n\n"
-        "This alert should disappear after you have made appropriate changes.",
-        "color": 0x36393F,
-    },
-    "member_asking_for_code": {
-        "title": "Please don't ask if anybody can, wants to, or will fix, correct "
-        "or write your code, game, project or assignment for you.",
-        "description": "All helpers here are volunteers, who show people how to "
-        "improve or implement things in their code by themselves. They don't do "
-        "all the work for them. Show us what you are working on, what you've "
-        "tried, as well as where you got stuck. "
-        "Remember to send along code snippets (no code screenshots), screenshots "
-        "and other media, error messages, etc.\n\n"
-        "To make changes to your post's title, either right-click on it "
-        "(desktop/web) or click and hold on it (mobile), then click on "
-        "**'Edit Post'**. Use the input field called 'POST TITLE' in the "
-        "post settings menu to change your post title. Remember to save "
-        "your changes.\n\n"
-        "This alert should disappear after you have made appropriate changes.",
-        "color": 0x36393F,
-    },
-    "member_asking_about_problem_with_code": {
-        "title": "There's a problem with your code, game, project or assignment? "
-        "Please tell us what are you struggling with.",
-        "description": "Use your help post title and your starter message "
-        "to describe how the problems with it came up. What made your code stop "
-        "working? What are you trying to do? "
-        "Remember to send along code snippets (no code screenshots), screenshots "
-        "and other media, error messages, etc.\n\n"
-        "To make changes to your post's title, either right-click on it "
-        "(desktop/web) or click and hold on it (mobile), then click on "
-        "**'Edit Post'**. Use the input field called 'POST TITLE' in the "
-        "post settings menu to change your post title. Remember to save "
-        "your changes.\n\n"
-        "This alert should disappear after you have made appropriate changes.",
-        "color": 0x36393F,
-    },
-}
-
 
 class HelpForumsPreCog(BaseExtCog, name="helpforums-pre"):
     def __init__(
@@ -1106,23 +981,24 @@ class HelpForumsPreCog(BaseExtCog, name="helpforums-pre"):
         member_msg_count = 0
         try:
             async for thread_message in thread.history(
-                limit=max(thread.message_count, 60)
+                limit=max(thread.message_count, 100)
             ):
                 if (
                     not thread_message.author.bot
                     and thread_message.type == discord.MessageType.default
                 ):
                     member_msg_count += 1
-                    if member_msg_count > 29:
+                    if member_msg_count >= THREAD_DELETION_MESSAGE_THRESHOLD:
                         break
 
-            if member_msg_count < 30:
+            if member_msg_count < THREAD_DELETION_MESSAGE_THRESHOLD:
                 await thread.send(
                     embed=discord.Embed(
                         title="Post scheduled for deletion",
                         description=(
                             "Someone deleted the starter message of this post.\n\n"
-                            "Since it contains less than 30 messages sent by "
+                            f"Since it contains less than "
+                            f"{THREAD_DELETION_MESSAGE_THRESHOLD} messages sent by "
                             "server members, it will be deleted "
                             f"**<t:{int(time.time()+300)}:R>**."
                         ),
