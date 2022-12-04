@@ -33,7 +33,7 @@ import sqlalchemy.exc
 import sqlalchemy.ext.asyncio
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncEngine, AsyncConnection
 
-from ._types import DatabaseDict, _InputDatabaseDict
+from ._types import DatabaseDict, ConfigDatabaseDict
 
 
 class DefaultFormatter(logging.Formatter):
@@ -306,7 +306,7 @@ def unimport_module(module: types.ModuleType) -> None:
 
 
 async def load_databases(
-    db_info_data: Sequence[_InputDatabaseDict],
+    db_info_data: Sequence[ConfigDatabaseDict],
     raise_exceptions: bool = True,
     logger: Optional[logging.Logger] = None,
 ) -> list[DatabaseDict]:

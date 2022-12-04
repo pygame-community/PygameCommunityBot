@@ -4,15 +4,16 @@ Copyright (c) 2022-present pygame-community.
 """
 
 from __future__ import annotations
-
-from typing import TYPE_CHECKING, Any, Optional, TypedDict
+from typing import TYPE_CHECKING, Any, Collection, Literal, Optional, TypedDict
 from sqlalchemy.ext.asyncio import AsyncEngine
 
 if TYPE_CHECKING:
-    from typing_extensions import NotRequired  # type: ignore
+    from typing_extensions import Required, NotRequired  # type: ignore
+
+ellipsis = type(Ellipsis)
 
 
-class _InputDatabaseDict(TypedDict):
+class ConfigDatabaseDict(TypedDict):
     name: str
     url: str
     connect_args: NotRequired[dict[str, Any]]
@@ -21,7 +22,7 @@ class _InputDatabaseDict(TypedDict):
 class DatabaseDict(TypedDict):
     name: str
     engine: AsyncEngine
-    url: NotRequired[str]
+    url: str
     connect_args: NotRequired[dict[str, Any]]
 
 
@@ -32,3 +33,47 @@ class ExtensionData(TypedDict):
     auto_migrate: bool
     db_table_prefix: str
     data: Optional[bytes]
+
+
+class ConfigAuthentication(TypedDict):
+    token: str
+
+
+class ConfigExtensionDict(TypedDict):
+    name: str
+    package: NotRequired[str]
+    config: dict[str, Any]
+
+
+class Config(TypedDict, total=False):
+    """Helper `TypedDict` for defining bot configuration data."""
+
+    authentication: Required[ConfigAuthentication | dict[str, Any]]
+    intents: int
+
+    owner_id: int | None
+    owner_ids: Collection[int]
+    owner_role_ids: Collection[int]
+    manager_role_ids: Collection[int]
+
+    command_prefix: str | list[str] | tuple[str, ...]
+    mention_as_command_prefix: bool
+
+    extensions: list[ConfigExtensionDict] | tuple[ConfigExtensionDict, ...]
+
+    databases: list[ConfigDatabaseDict] | tuple[ConfigDatabaseDict, ...]
+    main_database_name: str
+
+    log_level: Literal[
+        "CRITICAL",
+        "FATAL",
+        "ERROR",
+        "WARN",
+        "WARNING",
+        "INFO",
+        "DEBUG",
+        "NOTSET",
+    ]
+    log_directory: str
+    log_filename: str
+    log_file_extension: str

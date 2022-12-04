@@ -570,7 +570,7 @@ class PygameCommunityBot(snakecore.commands.Bot):
                 del self._recent_response_error_messages[ctx.message.id]
 
     def get_database(self) -> Optional[AsyncEngine]:
-        """Get an `sqlachemy.ext.asyncio.AsyncEngine` object for the primary
+        """Get an `sqlachemy.ext.asyncio.AsyncEngine` object for the main
         database of this bot.
 
         Returns
@@ -581,18 +581,16 @@ class PygameCommunityBot(snakecore.commands.Bot):
 
         return self._main_database.get("engine")
 
-    def get_databases_data(
-        self, *names: str
-    ) -> list[dict[str, Union[str, dict, AsyncEngine]]]:
+    def get_databases_data(self, *names: str) -> list[DatabaseDict]:
         """Get the database dictionaries for all the currently configured databases,
         containing the keys "name" for the database name, "engine" for the SQLAlchemy
-        engine and if available, "conect_args" for a dictionary containing the
-        database driver library-specific arguments for their `.connect()` function.
-        The first dictionary to be returned is always that of the bot's primary
-        database.
+        engine, "url" for the  database url in SQLAlchemy format, and if available,
+        "conect_args" for a dictionary containing the database driver library-specific
+        arguments for their `.connect()` function. The first dictionary to be returned
+        is always that of the bot's main database.
 
-        If string database names are given, only the
-        dictionaries of those (if found) will be returned by the bot.
+        If string database names are given, only the dictionaries of those (if found)
+        will be returned by the bot.
 
         Parameters
         ----------
@@ -602,20 +600,13 @@ class PygameCommunityBot(snakecore.commands.Bot):
         Returns
         -------
         :class:`list`[:class:`dict`]
-            The dictionaries.
+            A list of found dictionaries.
         """
-
-        db_dicts = []
-
-        for name in names if names else self._databases:
-            if name in self._databases:
-                db_dict = self._databases[name].copy()
-                if "url" in db_dict:
-                    del db_dict["url"]
-
-                db_dicts.append(db_dict)
-
-        return db_dicts
+        return [
+            self._databases[name].copy()
+            for name in (names if names else self._databases)
+            if name in self._databases
+        ]
 
     async def _init_extension_data_storage(self):
         if not self._main_database:

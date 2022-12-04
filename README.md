@@ -2,6 +2,7 @@
 The primary Discord bot powering the Pygame Community Discord server. 
 
 ## Setup
+0. Install Python 3.10+.
 1. Set up a virtual environment using your desired tool (e.g. `virtualenv`, `venv`, etc.).
 2. Install requirements: `python -m pip install -U -r requirements.txt [-r requirements-dev.txt]`.
 3. Create all necessary [configuration](#configuration) files.
@@ -47,8 +48,12 @@ To override variables as if they were omitted, define them with a value of `...`
 
 #### Example code for `localconfig.py` 
 ```py
-OMIT = Ellipsis # helper constant
-config = {
+from typing import Any
+
+from pcbot._types import Config # helper TypedDict for configuration data type checking, can be subclassed to define new variables, or omitted completely
+
+OMIT: Any = Ellipsis # helper constant
+config: Config = {
     "command_prefix": "!",  # can also be a list of prefixes
     "mention_as_command_prefix": True, # whether mentions may count as command prefixes
     "log_level": "INFO", # omission disables logging entirely
