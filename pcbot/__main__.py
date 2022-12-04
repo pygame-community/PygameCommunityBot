@@ -83,7 +83,7 @@ DEFAULT_CONFIG: dict[str, Any] = {
     "extensions": [],
 }
 
-config: dict = DEFAULT_CONFIG.copy() | {"extensions": []}
+config: dict[str, Any] = DEFAULT_CONFIG.copy() | {"extensions": []}
 
 
 def setup_logging(log_level) -> None:
@@ -924,7 +924,8 @@ def main(
             config["log_directory"]
         ):
             click.secho(
-                "  config error: 'log_directory' variable must be a valid path to a directory.",
+                "  config error: 'log_directory' variable must be a valid 'str' path "
+                "to a directory.",
                 err=True,
                 fg="red",
             )
@@ -981,7 +982,10 @@ def main(
             )
             raise click.Abort()
         try:
-            if not all(isinstance(role_id, int) for role_id in config["owner_ids"]):
+            if not (
+                config["owner_ids"]
+                and all(isinstance(role_id, int) for role_id in config["owner_ids"])
+            ):
                 click.secho(
                     "  config error: 'owner_ids' variable must be a container "
                     "(preferably a 'set' object) of 'int's that supports membership testing.",
@@ -1003,8 +1007,11 @@ def main(
 
     if "owner_role_ids" in config:
         try:
-            if not all(
-                isinstance(role_id, int) for role_id in config["owner_role_ids"]
+            if not (
+                config["owner_role_ids"]
+                and all(
+                    isinstance(role_id, int) for role_id in config["owner_role_ids"]
+                )
             ):
                 click.secho(
                     "  config error: 'owner_role_ids' variable must be a container "
