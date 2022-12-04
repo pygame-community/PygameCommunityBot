@@ -56,6 +56,7 @@ class InactiveHelpThreadData(TypedDict):
     last_active_ts: float
     alert_message_id: NotRequired[int]
 
+
 class HelpForumsPreCog(BaseExtCog, name="helpforums-pre"):
     def __init__(
         self,

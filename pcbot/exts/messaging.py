@@ -442,7 +442,7 @@ class Messaging(BaseExtCog, name="messaging"):
         embeds: tuple[CodeBlock, ...] = (),
         to: Optional[tuple[MessageableGuildChannel, ...]] = None,
         reply_to: Optional[discord.PartialMessage] = None,
-        delete_after: Optional[float] = None,
+        delete_after: Optional[Union[float, TimeDelta]] = None,
         mention_all: bool = False,
         mention_everyone: bool = False,
         mention_users: Union[tuple[discord.User], bool] = False,
@@ -482,7 +482,7 @@ class Messaging(BaseExtCog, name="messaging"):
         *,
         to: Optional[tuple[MessageableGuildChannel, ...]] = None,
         reply_to: Optional[discord.PartialMessage] = None,
-        delete_after: Optional[float] = None,
+        delete_after: Optional[Union[float, TimeDelta]] = None,
         mention_all: bool = False,
         mention_everyone: bool = False,
         mention_users: Union[tuple[discord.User], bool] = False,
@@ -586,7 +586,11 @@ class Messaging(BaseExtCog, name="messaging"):
                 )
             )
             if delete_after:
-                await msg.delete(delay=delete_after)
+                await msg.delete(
+                    delay=delete_after.total_seconds()
+                    if isinstance(delete_after, datetime.timedelta)
+                    else delete_after
+                )
 
     @commands.guild_only()
     @commands.max_concurrency(1, per=commands.BucketType.default, wait=True)
