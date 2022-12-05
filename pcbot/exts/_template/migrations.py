@@ -10,7 +10,7 @@ from . import DB_TABLE_PREFIX
 # a tuple of them. Revision versions are the indices of the list.
 # Make sure to prefix tables with DB_TABLE_PREFIX
 # (to avoid database table name collisions and for easier database management)
-REVISIONS: list[dict[str, Union[str, tuple[str, ...]]]] = [
+REVISIONS: list[dict[str, str | tuple[str, ...]]] = [
     {"sqlite": (""), "postgresql": ("")},  # revision 0
     {"sqlite": (""), "postgresql": ("")},  # revision 1
     # other migration revisions and statements would be added here, label them as shown
@@ -19,7 +19,7 @@ REVISIONS: list[dict[str, Union[str, tuple[str, ...]]]] = [
 
 # An antithesis of REVISIONS, that undoes any changes done by a matching revision in
 # REVISIONS. Data loss should be prevented, if possible.
-ROLLBACKS: list[dict[str, Union[str, tuple[str, ...]]]] = [
+ROLLBACKS: list[dict[str, str | tuple[str, ...]]] = [
     {"sqlite": (""), "postgresql": ("")},  # anti-revision 0
     {"sqlite": (""), "postgresql": ("")},  # anti-revision 1
     # other migration anti-revisions and statements would be added here, label them as shown

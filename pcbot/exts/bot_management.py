@@ -66,13 +66,13 @@ class BotManagement(BaseExtCog, name="bot-management"):
     def __init__(
         self,
         bot: BotT,
-        theme_color: Union[int, discord.Color] = 0,
-        log_directory: Optional[Union[str, os.PathLike]] = None,
-        log_filename: Optional[str] = None,
-        log_file_extension: Optional[str] = None,
-        log_filename_glob: Optional[str] = None,
-        status_channel_id: Optional[int] = None,
-        invocation_log_channel_id: Optional[int] = None,
+        theme_color: int | discord.Color = 0,
+        log_directory: str | os.PathLike | None = None,
+        log_filename: str | None = None,
+        log_file_extension: str | None = None,
+        log_filename_glob: str | None = None,
+        status_channel_id: int | None = None,
+        invocation_log_channel_id: int | None = None,
     ) -> None:
         super().__init__(bot, theme_color)
         self.bot: BotT
@@ -100,11 +100,11 @@ class BotManagement(BaseExtCog, name="bot-management"):
         self.platform_info = platform.platform()
         self.short_log_record_queue = self.short_log_record_filter.queue
         self.short_log_record_error_queue = self.log_record_error_filter.queue
-        self.status_channel: Optional[discord.TextChannel] = None
+        self.status_channel: discord.TextChannel | None = None
         self.status_channel_id = status_channel_id
-        self.invocation_log_channel: Optional[discord.TextChannel] = None
+        self.invocation_log_channel: discord.TextChannel | None = None
         self.invocation_log_channel_id = invocation_log_channel_id
-        self.status_message: Optional[discord.Message] = None
+        self.status_message: discord.Message | None = None
         self.bot_was_ready = False
 
     async def cog_load(self) -> None:
@@ -323,7 +323,7 @@ class BotManagement(BaseExtCog, name="bot-management"):
     )
     @flagconverter_kwargs()
     async def shutdown(
-        self, ctx: commands.Context[BotT], *, timeout: Union[float, TimeDelta] = 60.0
+        self, ctx: commands.Context[BotT], *, timeout: float | TimeDelta = 60.0
     ):
         """Shutdown this bot application, with a timeout.
 
@@ -427,9 +427,9 @@ class BotManagement(BaseExtCog, name="bot-management"):
         self,
         ctx: commands.Context[BotT],
         *,
-        after: Optional[DateTime] = None,
-        before: Optional[DateTime] = None,
-        limit: Optional[int] = None,
+        after: DateTime | None = None,
+        before: DateTime | None = None,
+        limit: int | None = None,
     ):
         """Get the current log information of this bot application.
 
@@ -597,13 +597,13 @@ class BotManagement(BaseExtCog, name="bot-management"):
 @snakecore.commands.decorators.with_config_kwargs
 async def setup(
     bot: BotT,
-    color: Union[int, discord.Color] = constants.DEFAULT_EMBED_COLOR,
-    log_directory: Optional[Union[str, os.PathLike]] = None,
-    log_filename: Optional[str] = None,
-    log_file_extension: Optional[str] = None,
-    log_filename_glob: Optional[str] = None,
-    status_channel_id: Optional[int] = None,
-    invocation_log_channel_id: Optional[int] = None,
+    color: int | discord.Color = constants.DEFAULT_EMBED_COLOR,
+    log_directory: str | os.PathLike | None = None,
+    log_filename: str | None = None,
+    log_file_extension: str | None = None,
+    log_filename_glob: str | None = None,
+    status_channel_id: int | None = None,
+    invocation_log_channel_id: int | None = None,
 ):
     await bot.add_cog(
         BotManagement(

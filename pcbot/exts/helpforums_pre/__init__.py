@@ -63,7 +63,7 @@ class HelpForumsPreCog(BaseExtCog, name="helpforums-pre"):
         bot: BotT,
         db_engine: AsyncEngine,
         revision_number: int,
-        theme_color: Union[int, discord.Color] = 0,
+        theme_color: int | discord.Color = 0,
     ) -> None:
         super().__init__(bot, theme_color=theme_color)
         self.bot: BotT
@@ -1174,7 +1174,7 @@ class HelpForumsPreCog(BaseExtCog, name="helpforums-pre"):
     @staticmethod
     async def fetch_last_thread_message(
         thread: discord.Thread,
-    ) -> Optional[discord.Message]:
+    ) -> discord.Message | None:
         """Get the last message sent in the given thread.
 
         Parameters
@@ -1184,7 +1184,7 @@ class HelpForumsPreCog(BaseExtCog, name="helpforums-pre"):
 
         Returns
         -------
-        Optional[discord.Message]
+        discord.Message | None
             The message, if it exists.
         """
         last_message = thread.last_message
@@ -1224,7 +1224,7 @@ rollback = ext_spec.rollback
 @snakecore.commands.decorators.with_config_kwargs
 async def setup(
     bot: BotT,
-    color: Union[int, discord.Color] = 0
+    color: int | discord.Color = 0
     # add more optional parameters as desired
 ):
     await ext_spec.prepare_setup(bot)

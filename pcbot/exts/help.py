@@ -75,7 +75,7 @@ class EmbedHelpCommand(commands.HelpCommand):
         ).strip()
 
     async def send_bot_help(
-        self, mapping: Mapping[Optional[commands.Cog], list[commands.Command]]
+        self, mapping: Mapping[commands.Cog | None, list[commands.Command]]
     ):
         start_embed_dict = {}
         start_embed_dict["title"] = "Help"
@@ -358,9 +358,7 @@ class HelpCommandCog(BaseExtCog, name="help-commands"):
 
 
 @snakecore.commands.decorators.with_config_kwargs
-async def setup(
-    bot: BotT, bot_help_message: str = "", color: Union[int, discord.Color] = 0
-):
+async def setup(bot: BotT, bot_help_message: str = "", color: int | discord.Color = 0):
     await bot.add_cog((help_command_cog := HelpCommandCog(bot)))  # type: ignore
     embed_help_command = EmbedHelpCommand(
         bot_help_message=bot_help_message, theme_color=int(color)

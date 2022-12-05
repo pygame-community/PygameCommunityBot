@@ -245,7 +245,7 @@ class QueuingFilter(logging.Filter):
         self,
         name: str = "",
         queue_level: int = logging.NOTSET,
-        maxlen: Optional[int] = None,
+        maxlen: int | None = None,
     ) -> None:
         super().__init__(name)
         self.queue: deque[logging.LogRecord] = deque(maxlen=maxlen)
@@ -308,7 +308,7 @@ def unimport_module(module: types.ModuleType) -> None:
 async def load_databases(
     db_info_data: Sequence[ConfigDatabaseDict],
     raise_exceptions: bool = True,
-    logger: Optional[logging.Logger] = None,
+    logger: logging.Logger | None = None,
 ) -> list[DatabaseDict]:
     dbs = []
 
@@ -360,7 +360,7 @@ async def load_databases(
 async def unload_databases(
     dbs: Iterable[DatabaseDict],
     raise_exceptions: bool = True,
-    logger: Optional[logging.Logger] = None,
+    logger: logging.Logger | None = None,
 ):
     for db_dict in dbs:
         db_name = db_dict["name"]
@@ -423,17 +423,15 @@ async def create_bot_extension_data_table(db: DatabaseDict):
 
 
 async def message_delete_reaction_listener(
-    client: Union[discord.Client, discord.AutoShardedClient],
+    client: discord.Client | discord.AutoShardedClient,
     message: discord.Message,
-    invoker: Union[discord.Member, discord.User],
-    emoji: Union[discord.Emoji, discord.PartialEmoji, str],
-    role_whitelist: Optional[Collection[Union[discord.Role, int]]] = None,
-    timeout: Optional[float] = None,
-    on_delete: Union[
-        Callable[[discord.Message], Coroutine[Any, Any, Any]],
-        Callable[[discord.Message], Any],
-        None,
-    ] = None,
+    invoker: discord.Member | discord.User,
+    emoji: discord.Emoji | discord.PartialEmoji | str,
+    role_whitelist: Collection[discord.Role | int] | None = None,
+    timeout: float | None = None,
+    on_delete: Callable[[discord.Message], Coroutine[Any, Any, Any]]
+    | Callable[[discord.Message], Any]
+    | None = None,
 ):
     """Allows for a message to be deleted using a specific reaction.
     If any HTTP-related exceptions are raised by `discord.py` within this function,
@@ -443,15 +441,15 @@ async def message_delete_reaction_listener(
     ----------
     message : :class:`discord.Message`
         The message to use.
-    invoker : Union[:class:`discord.Member`, :class:`discord.User`]
+    invoker : :class:`discord.Member` | :class:`discord.User`
         The member/user who can delete a message.
-    emoji : Union[:class:`discord.Emoji`, :class:`discord.PartialEmoji`, :class:`str`]):
+    emoji : :class:`discord.Emoji` | :class:`discord.PartialEmoji` | :class:`str`):
         The emoji to listen for.
-    role_whitelist : Optional[Collection[Union[:class:`discord.Role`, :class:`int`]]], optional
+    role_whitelist : Collection[:class:`discord.Role` | :class:`int`] | None, optional
         A collection of roles or role IDs whose users' reactions can also be picked up by this function.
-    timeout : Optional[:class:`float`], optional
+    timeout : :class:`float` | None, optional
         A timeout for waiting, before automatically removing any added reactions and returning silently.
-    on_delete : Union[Callable[[:class:`discord.Message`], Coroutine[Any, Any, Any]], Callable[[:class:`discord.Message`], Any], None], optional
+    on_delete : Callable[[:class:`discord.Message`], Coroutine[Any, Any, Any]] | Callable[[:class:`discord.Message`], Any] | None, optional
         A (coroutine) function to call when a message is successfully deleted via the reaction. Defaults to `None`.
 
     Raises

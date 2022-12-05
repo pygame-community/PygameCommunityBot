@@ -84,7 +84,7 @@ import snakecore
 
 from .bases import BaseExtCog
 
-BotT = Union[snakecore.commands.Bot, snakecore.commands.AutoShardedBot]
+BotT = snakecore.commands.Bot | snakecore.commands.AutoShardedBot
 
 DOC_EMBED_LIMIT = 3
 
@@ -306,5 +306,5 @@ class DocsPre(BaseExtCog, name="docs-pre"):
 
 
 @snakecore.commands.decorators.with_config_kwargs
-async def setup(bot: BotT, color: Union[int, discord.Color] = 0):
+async def setup(bot: BotT, color: int | discord.Color = 0):
     await bot.add_cog(DocsPre(bot, theme_color=color))

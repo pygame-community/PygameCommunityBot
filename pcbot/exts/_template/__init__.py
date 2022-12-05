@@ -29,7 +29,7 @@ class MyExtCog(BaseExtCog, name="my-ext"):
         bot: BotT,
         db_engine: AsyncEngine,
         revision_number: int,
-        theme_color: Union[int, discord.Color] = 0,
+        theme_color: int | discord.Color = 0,
     ) -> None:
         super().__init__(bot, theme_color)
         self.db_engine = db_engine
@@ -54,7 +54,7 @@ rollback = ext_spec.rollback
 @snakecore.commands.decorators.with_config_kwargs
 async def setup(
     bot: BotT,
-    color: Union[int, discord.Color] = 0
+    color: int | discord.Color = 0
     # add more optional parameters as desired
 ):
     await ext_spec.prepare_setup(bot)
