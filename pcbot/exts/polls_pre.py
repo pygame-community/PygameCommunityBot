@@ -17,7 +17,7 @@ from snakecore.commands.converters import String, StringExpr, UnicodeEmoji, Pare
 
 from .bases import BaseExtCog
 
-BotT = Union[snakecore.commands.Bot, snakecore.commands.AutoShardedBot]
+BotT = snakecore.commands.Bot | snakecore.commands.AutoShardedBot
 
 
 def parse_text_to_mapping(
@@ -106,12 +106,13 @@ class PollsPre(BaseExtCog, name="polls-pre"):
         self,
         ctx: commands.Context[BotT],
         description: str,
-        *emojis: tuple[Union[str, discord.PartialEmoji], str],
+        *emojis: tuple[str | discord.PartialEmoji, str],
         multiple_votes: bool = True,
-        _destination: Optional[
-            Union[discord.TextChannel, discord.VoiceChannel, discord.Thread]
-        ] = None,
-        _richpoll_embed_dict: Optional[dict] = None,
+        _destination: discord.TextChannel
+        | discord.VoiceChannel
+        | discord.Thread
+        | None = None,
+        _richpoll_embed_dict: dict | None = None,
     ):
         _richpoll_embed_dict = _richpoll_embed_dict or {}
 
@@ -194,7 +195,7 @@ class PollsPre(BaseExtCog, name="polls-pre"):
         self,
         ctx: commands.Context[BotT],
         msg: discord.Message,
-        _color: Optional[discord.Color] = None,
+        _color: discord.Color | None = None,
     ):
         assert isinstance(ctx.author, discord.Member)
 
@@ -340,7 +341,7 @@ class PollsPre(BaseExtCog, name="polls-pre"):
         ctx: commands.Context[BotT],
         description: String,
         *,
-        option: list[tuple[Union[UnicodeEmoji, discord.PartialEmoji], String]],
+        option: list[tuple[UnicodeEmoji | discord.PartialEmoji, String]],
         multiple_votes: bool = True,
     ):
         """Create a poll, powered by Discord message embeds and reactions.
@@ -378,7 +379,7 @@ class PollsPre(BaseExtCog, name="polls-pre"):
     async def poll_close(
         self,
         ctx: commands.Context[BotT],
-        message: Optional[discord.Message],
+        message: discord.Message | None,
     ):
         """Close the poll in the specified message.
 
@@ -408,15 +409,16 @@ class PollsPre(BaseExtCog, name="polls-pre"):
         ctx: commands.Context[BotT],
         description: String,
         *,
-        option: list[tuple[Union[UnicodeEmoji, discord.PartialEmoji], String]],
-        destination: Optional[
-            Union[discord.TextChannel, discord.VoiceChannel, discord.Thread]
-        ] = None,
-        author: Optional[String] = None,
-        color: Optional[discord.Color] = None,
-        url: Optional[StringExpr[snakecore.utils.regex_patterns.HTTP_URL]] = None,
-        image_url: Optional[StringExpr[snakecore.utils.regex_patterns.HTTP_URL]] = None,
-        thumbnail: Optional[String] = None,
+        option: list[tuple[UnicodeEmoji | discord.PartialEmoji, String]],
+        destination: discord.TextChannel
+        | discord.VoiceChannel
+        | discord.Thread
+        | None = None,
+        author: String | None = None,
+        color: discord.Color | None = None,
+        url: StringExpr[snakecore.utils.regex_patterns.HTTP_URL] | None = None,
+        image_url: StringExpr[snakecore.utils.regex_patterns.HTTP_URL] | None = None,
+        thumbnail: String | None = None,
         multiple_votes: bool = True,
     ):
         """Create a poll, powered by Discord message embeds and reactions.
@@ -506,9 +508,9 @@ class PollsPre(BaseExtCog, name="polls-pre"):
     async def richpoll_close(
         self,
         ctx: commands.Context[BotT],
-        message: Optional[discord.Message] = None,
+        message: discord.Message | None = None,
         *,
-        color: Optional[discord.Color] = None,
+        color: discord.Color | None = None,
     ):
         """Close the poll in the specified message, optionally changing its embed's color to the one specified.
 

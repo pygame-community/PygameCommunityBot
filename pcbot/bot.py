@@ -83,7 +83,7 @@ class PygameCommunityBot(snakecore.commands.Bot):
     def cached_embed_paginators_maxsize(self):
         return self._cached_embed_paginators_maxsize
 
-    async def is_owner(self, user: Union[discord.User, discord.Member], /) -> bool:
+    async def is_owner(self, user: discord.User | discord.Member, /) -> bool:
         return (
             isinstance(user, discord.Member)
             and (owner_role_ids := self._config.get("owner_role_ids", ()))
@@ -91,7 +91,7 @@ class PygameCommunityBot(snakecore.commands.Bot):
         ) or await super().is_owner(user)
 
     async def process_commands(
-        self, message: discord.Message, /, ctx: Optional[commands.Context] = None
+        self, message: discord.Message, /, ctx: commands.Context | None = None
     ) -> None:
         if message.author.bot:
             return
@@ -283,7 +283,7 @@ class PygameCommunityBot(snakecore.commands.Bot):
 
     async def get_context(
         self,
-        origin: Union[discord.Message, discord.Interaction],
+        origin: discord.Message | discord.Interaction,
         /,
         *,
         cls: Type[commands.Context["PygameCommunityBot"]] = discord.utils.MISSING,
@@ -569,13 +569,13 @@ class PygameCommunityBot(snakecore.commands.Bot):
             finally:
                 del self._recent_response_error_messages[ctx.message.id]
 
-    def get_database(self) -> Optional[AsyncEngine]:
+    def get_database(self) -> AsyncEngine | None:
         """Get an `sqlachemy.ext.asyncio.AsyncEngine` object for the main
         database of this bot.
 
         Returns
         -------
-        Optional[AsyncEngine]
+        AsyncEngine | None
             The engine, or None if nothing was loaded/configured.
         """
 
@@ -624,7 +624,7 @@ class PygameCommunityBot(snakecore.commands.Bot):
         revision_number: int,
         auto_migrate: bool,
         db_table_prefix: str,
-        data: Optional[bytes] = None,
+        data: bytes | None = None,
     ):
         if not self._extension_data_storage_is_init:
             raise RuntimeError("Extension data storage was not initialized.")
@@ -761,11 +761,11 @@ class PygameCommunityBot(snakecore.commands.Bot):
     async def update_extension_data(
         self,
         name: str,
-        last_session_version: Optional[str] = None,
-        revision_number: Optional[int] = None,
-        auto_migrate: Optional[bool] = None,
-        db_table_prefix: Optional[str] = None,
-        data: Optional[bytes] = None,
+        last_session_version: str | None = None,
+        revision_number: int | None = None,
+        auto_migrate: bool | None = None,
+        db_table_prefix: str | None = None,
+        data: bytes | None = None,
     ):
 
         if not self._extension_data_storage_is_init:

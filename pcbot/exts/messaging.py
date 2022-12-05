@@ -18,13 +18,11 @@ from snakecore.commands.converters import CodeBlock, String, Parens, TimeDelta
 
 from .bases import BaseExtCog
 
-BotT = Union[snakecore.commands.Bot, snakecore.commands.AutoShardedBot]
-MessageableGuildChannel = Union[
-    discord.TextChannel, discord.VoiceChannel, discord.Thread
-]
+BotT = snakecore.commands.Bot | snakecore.commands.AutoShardedBot
+MessageableGuildChannel = discord.TextChannel | discord.VoiceChannel | discord.Thread
 
 
-def get_markdown_member_info(member: Union[discord.Member, discord.User]):
+def get_markdown_member_info(member: discord.Member | discord.User):
     member_name_info = f"\u200b\n*Name*: \n> {member.mention} \n> "
     if hasattr(member, "nick") and member.display_name:
         member_nick = (
@@ -95,7 +93,7 @@ def get_msg_info_embed(msg: discord.Message, author: bool = True):
     """
     Generate an embed containing info about a message and its author.
     """
-    member: Union[discord.Member, discord.User] = msg.author
+    member: discord.Member | discord.User = msg.author
 
     msg_created_at_info = f"*Created On:*\n> {snakecore.utils.create_markdown_timestamp(msg.created_at)}\n\n"
 
@@ -210,15 +208,15 @@ class Messaging(BaseExtCog, name="messaging"):
         ctx: commands.Context[BotT],
         attachments: commands.Greedy[discord.Attachment],
         *,
-        content: Optional[String] = None,
+        content: String | None = None,
         embeds: tuple[CodeBlock, ...],
-        to: Optional[tuple[MessageableGuildChannel, ...]] = None,
-        reply_to: Optional[discord.PartialMessage] = None,
-        delete_after: Optional[Union[float, TimeDelta]] = None,
+        to: tuple[MessageableGuildChannel, ...] | None = None,
+        reply_to: discord.PartialMessage | None = None,
+        delete_after: float | TimeDelta | None = None,
         mention_all: bool = False,
         mention_everyone: bool = False,
-        mention_users: Union[tuple[discord.User], bool] = False,
-        mention_roles: Union[tuple[discord.Role], bool] = False,
+        mention_users: tuple[discord.User] | bool = False,
+        mention_roles: tuple[discord.Role] | bool = False,
         mention_replied_user: bool = False,
     ):
         assert (
@@ -354,15 +352,15 @@ class Messaging(BaseExtCog, name="messaging"):
         ctx: commands.Context[BotT],
         attachments: commands.Greedy[discord.Attachment],
         *,
-        content: Optional[String[2000]] = None,
+        content: String[2000] | None = None,
         embeds: tuple[CodeBlock, ...] = (),
-        to: Optional[tuple[MessageableGuildChannel, ...]] = None,
-        reply_to: Optional[discord.PartialMessage] = None,
-        delete_after: Optional[Union[float, TimeDelta]] = None,
+        to: tuple[MessageableGuildChannel, ...] | None = None,
+        reply_to: discord.PartialMessage | None = None,
+        delete_after: float | TimeDelta | None = None,
         mention_all: bool = False,
         mention_everyone: bool = False,
-        mention_users: Union[tuple[discord.User], bool] = False,
-        mention_roles: Union[tuple[discord.Role], bool] = False,
+        mention_users: tuple[discord.User] | bool = False,
+        mention_roles: tuple[discord.Role] | bool = False,
         mention_replied_user: bool = False,
     ):
         """Send a message to the invocation channel or a custom destination.
@@ -438,15 +436,15 @@ class Messaging(BaseExtCog, name="messaging"):
         ctx: commands.Context[BotT],
         attachments: commands.Greedy[discord.Attachment],
         *,
-        content: Optional[String[2000]] = None,
+        content: String[2000] | None = None,
         embeds: tuple[CodeBlock, ...] = (),
-        to: Optional[tuple[MessageableGuildChannel, ...]] = None,
-        reply_to: Optional[discord.PartialMessage] = None,
-        delete_after: Optional[Union[float, TimeDelta]] = None,
+        to: tuple[MessageableGuildChannel, ...] | None = None,
+        reply_to: discord.PartialMessage | None = None,
+        delete_after: float | TimeDelta | None = None,
         mention_all: bool = False,
         mention_everyone: bool = False,
-        mention_users: Union[tuple[discord.User], bool] = False,
-        mention_roles: Union[tuple[discord.Role], bool] = False,
+        mention_users: tuple[discord.User] | bool = False,
+        mention_roles: tuple[discord.Role] | bool = False,
         mention_replied_user: bool = False,
     ):
         return await self.message_send_func(
@@ -480,13 +478,13 @@ class Messaging(BaseExtCog, name="messaging"):
         ctx: commands.Context[BotT],
         content: str,
         *,
-        to: Optional[tuple[MessageableGuildChannel, ...]] = None,
-        reply_to: Optional[discord.PartialMessage] = None,
-        delete_after: Optional[Union[float, TimeDelta]] = None,
+        to: tuple[MessageableGuildChannel, ...] | None = None,
+        reply_to: discord.PartialMessage | None = None,
+        delete_after: float | TimeDelta | None = None,
         mention_all: bool = False,
         mention_everyone: bool = False,
-        mention_users: Union[tuple[discord.User], bool] = False,
-        mention_roles: Union[tuple[discord.Role], bool] = False,
+        mention_users: tuple[discord.User] | bool = False,
+        mention_roles: tuple[discord.Role] | bool = False,
         mention_replied_user: bool = False,
     ):
         """Send a message with the specified text content to the invocation channel or a custom destination.
@@ -607,22 +605,22 @@ class Messaging(BaseExtCog, name="messaging"):
     async def message_edit(
         self,
         ctx: commands.Context[BotT],
-        message: Optional[discord.Message],
+        message: discord.Message | None,
         attachments: commands.Greedy[discord.Attachment],
         *,
-        content: Optional[String] = None,
+        content: String | None = None,
         embeds: tuple[
-            Union[CodeBlock, discord.Message, Parens[discord.Message, int]], ...
+            CodeBlock | discord.Message | Parens[discord.Message, int], ...
         ] = (),
         remove_content: bool = False,
         remove_embeds: bool = False,
         remove_all_attachments: bool = False,
         remove_old_attachments: bool = False,
-        mention_all: Optional[bool] = None,
-        mention_everyone: Optional[bool] = None,
-        mention_users: Optional[Union[tuple[discord.User], bool]] = None,
-        mention_roles: Optional[Union[tuple[discord.Role], bool]] = None,
-        mention_replied_user: Optional[bool] = None,
+        mention_all: bool | None = None,
+        mention_everyone: bool | None = None,
+        mention_users: tuple[discord.User] | bool | None = None,
+        mention_roles: tuple[discord.Role] | bool | None = None,
+        mention_replied_user: bool | None = None,
     ):
         """Edit a previously sent message.
 
@@ -878,9 +876,8 @@ class Messaging(BaseExtCog, name="messaging"):
     async def message_editcontent(
         self,
         ctx: commands.Context[BotT],
-        message: Optional[
-            discord.Message
-        ],  # required for injecting reference messages to work
+        message: discord.Message
+        | None,  # required for injecting reference messages to work
         content: String[2000],
     ):
         """Edit an existing message with new text content.
@@ -948,7 +945,7 @@ class Messaging(BaseExtCog, name="messaging"):
         self,
         ctx: commands.Context[BotT],
         *messages: discord.Message,
-        to: Optional[MessageableGuildChannel] = None,
+        to: MessageableGuildChannel | None = None,
         content: bool = True,
         content_attachment: bool = False,
         attachments: bool = True,
@@ -1178,11 +1175,11 @@ class Messaging(BaseExtCog, name="messaging"):
         self,
         ctx: commands.Context[BotT],
         *messages: discord.Message,
-        to: Optional[tuple[MessageableGuildChannel, ...]] = None,
+        to: tuple[MessageableGuildChannel, ...] | None = None,
         content: bool = True,
         embeds: bool = True,
         attachments: bool = True,
-        as_spoiler: Optional[bool] = None,
+        as_spoiler: bool | None = None,
         info: bool = False,
         author_info: bool = True,
         skip_empty: bool = True,
@@ -1368,13 +1365,13 @@ class Messaging(BaseExtCog, name="messaging"):
         self,
         ctx: commands.Context[BotT],
         origin: MessageableGuildChannel,
-        quantity: Optional[int] = None,
+        quantity: int | None = None,
         *,
         mode: int = 0,
-        to: Optional[MessageableGuildChannel] = None,
-        before: Optional[Union[discord.PartialMessage, datetime.datetime]] = None,
-        after: Optional[Union[discord.PartialMessage, datetime.datetime]] = None,
-        around: Optional[Union[discord.PartialMessage, datetime.datetime]] = None,
+        to: MessageableGuildChannel | None = None,
+        before: discord.PartialMessage | datetime.datetime | None = None,
+        after: discord.PartialMessage | datetime.datetime | None = None,
+        around: discord.PartialMessage | datetime.datetime | None = None,
         raw: bool = False,
         show_header: bool = True,
         show_author: bool = True,
@@ -1818,7 +1815,7 @@ class Messaging(BaseExtCog, name="messaging"):
         *messages: discord.PartialMessage,
         delete_system_message: bool = False,
         unpin_last: bool = False,
-        _channel: Optional[MessageableGuildChannel] = None,
+        _channel: MessageableGuildChannel | None = None,
     ):
         """Pin the specified messages.
 
@@ -1964,7 +1961,7 @@ class Messaging(BaseExtCog, name="messaging"):
     async def message_pin_in(
         self,
         ctx: commands.Context[BotT],
-        channel: Optional[MessageableGuildChannel] = None,
+        channel: MessageableGuildChannel | None = None,
         *messages: discord.PartialMessage,
         delete_system_message: bool = False,
         unpin_last: bool = True,
@@ -2010,7 +2007,7 @@ class Messaging(BaseExtCog, name="messaging"):
         self,
         ctx: commands.Context[BotT],
         *messages: discord.PartialMessage,
-        _channel: Optional[MessageableGuildChannel] = None,
+        _channel: MessageableGuildChannel | None = None,
     ):
         """Unpin the specified messages.
 
@@ -2131,7 +2128,7 @@ class Messaging(BaseExtCog, name="messaging"):
     async def message_unpin_in(
         self,
         ctx: commands.Context[BotT],
-        channel: Optional[MessageableGuildChannel] = None,
+        channel: MessageableGuildChannel | None = None,
         *messages: discord.PartialMessage,
     ):
         """Unpin the specified messages in the specified channel.
@@ -2149,5 +2146,5 @@ class Messaging(BaseExtCog, name="messaging"):
 
 
 @snakecore.commands.decorators.with_config_kwargs
-async def setup(bot: BotT, color: Union[int, discord.Color] = 0):
+async def setup(bot: BotT, color: int | discord.Color = 0):
     await bot.add_cog(Messaging(bot, theme_color=color))

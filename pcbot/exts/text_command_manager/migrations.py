@@ -6,7 +6,7 @@ Copyright (c) 2022-present pygame-community.
 from typing import Union
 from . import DB_TABLE_PREFIX
 
-REVISIONS: list[dict[str, Union[str, tuple[str, ...]]]] = [
+REVISIONS: list[dict[str, str | tuple[str, ...]]] = [
     {  # revision 0
         "sqlite": (
             f"CREATE TABLE '{DB_TABLE_PREFIX}guild_tcmd_states' ("
@@ -33,7 +33,7 @@ REVISIONS: list[dict[str, Union[str, tuple[str, ...]]]] = [
     }
 ]
 
-ROLLBACKS: list[dict[str, Union[str, tuple[str, ...]]]] = [
+ROLLBACKS: list[dict[str, str | tuple[str, ...]]] = [
     {  # anti-revision 0
         "sqlite": (f"DROP TABLE '{DB_TABLE_PREFIX}guild_tcmd_states'"),
         "postgresql": (f"DROP TABLE '{DB_TABLE_PREFIX}guild_tcmd_states'"),

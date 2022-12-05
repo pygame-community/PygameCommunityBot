@@ -35,22 +35,20 @@ BotT = PygameCommunityBot
 
 ChannelOrRoleOverrides = list[
     tuple[
-        Union[
-            discord.Role,
-            discord.TextChannel,
-            discord.VoiceChannel,
-            discord.ForumChannel,
-            Literal[
-                "all channels",
-                "All Channels",
-                "All channels",
-                "all Channels",
-                "ALL CHANNELS",
-                "everyone",
-                "@everyone",
-                "Everyone",
-                "EVERYONE",
-            ],
+        discord.Role
+        | discord.TextChannel
+        | discord.VoiceChannel
+        | discord.ForumChannel
+        | Literal[
+            "all channels",
+            "All Channels",
+            "All channels",
+            "all Channels",
+            "ALL CHANNELS",
+            "everyone",
+            "@everyone",
+            "Everyone",
+            "EVERYONE",
         ],
         bool,
     ]
@@ -173,8 +171,8 @@ class TextCommandManagerCog(BaseExtCog, name="text-command-manager"):
             )
 
     async def tcmd_cannot_run_reason(
-        self, ctx: commands.Context[BotT], command: Optional[commands.Command] = None
-    ) -> Optional[TCMDCantRunReason]:
+        self, ctx: commands.Context[BotT], command: commands.Command | None = None
+    ) -> TCMDCantRunReason | None:
         if not (
             ctx.guild
             and isinstance(ctx.author, discord.Member)
@@ -376,7 +374,7 @@ class TextCommandManagerCog(BaseExtCog, name="text-command-manager"):
         return None
 
     async def tcmd_can_run(
-        self, ctx: commands.Context[BotT], command: Optional[commands.Command] = None
+        self, ctx: commands.Context[BotT], command: commands.Command | None = None
     ) -> bool:
         return not await self.tcmd_cannot_run_reason(ctx, command=command)
 
@@ -621,9 +619,7 @@ class TextCommandManagerCog(BaseExtCog, name="text-command-manager"):
     async def tcm_mockroles(
         self,
         ctx: commands.Context[BotT],
-        *roles: Union[
-            discord.Role, Literal["everyone", "@everyone", "Everyone", "EVERYONE"]
-        ],
+        *roles: discord.Role | Literal["everyone", "@everyone", "Everyone", "EVERYONE"],
     ):
         """Apply one or more ephemeral mock roles to yourself, to be used for testing
         text command permissions. Only 100 mock roles can be set at a time.
@@ -966,11 +962,11 @@ class TextCommandManagerCog(BaseExtCog, name="text-command-manager"):
     async def tcm_set(
         self,
         ctx: commands.Context[BotT],
-        name: Union[Parens[str, ...], str],
+        name: Parens[str, ...] | str,
         *,
         override: ChannelOrRoleOverrides,
-        enabled: Optional[bool] = None,
-        subcommands_enabled: Optional[bool] = None,
+        enabled: bool | None = None,
+        subcommands_enabled: bool | None = None,
     ):
         """Add or replace settings for the specified text commands.
 
@@ -1311,10 +1307,10 @@ class TextCommandManagerCog(BaseExtCog, name="text-command-manager"):
     async def tcm_clearoverrides(
         self,
         ctx: commands.Context[BotT],
-        name: Union[Parens[str, ...], str],
+        name: Parens[str, ...] | str,
         *,
-        roles: Optional[bool] = None,
-        channels: Optional[bool] = None,
+        roles: bool | None = None,
+        channels: bool | None = None,
     ):
         """Clear any channel and/or role overrides for the specified text commands.
 
@@ -1381,8 +1377,8 @@ class TextCommandManagerCog(BaseExtCog, name="text-command-manager"):
         self,
         ctx: commands.Context[BotT],
         *,
-        roles: Optional[bool] = None,
-        channels: Optional[bool] = None,
+        roles: bool | None = None,
+        channels: bool | None = None,
     ):
         """Clear any global channel and/or role overrides that may be used or overridden by text commands.
 
@@ -1450,7 +1446,7 @@ rollback = ext_spec.rollback
 @snakecore.commands.decorators.with_config_kwargs
 async def setup(
     bot: BotT,
-    color: Union[int, discord.Color] = 0
+    color: int | discord.Color = 0
     # add more optional parameters as desired
 ):
     await ext_spec.prepare_setup(bot)

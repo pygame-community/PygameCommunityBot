@@ -15,10 +15,8 @@ from snakecore.commands.converters import CodeBlock, String, Parens
 
 from .bases import BaseExtCog
 
-BotT = Union[snakecore.commands.Bot, snakecore.commands.AutoShardedBot]
-MessageableGuildChannel = Union[
-    discord.TextChannel, discord.VoiceChannel, discord.Thread
-]
+BotT = snakecore.commands.Bot | snakecore.commands.AutoShardedBot
+MessageableGuildChannel = discord.TextChannel | discord.VoiceChannel | discord.Thread
 
 PGC_GUILD_ID = 772505616680878080
 SERVER_GUIDE_CHANNEL_ID = 772528306615615500
@@ -101,7 +99,7 @@ BOT_WELCOME_MSG = {
 
 
 class PGCActivity(BaseExtCog, name="pgc-activity"):
-    def __init__(self, bot: BotT, theme_color: Union[int, discord.Color] = 0) -> None:
+    def __init__(self, bot: BotT, theme_color: int | discord.Color = 0) -> None:
         super().__init__(bot, theme_color)
 
     @commands.Cog.listener()

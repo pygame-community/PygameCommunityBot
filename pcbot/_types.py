@@ -32,7 +32,7 @@ class ExtensionData(TypedDict):
     revision_number: int
     auto_migrate: bool
     db_table_prefix: str
-    data: Optional[bytes]
+    data: bytes | None
 
 
 class ConfigAuthentication(TypedDict):

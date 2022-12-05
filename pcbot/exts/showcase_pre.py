@@ -14,14 +14,14 @@ import snakecore
 
 from .bases import BaseExtCog
 
-BotT = Union[snakecore.commands.Bot, snakecore.commands.AutoShardedBot]
+BotT = snakecore.commands.Bot | snakecore.commands.AutoShardedBot
 
 SHOWCASE_ENTRIES_CHANNEL = 772507247540437032
 ENTRIES_DISCUSSION_CHANNEL = 780351772514058291
 
 
 class ShowcasePre(BaseExtCog, name="showcase-pre"):
-    def __init__(self, bot: BotT, theme_color: Union[int, discord.Color] = 0) -> None:
+    def __init__(self, bot: BotT, theme_color: int | discord.Color = 0) -> None:
         super().__init__(bot, theme_color=theme_color)
         self.entry_message_deletion_dict: dict[int, tuple[asyncio.Task[None], int]] = {}
 
@@ -48,7 +48,7 @@ class ShowcasePre(BaseExtCog, name="showcase-pre"):
     @staticmethod
     def format_entries_message(
         msg: discord.Message,
-    ) -> tuple[str, list[dict[str, Union[str, bool]]]]:
+    ) -> tuple[str, list[dict[str, str | bool]]]:
         """
         Formats an entries message to be reposted in discussion channel
         """

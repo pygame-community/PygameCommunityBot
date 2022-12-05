@@ -123,7 +123,7 @@ def setup_logging(log_level) -> None:
     logger.addHandler(rotating_file_handler)
 
 
-def clear_logging_handlers(logger: Optional[logging.Logger] = None):
+def clear_logging_handlers(logger: logging.Logger | None = None):
     if logger is None:
         logger = logging.getLogger()
 
@@ -159,7 +159,7 @@ async def close_bot(bot: Bot) -> None:
 
 
 def load_config_files(
-    config_path: Optional[str], localconfig_path: Optional[str], quiet: bool = False
+    config_path: str | None, localconfig_path: str | None, quiet: bool = False
 ) -> None:
 
     if not quiet:
@@ -685,16 +685,16 @@ async def delete_bot_extension_data(
 # fmt: on
 def main(
     ctx: click.Context,
-    config_path: Optional[str],
-    localconfig_path: Optional[str],
+    config_path: str | None,
+    localconfig_path: str | None,
     command_prefix: tuple[str, ...],
     mention_as_command_prefix: bool,
-    intents: Optional[int],
+    intents: int | None,
     ignore_extension: tuple[str, ...],
     ignore_all_extensions: bool,
     ignore_default_extensions: bool,
     ignore_extra_extensions: bool,
-    log_level: Optional[str],
+    log_level: str | None,
     quiet: bool,
 ):
     """Launch this Discord bot application."""
@@ -1099,8 +1099,8 @@ def main(
 # fmt: on
 def extdata(
     ctx: click.Context,
-    config_path: Optional[str],
-    localconfig_path: Optional[str],
+    config_path: str | None,
+    localconfig_path: str | None,
     extension: tuple[str, ...],
     quiet: bool,
 ):
@@ -1146,8 +1146,8 @@ def extdata(
 @click.help_option("-h", "--help", "help")
 # fmt: on
 def delete(
-    config_path: Optional[str],
-    localconfig_path: Optional[str],
+    config_path: str | None,
+    localconfig_path: str | None,
     extension: tuple[str, ...],
     quiet: bool,
     yes: bool,

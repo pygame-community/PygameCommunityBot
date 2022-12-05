@@ -21,7 +21,7 @@ from ..bot import PygameCommunityBot
 
 from .. import __version__
 
-BotT = Union[commands.Bot, commands.AutoShardedBot]
+BotT = commands.Bot | commands.AutoShardedBot
 PCBotT = PygameCommunityBot
 
 _logger = logging.getLogger(__name__)
@@ -30,7 +30,7 @@ _logger = logging.getLogger(__name__)
 class BaseExtCog(commands.Cog):
     __version__ = __version__
 
-    def __init__(self, bot: BotT, theme_color: Union[int, discord.Color] = 0) -> None:
+    def __init__(self, bot: BotT, theme_color: int | discord.Color = 0) -> None:
         super().__init__()
         self.bot = bot
         self.theme_color = discord.Color(int(theme_color))
@@ -123,28 +123,27 @@ class BaseExtCog(commands.Cog):
     async def send_or_edit_response(
         self,
         ctx: commands.Context[BotT],
-        content: Optional[str] = UNSET,
+        content: str | None = UNSET,
         *,
         tts: bool = UNSET,
-        embed: Optional[discord.Embed] = UNSET,
-        embeds: Optional[Sequence[discord.Embed]] = UNSET,
-        attachments: Sequence[Union[discord.Attachment, discord.File]] = UNSET,
-        file: Optional[discord.File] = UNSET,
-        files: Optional[Sequence[discord.File]] = UNSET,
-        stickers: Optional[
-            Sequence[Union[discord.GuildSticker, discord.StickerItem]]
-        ] = None,
-        delete_after: Optional[float] = None,
-        nonce: Optional[Union[str, int]] = None,
-        allowed_mentions: Optional[discord.AllowedMentions] = UNSET,
-        reference: Optional[
-            Union[discord.Message, discord.MessageReference, discord.PartialMessage]
-        ] = None,
-        mention_author: Optional[bool] = None,
-        view: Optional[discord.ui.View] = UNSET,
+        embed: discord.Embed | None = UNSET,
+        embeds: Sequence[discord.Embed] | None = UNSET,
+        attachments: Sequence[discord.Attachment | discord.File] = UNSET,
+        file: discord.File | None = UNSET,
+        files: Sequence[discord.File] | None = UNSET,
+        stickers: Sequence[discord.GuildSticker | discord.StickerItem] | None = None,
+        delete_after: float | None = None,
+        nonce: str | int | None = None,
+        allowed_mentions: discord.AllowedMentions | None = UNSET,
+        reference: discord.Message
+        | discord.MessageReference
+        | discord.PartialMessage
+        | None = None,
+        mention_author: bool | None = None,
+        view: discord.ui.View | None = UNSET,
         suppress_embeds: bool = False,
         suppress: bool = False,
-        destination: Optional[discord.abc.Messageable] = None,
+        destination: discord.abc.Messageable | None = None,
     ) -> discord.Message:  # type: ignore
 
         suppress_embeds = suppress or suppress_embeds
@@ -196,11 +195,12 @@ class BaseExtCog(commands.Cog):
         self,
         ctx: commands.Context[BotT],
         *embeds: discord.Embed,
-        member: Optional[Union[discord.Member, Sequence[discord.Member]]] = None,
-        inactivity_timeout: Optional[int] = 60,
-        destination: Optional[
-            Union[discord.TextChannel, discord.VoiceChannel, discord.Thread]
-        ] = None,
+        member: discord.Member | Sequence[discord.Member] | None = None,
+        inactivity_timeout: int | None = 60,
+        destination: discord.TextChannel
+        | discord.VoiceChannel
+        | discord.Thread
+        | None = None,
     ):
 
         if not ctx.guild:
@@ -296,8 +296,8 @@ class ExtSpec:
     def __init__(
         self,
         name: str,
-        revisions: list[dict[str, Union[str, tuple[str, ...]]]],
-        rollbacks: list[dict[str, Union[str, tuple[str, ...]]]],
+        revisions: list[dict[str, str | tuple[str, ...]]],
+        rollbacks: list[dict[str, str | tuple[str, ...]]],
         default_auto_migrate: bool,
         db_table_prefix: str,
     ) -> None:
