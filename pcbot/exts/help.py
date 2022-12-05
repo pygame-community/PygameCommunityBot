@@ -90,14 +90,10 @@ class EmbedHelpCommand(commands.HelpCommand):
         if self.context.guild:
             if mapping:
                 embed_dict["fields"] = []
-                embed_dict["fields"].append(
-                    dict(
-                        name="Categories: "
-                        f"{len(mapping)-1 if None in mapping else len(mapping)}",
-                        value="\u200b",
-                    )
-                )
+
             text_command_manager: TextCommandManagerCog = self.context.bot.get_cog("text-command-manager")  # type: ignore
+
+            shown_cog_count = 0
 
             for cog, cmds in mapping.items():
                 name = "No Category" if cog is None else cog.qualified_name
@@ -126,6 +122,16 @@ class EmbedHelpCommand(commands.HelpCommand):
                     embed_dict["fields"].append(
                         dict(name=name, value=value, inline=True)
                     )
+                    shown_cog_count += 1
+
+            if shown_cog_count:
+                embed_dict["fields"].insert(
+                    0,
+                    dict(
+                        name=f"Categories: {shown_cog_count}",
+                        value="\u200b",
+                    ),
+                )
 
             embed_dict["footer"] = dict(text=self.get_ending_note())
 
