@@ -19,7 +19,9 @@ from snakecore.commands.converters import CodeBlock, String, Parens, TimeDelta
 from .bases import BaseExtCog
 
 BotT = snakecore.commands.Bot | snakecore.commands.AutoShardedBot
-MessageableGuildChannel = discord.TextChannel | discord.VoiceChannel | discord.Thread
+MessageableGuildChannel = Union[
+    discord.TextChannel, discord.VoiceChannel, discord.Thread
+]
 
 
 def get_markdown_member_info(member: discord.Member | discord.User):
@@ -210,13 +212,15 @@ class Messaging(BaseExtCog, name="messaging"):
         *,
         content: String | None = None,
         embeds: tuple[CodeBlock, ...],
-        to: tuple[MessageableGuildChannel, ...] | None = None,
+        to: tuple[MessageableGuildChannel, ...] = (),
         reply_to: discord.PartialMessage | None = None,
         delete_after: float | TimeDelta | None = None,
         mention_all: bool = False,
         mention_everyone: bool = False,
-        mention_users: tuple[discord.User] | bool = False,
-        mention_roles: tuple[discord.Role] | bool = False,
+        mention_users: bool = False,
+        mention_these_users: tuple[discord.User, ...] = (),
+        mention_roles: bool = False,
+        mention_these_roles: tuple[discord.Role, ...] = (),
         mention_replied_user: bool = False,
     ):
         assert (
@@ -308,8 +312,12 @@ class Messaging(BaseExtCog, name="messaging"):
                         if mention_all
                         else discord.AllowedMentions(
                             everyone=mention_everyone,
-                            users=mention_users,
-                            roles=mention_roles,
+                            users=mention_these_users
+                            if mention_these_users
+                            else mention_users,
+                            roles=mention_these_roles
+                            if mention_these_roles
+                            else mention_roles,
                             replied_user=mention_replied_user,
                         )
                     ),
@@ -327,8 +335,12 @@ class Messaging(BaseExtCog, name="messaging"):
                         if mention_all
                         else discord.AllowedMentions(
                             everyone=mention_everyone,
-                            users=mention_users,
-                            roles=mention_roles,
+                            users=mention_these_users
+                            if mention_these_users
+                            else mention_users,
+                            roles=mention_these_roles
+                            if mention_these_roles
+                            else mention_roles,
                             replied_user=mention_replied_user,
                         )
                     ),
@@ -344,7 +356,7 @@ class Messaging(BaseExtCog, name="messaging"):
         usage="[attachments (upload files < 8 MiB)]... [content: Text[2000]] [embeds: CodeBlock...] "
         "[to: Channel] [reply_to: Message] [delete_after: Number/TimeDelta] "
         "[mention_all: yes|no] [mention_everyone: yes|no] "
-        "[mention_users: User.../yes|no] [mention_roles: Role.../yes|no] [mention_replied_user: yes|no]",
+        "[mention_users: yes|no] [mention_these_users: User...] [mention_roles: yes|no] [mention_these_roles: Role...] [mention_replied_user: yes|no]",
     )
     @flagconverter_kwargs()
     async def message(
@@ -354,13 +366,15 @@ class Messaging(BaseExtCog, name="messaging"):
         *,
         content: String[2000] | None = None,
         embeds: tuple[CodeBlock, ...] = (),
-        to: tuple[MessageableGuildChannel, ...] | None = None,
+        to: tuple[MessageableGuildChannel, ...] = (),
         reply_to: discord.PartialMessage | None = None,
         delete_after: float | TimeDelta | None = None,
         mention_all: bool = False,
         mention_everyone: bool = False,
-        mention_users: tuple[discord.User] | bool = False,
-        mention_roles: tuple[discord.Role] | bool = False,
+        mention_users: bool = False,
+        mention_these_users: tuple[discord.User, ...] = (),
+        mention_roles: bool = False,
+        mention_these_roles: tuple[discord.Role, ...] = (),
         mention_replied_user: bool = False,
     ):
         """Send a message to the invocation channel or a custom destination.
@@ -394,15 +408,22 @@ class Messaging(BaseExtCog, name="messaging"):
         **`[mention_everyone: yes|no]`**
         > A flag for whether @everyone should be mentioned.
 
-        **`[mention_users: User.../yes|no]`**
+        **`[mention_users: yes|no]`**
         > A flag for whether any mentioned users in the message text content should receive a mention ping.
-        > Can be either 'yes' or 'no', or a sequence of users to ping.
         > Defaults to 'no'.
 
-        **`[mention_roles: Role.../yes|no]`**
+        **`[mention_these_users: User...]`**
+        > A flag for a sequence of users in the message text content that should receive a mention ping.
+         > This overrides the settings of the `mention_users:` flag.
+
+        **`[mention_roles: yes|no]`**
         > A flag for whether any mentioned roles in the message text content should receive a mention ping.
         > Can be either 'yes' or 'no', or a sequence of roles to ping.
         > Defaults to 'no'.
+
+        **`[mention_these_roles: Role...]`**
+        > > A flag for a sequence of roles in the message text content that should receive a mention ping.
+        > This overrides the settings of the `mention_roles:` flag.
 
         **`[mention_replied_user: yes|no]`**
         > A flag for whether a user being replied to should be pinged.
@@ -419,7 +440,9 @@ class Messaging(BaseExtCog, name="messaging"):
             mention_all=mention_all,
             mention_everyone=mention_everyone,
             mention_users=mention_users,
+            mention_these_users=mention_these_users,
             mention_roles=mention_roles,
+            mention_these_roles=mention_these_roles,
             mention_replied_user=mention_replied_user,
         )
 
@@ -438,13 +461,15 @@ class Messaging(BaseExtCog, name="messaging"):
         *,
         content: String[2000] | None = None,
         embeds: tuple[CodeBlock, ...] = (),
-        to: tuple[MessageableGuildChannel, ...] | None = None,
+        to: tuple[MessageableGuildChannel, ...] = (),
         reply_to: discord.PartialMessage | None = None,
         delete_after: float | TimeDelta | None = None,
         mention_all: bool = False,
         mention_everyone: bool = False,
-        mention_users: tuple[discord.User] | bool = False,
-        mention_roles: tuple[discord.Role] | bool = False,
+        mention_users: bool = False,
+        mention_these_users: tuple[discord.User, ...] = (),
+        mention_roles: bool = False,
+        mention_these_roles: tuple[discord.Role, ...] = (),
         mention_replied_user: bool = False,
     ):
         return await self.message_send_func(
@@ -458,7 +483,9 @@ class Messaging(BaseExtCog, name="messaging"):
             mention_all=mention_all,
             mention_everyone=mention_everyone,
             mention_users=mention_users,
+            mention_these_users=mention_these_users,
             mention_roles=mention_roles,
+            mention_these_roles=mention_these_roles,
             mention_replied_user=mention_replied_user,
         )
 
@@ -478,13 +505,15 @@ class Messaging(BaseExtCog, name="messaging"):
         ctx: commands.Context[BotT],
         content: str,
         *,
-        to: tuple[MessageableGuildChannel, ...] | None = None,
+        to: tuple[MessageableGuildChannel, ...] = (),
         reply_to: discord.PartialMessage | None = None,
         delete_after: float | TimeDelta | None = None,
         mention_all: bool = False,
         mention_everyone: bool = False,
-        mention_users: tuple[discord.User] | bool = False,
-        mention_roles: tuple[discord.Role] | bool = False,
+        mention_users: bool = False,
+        mention_these_users: tuple[discord.User, ...] = (),
+        mention_roles: bool = False,
+        mention_these_roles: tuple[discord.Role, ...] = (),
         mention_replied_user: bool = False,
     ):
         """Send a message with the specified text content to the invocation channel or a custom destination.
@@ -512,15 +541,22 @@ class Messaging(BaseExtCog, name="messaging"):
         **`[mention_everyone: yes|no]`**
         > A flag for whether @everyone should be mentioned.
 
-        **`[mention_users: User.../yes|no]`**
+        **`[mention_users: yes|no]`**
         > A flag for whether any mentioned users in the message text content should receive a mention ping.
-        > Can be either 'yes' or 'no', or a sequence of users to ping.
         > Defaults to 'no'.
 
-        **`[mention_roles: Role.../yes|no]`**
+        **`[mention_these_users: User...]`**
+        > A flag for a sequence of users in the message text content that should receive a mention ping.
+         > This overrides the settings of the `mention_users:` flag.
+
+        **`[mention_roles: yes|no]`**
         > A flag for whether any mentioned roles in the message text content should receive a mention ping.
         > Can be either 'yes' or 'no', or a sequence of roles to ping.
         > Defaults to 'no'.
+
+        **`[mention_these_roles: Role...]`**
+        > > A flag for a sequence of roles in the message text content that should receive a mention ping.
+        > This overrides the settings of the `mention_roles:` flag.
 
         **`[mention_replied_user: yes|no]`**
         > A flag for whether a user being replied to should be pinged.
@@ -562,8 +598,12 @@ class Messaging(BaseExtCog, name="messaging"):
                         if mention_all
                         else discord.AllowedMentions(
                             everyone=mention_everyone,
-                            users=mention_users,
-                            roles=mention_roles,
+                            users=mention_these_users
+                            if mention_these_users
+                            else mention_users,
+                            roles=mention_these_roles
+                            if mention_these_roles
+                            else mention_roles,
                             replied_user=mention_replied_user,
                         )
                     ),
@@ -576,8 +616,12 @@ class Messaging(BaseExtCog, name="messaging"):
                         if mention_all
                         else discord.AllowedMentions(
                             everyone=mention_everyone,
-                            users=mention_users,
-                            roles=mention_roles,
+                            users=mention_these_users
+                            if mention_these_users
+                            else mention_users,
+                            roles=mention_these_roles
+                            if mention_these_roles
+                            else mention_roles,
                             replied_user=mention_replied_user,
                         )
                     ),
@@ -618,8 +662,10 @@ class Messaging(BaseExtCog, name="messaging"):
         remove_old_attachments: bool = False,
         mention_all: bool | None = None,
         mention_everyone: bool | None = None,
-        mention_users: tuple[discord.User] | bool | None = None,
-        mention_roles: tuple[discord.Role] | bool | None = None,
+        mention_users: bool | None = None,
+        mention_these_users: tuple[discord.User, ...] = (),
+        mention_roles: bool | None = None,
+        mention_these_roles: tuple[discord.Role, ...] = (),
         mention_replied_user: bool | None = None,
     ):
         """Edit a previously sent message.
@@ -652,15 +698,19 @@ class Messaging(BaseExtCog, name="messaging"):
         **`[mention_everyone: yes|no]`**
         > A flag for whether @everyone should be marked as mentioned.
 
-        **`[mention_users: User.../yes|no]`**
+        **`[mention_users: yes|no]`**
         > A flag for whether any mentioned users in the message text content should receive a mention ping.
-        > Can be either 'yes' or 'no', or a sequence of users to ping.
-        > Defaults to 'no'.
 
-        **`[mention_roles: Role.../yes|no]`**
+        **`[mention_these_users: User...]`**
+        > A flag for a sequence of users in the message text content that should receive a mention ping.
+         > This overrides the settings of the `mention_users:` flag.
+
+        **`[mention_roles: yes|no]`**
         > A flag for whether any mentioned roles in the message text content should receive a mention ping.
-        > Can be either 'yes' or 'no', or a sequence of roles to ping.
-        > Defaults to 'no'.
+
+        **`[mention_these_roles: Role...]`**
+        > > A flag for a sequence of roles in the message text content that should receive a mention ping.
+        > This overrides the settings of the `mention_roles:` flag.
 
         **`[mention_replied_user: yes|no]`**
         > A flag for whether a user being replied to should be pinged.
@@ -836,8 +886,14 @@ class Messaging(BaseExtCog, name="messaging"):
         if not mention_all:
             for kwarg, value in (
                 ("everyone", mention_everyone),
-                ("users", mention_users),
-                ("roles", mention_roles),
+                (
+                    "users",
+                    mention_these_users if mention_these_users else mention_users,
+                ),
+                (
+                    "roles",
+                    mention_these_roles if mention_these_roles else mention_roles,
+                ),
                 ("replied_user", mention_replied_user),
             ):
                 if value is not None:
@@ -1175,7 +1231,7 @@ class Messaging(BaseExtCog, name="messaging"):
         self,
         ctx: commands.Context[BotT],
         *messages: discord.Message,
-        to: tuple[MessageableGuildChannel, ...] | None = None,
+        to: tuple[MessageableGuildChannel, ...] = (),
         content: bool = True,
         embeds: bool = True,
         attachments: bool = True,
