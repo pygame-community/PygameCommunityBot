@@ -24,7 +24,7 @@ import snakecore
 from snakecore.constants import UNSET
 from snakecore.utils.pagination import EmbedPaginator
 
-from . import utils
+from . import constants, utils
 from ._types import DatabaseDict, ExtensionData
 
 _logger = logging.getLogger(__name__)
@@ -366,7 +366,9 @@ class PygameCommunityBot(snakecore.commands.Bot):
 
     async def on_ready(self):
         assert self.user is not None
-        self.loading_emoji = self.get_emoji(1017826887990509661) or self.loading_emoji
+        self.loading_emoji = (
+            self.get_emoji(constants.PGC_LOADING_EMOJI_ID) or self.loading_emoji
+        )
         print(f"Logged in as {self.user} (ID: {self.user.id})")
         print("------")
         handle_loading_reactions = self.handle_loading_reactions
@@ -489,7 +491,7 @@ class PygameCommunityBot(snakecore.commands.Bot):
                     f"Command raised an exception: {exception.original.__class__.__name__}: ",
                     "",
                 )
-                color = 0x851D08
+                color = constants.KNOWN_COMMAND_ERROR_COLOR
                 footer_text = exception.__class__.__name__
 
             elif exception.__cause__:
@@ -503,7 +505,7 @@ class PygameCommunityBot(snakecore.commands.Bot):
                     "please report this to the bot team.\n\n"
                     f"```\n{exception.__cause__.args[0] if exception.__cause__.args else ''}```"
                 )
-                color = 0xFF0000
+                color = constants.UNKNOWN_COMMAND_ERROR_COLOR
                 footer_text = exception.__cause__.__class__.__name__
 
         footer_text += "\n(React with 🗑 to delete this error message in the next 30s)"

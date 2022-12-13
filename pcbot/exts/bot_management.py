@@ -4,7 +4,7 @@ Copyright (c) 2022-present pygame-community.
 """
 
 import asyncio
-from collections import deque
+from collections import OrderedDict, deque
 import datetime
 import glob
 import io
@@ -15,6 +15,7 @@ import platform
 import random
 import re
 import time
+import traceback
 from typing import Optional, Union
 
 import discord
@@ -60,7 +61,7 @@ def is_bot_manager():
     return commands.check(predicate)
 
 
-class BotManagement(BaseExtCog, name="bot-management"):
+class BotManagementCog(BaseExtCog, name="bot-management"):
     invoke_on_message_edit: bool = True
 
     def __init__(
@@ -104,6 +105,7 @@ class BotManagement(BaseExtCog, name="bot-management"):
         self.status_channel_id = status_channel_id
         self.invocation_log_channel: discord.TextChannel | None = None
         self.invocation_log_channel_id = invocation_log_channel_id
+        self.cached_invocation_log_messages: dict[int, discord.Message] = {}
         self.status_message: discord.Message | None = None
         self.bot_was_ready = False
 
@@ -141,32 +143,143 @@ class BotManagement(BaseExtCog, name="bot-management"):
             with io.StringIO(ctx.message.content) as log_buffer:
                 log_txt_file = discord.File(log_buffer, filename="command.txt")  # type: ignore
 
-        await self.invocation_log_channel.send(
-            embed=discord.Embed.from_dict(
+        invocation_embed_dict = dict(
+            author=dict(
+                name=str(ctx.author),
+                icon_url=str(ctx.author.avatar or ctx.author.default_avatar),
+            ),
+            description=escaped_cmd_text
+            if len(escaped_cmd_text) <= 4095
+            else escaped_cmd_text[:2044] + "...",
+            fields=[
                 dict(
-                    author=dict(
-                        name=str(ctx.author),
-                        icon_url=str(ctx.author.avatar or ctx.author.default_avatar),
-                    ),
-                    title=f"New Command Invocation",
-                    description=escaped_cmd_text
-                    if len(escaped_cmd_text) <= 4095
-                    else escaped_cmd_text[:2044] + "...",
+                    name="\u200b",
+                    value=f"by {ctx.author.mention} "
+                    f"(ID: {ctx.author.id})\n"
+                    f"**[View Original]({ctx.message.jump_url})**",
+                    inline=False,
+                ),
+            ],
+            timestamp=ctx.message.created_at.isoformat(),
+        )
+
+        command_completion_task = asyncio.create_task(
+            ctx.bot.wait_for(
+                "command_completion",
+                check=lambda _ctx: _ctx.message.id == ctx.message.id,
+            )
+        )
+        command_error_task = asyncio.create_task(
+            ctx.bot.wait_for(
+                "command_error",
+                check=lambda _ctx, exception: _ctx.message.id == ctx.message.id,
+            )
+        )
+        done, pending = await asyncio.wait(
+            (command_completion_task, command_error_task),
+            return_when=asyncio.FIRST_COMPLETED,
+        )
+
+        await asyncio.sleep(1)  # sleep to make rate-limits less likely
+
+        self.cached_invocation_log_messages[
+            ctx.message.id
+        ] = invocation_log_message = await self.invocation_log_channel.send(
+            embed=discord.Embed.from_dict(
+                invocation_embed_dict
+                | dict(
+                    title="Command Invocation "
+                    + (f"(`{ctx.command.qualified_name}`)" if ctx.command else "")
+                    + "\n  • Status: Running "
+                    f"{ctx.bot.get_emoji(constants.PGC_LOADING_EMOJI_ID) or '🔄'}",
                     color=int(self.theme_color),
-                    fields=[
-                        dict(
-                            name="\u200b",
-                            value=f"by {ctx.author.mention} "
-                            f"(ID: {ctx.author.id})\n"
-                            f"**[View Original]({ctx.message.jump_url})**",
-                            inline=False,
-                        ),
-                    ],
-                    timestamp=ctx.message.created_at.isoformat(),
                 )
             ),
             file=log_txt_file,  # type: ignore
         )
+
+        if command_error_task in done and not (
+            command_error_task.cancelled() or command_error_task.exception()
+        ):
+            command_exception: Exception = command_error_task.result()[1]
+            with io.StringIO() as strio:
+                traceback.print_exception(
+                    type(command_exception),
+                    command_exception,
+                    tb=command_exception.__traceback__,
+                    file=strio,
+                )
+                strio.seek(0)
+                await asyncio.sleep(5)
+                is_unknown_error = (
+                    isinstance(command_exception, commands.CommandInvokeError)
+                    and command_exception.__cause__
+                )
+                await invocation_log_message.edit(
+                    embed=discord.Embed.from_dict(
+                        invocation_embed_dict
+                        | dict(
+                            title=f"Command Invocation "
+                            + (
+                                f"(`{ctx.command.qualified_name}`)"
+                                if ctx.command
+                                else ""
+                            )
+                            + f"\n  • Status: "
+                            + (
+                                "Failed (Unknown Error) ❌"
+                                if is_unknown_error
+                                else "Failed ❌"
+                            ),
+                            color=constants.UNKNOWN_COMMAND_ERROR_COLOR
+                            if is_unknown_error
+                            else constants.KNOWN_COMMAND_ERROR_COLOR,
+                        )
+                    ),
+                    attachments=invocation_log_message.attachments
+                    + (
+                        [discord.File(strio, filename="command_invocation_error.txt")]  # type: ignore
+                        if is_unknown_error
+                        else []
+                    ),
+                )
+        elif command_completion_task in done and not (
+            command_completion_task.cancelled() or command_completion_task.exception()
+        ):
+            await asyncio.sleep(5)
+            await invocation_log_message.edit(
+                embed=discord.Embed.from_dict(
+                    invocation_embed_dict
+                    | dict(
+                        title=f"Command Invocation "
+                        + (f"(`{ctx.command.qualified_name}`)" if ctx.command else "")
+                        + "\n  • Status: Completed ✅",
+                        color=constants.SUCCESS_COLOR,
+                    )
+                ),
+            )
+        elif command_completion_task in pending:
+            await command_completion_task
+            await asyncio.sleep(5)
+            await invocation_log_message.edit(
+                embed=discord.Embed.from_dict(
+                    invocation_embed_dict
+                    | dict(
+                        title=f"Command Invocation "
+                        + (f"(`{ctx.command.qualified_name}`)" if ctx.command else "")
+                        + "\n  • Status: Completed ✅",
+                        color=constants.SUCCESS_COLOR,
+                    )
+                ),
+            )
+
+        for tsk in pending:
+            tsk.cancel()
+
+    @commands.Cog.listener()
+    async def on_command_completion(self, ctx: commands.Context["PygameCommunityBot"]):
+        if ctx.message.id in self.cached_invocation_log_messages:
+            del self.cached_invocation_log_messages[ctx.message.id]
 
     @tasks.loop(seconds=60, reconnect=False)
     async def update_status_message(self):
@@ -606,7 +719,7 @@ async def setup(
     invocation_log_channel_id: int | None = None,
 ):
     await bot.add_cog(
-        BotManagement(
+        BotManagementCog(
             bot,
             theme_color=color,
             log_directory=os.path.abspath(log_directory) if log_directory else None,

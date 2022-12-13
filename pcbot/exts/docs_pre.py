@@ -89,7 +89,7 @@ BotT = snakecore.commands.Bot | snakecore.commands.AutoShardedBot
 DOC_EMBED_LIMIT = 3
 
 
-class DocsPre(BaseExtCog, name="docs-pre"):
+class DocsPreCog(BaseExtCog, name="docs-pre"):
     async def put_main_doc(self, ctx: commands.Context[BotT], name: str):
         """
         Put main part of the doc into embed(s)
@@ -307,4 +307,4 @@ class DocsPre(BaseExtCog, name="docs-pre"):
 
 @snakecore.commands.decorators.with_config_kwargs
 async def setup(bot: BotT, color: int | discord.Color = 0):
-    await bot.add_cog(DocsPre(bot, theme_color=color))
+    await bot.add_cog(DocsPreCog(bot, theme_color=color))
