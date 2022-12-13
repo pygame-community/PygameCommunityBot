@@ -20,7 +20,7 @@ SHOWCASE_ENTRIES_CHANNEL = 772507247540437032
 ENTRIES_DISCUSSION_CHANNEL = 780351772514058291
 
 
-class ShowcasePre(BaseExtCog, name="showcase-pre"):
+class ShowcasePreCog(BaseExtCog, name="showcase-pre"):
     def __init__(self, bot: BotT, theme_color: int | discord.Color = 0) -> None:
         super().__init__(bot, theme_color=theme_color)
         self.entry_message_deletion_dict: dict[int, tuple[asyncio.Task[None], int]] = {}
@@ -315,4 +315,4 @@ class ShowcasePre(BaseExtCog, name="showcase-pre"):
 
 @snakecore.commands.decorators.with_config_kwargs
 async def setup(bot: BotT):
-    await bot.add_cog(ShowcasePre(bot))
+    await bot.add_cog(ShowcasePreCog(bot))

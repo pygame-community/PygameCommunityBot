@@ -40,7 +40,7 @@ def parse_text_to_mapping(
     return mapping
 
 
-class PollsPre(BaseExtCog, name="polls-pre"):
+class PollsPreCog(BaseExtCog, name="polls-pre"):
     @commands.Cog.listener()
     async def on_raw_reaction_add(self, payload: discord.RawReactionActionEvent):
         channel = self.bot.get_channel(payload.channel_id)
@@ -533,4 +533,4 @@ class PollsPre(BaseExtCog, name="polls-pre"):
 
 @snakecore.commands.decorators.with_config_kwargs
 async def setup(bot: BotT):
-    await bot.add_cog(PollsPre(bot))
+    await bot.add_cog(PollsPreCog(bot))

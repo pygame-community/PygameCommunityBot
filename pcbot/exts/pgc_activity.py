@@ -98,7 +98,7 @@ BOT_WELCOME_MSG = {
 }
 
 
-class PGCActivity(BaseExtCog, name="pgc-activity"):
+class PGCActivityCog(BaseExtCog, name="pgc-activity"):
     def __init__(self, bot: BotT, theme_color: int | discord.Color = 0) -> None:
         super().__init__(bot, theme_color)
 
@@ -196,4 +196,4 @@ class PGCActivity(BaseExtCog, name="pgc-activity"):
 
 @snakecore.commands.decorators.with_config_kwargs
 async def setup(bot: BotT):
-    await bot.add_cog(PGCActivity(bot))
+    await bot.add_cog(PGCActivityCog(bot))
