@@ -483,7 +483,9 @@ class PygameCommunityBot(snakecore.commands.Bot):
         ):
             if isinstance(exception, commands.CommandInvokeError) and (
                 not exception.__cause__
-                or isinstance(exception.__cause__, discord.HTTPException)
+                or isinstance(
+                    exception.__cause__, (discord.HTTPException, discord.RateLimited)
+                )
             ):
                 title = f"Command `{context.invoked_with}` reported an error"
                 description = exception.args[0] if exception.args else ""

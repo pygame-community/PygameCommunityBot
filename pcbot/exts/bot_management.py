@@ -16,6 +16,7 @@ import random
 import re
 import time
 import traceback
+from types import NoneType
 from typing import Optional, Union
 
 import discord
@@ -211,9 +212,11 @@ class BotManagementCog(BaseExtCog, name="bot-management"):
                 )
                 strio.seek(0)
                 await asyncio.sleep(5)
-                is_unknown_error = (
-                    isinstance(command_exception, commands.CommandInvokeError)
-                    and command_exception.__cause__
+                is_unknown_error = isinstance(
+                    command_exception, commands.CommandInvokeError
+                ) and not isinstance(
+                    command_exception.__cause__,
+                    (discord.HTTPException, discord.RateLimited, NoneType),
                 )
                 await invocation_log_message.edit(
                     embed=discord.Embed.from_dict(
