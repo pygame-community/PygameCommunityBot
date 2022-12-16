@@ -5,13 +5,10 @@ Copyright (c) 2022-present pygame-community.
 
 import asyncio
 import random
-from typing import Union
 
 import discord
 from discord.ext import commands, tasks
 import snakecore
-from snakecore.commands.decorators import flagconverter_kwargs
-from snakecore.commands.converters import CodeBlock, String, Parens
 
 from .bases import BaseExtCog
 
@@ -111,15 +108,16 @@ class PGCActivityCog(BaseExtCog, name="pgc-activity"):
         if (task_loop := self.toggle_presence).is_running():
             task_loop.cancel()
 
-    @tasks.loop(seconds=30, reconnect=False)
+    @tasks.loop(seconds=30, reconnect=True)
     async def toggle_presence(self):
-        key = random.choice(PRESENCES)
         await self.bot.change_presence(
             activity=discord.Activity(
-                type=key,
+                type=(key := random.choice(PRESENCES)),
                 name=random.choice(PRESENCE_MAP[key]),
             )
         )
+
+    toggle_presence.add_exception_type(ConnectionResetError)
 
     @commands.Cog.listener()
     async def on_message(self, message: discord.Message):
