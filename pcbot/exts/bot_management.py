@@ -284,7 +284,7 @@ class BotManagementCog(BaseExtCog, name="bot-management"):
         if ctx.message.id in self.cached_invocation_log_messages:
             del self.cached_invocation_log_messages[ctx.message.id]
 
-    @tasks.loop(seconds=60, reconnect=False)
+    @tasks.loop(seconds=60, reconnect=True)
     async def update_status_message(self):
         next_refresh = datetime.datetime.now(
             datetime.timezone.utc
@@ -374,6 +374,8 @@ class BotManagementCog(BaseExtCog, name="bot-management"):
             await self.status_message.reply(
                 content=f"```ansi\n{raw_content}```"  # announce errors in extra separate messages
             )
+
+    update_status_message.add_exception_type(discord.DiscordServerError)
 
     async def prepare_status_reporting(self):
         if self.invocation_log_channel_id:
