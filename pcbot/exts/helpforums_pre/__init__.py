@@ -11,7 +11,7 @@ import pickle
 import re
 import time
 
-from typing import TYPE_CHECKING, Optional, TypedDict, Union
+from typing import TYPE_CHECKING, Callable, Optional, TypedDict, Union
 
 import discord
 from discord.ext import commands, tasks
@@ -86,13 +86,18 @@ class HelpForumsPreCog(BaseExtCog, name="helpforums-pre"):
                 task_loop.start()
 
     @commands.Cog.listener()
-    async def on_message_delete(self, msg: discord.Message):
+    async def on_message_delete(self, message: discord.Message):
         if (
-            isinstance(msg.channel, discord.Thread)
-            and msg.channel.parent_id in HELP_FORUM_CHANNEL_IDS.values()
-            and msg.id == msg.channel.id  # OP deleted starter message
+            isinstance(message.channel, discord.Thread)
+            and message.channel.parent_id in HELP_FORUM_CHANNEL_IDS.values()
+            and message.id == message.channel.id  # OP deleted starter message
         ):
-            await self.help_thread_deletion_checks(msg.channel)
+            await self.help_thread_deletion_below_size_threshold(
+                message.channel,
+                300,
+                reason="Someone deleted the starter message of this post and it "
+                f"consists of less than {THREAD_DELETION_MESSAGE_THRESHOLD} messages.",
+            )
 
     async def bad_help_thread_data_exists(self, thread_id: int) -> bool:
         conn: AsyncConnection
@@ -614,6 +619,31 @@ class HelpForumsPreCog(BaseExtCog, name="helpforums-pre"):
             await self.delete_inactive_help_thread_data(payload.thread_id)
 
     @commands.Cog.listener()
+    async def on_raw_member_remove(self, payload: discord.RawMemberRemoveEvent):
+        for forum_channel in [
+            self.bot.get_channel(fid) or (await self.bot.fetch_channel(fid))
+            for fid in HELP_FORUM_CHANNEL_IDS.values()
+        ]:
+            if not isinstance(forum_channel, discord.ForumChannel):
+                return
+
+            for help_thread in itertools.chain(
+                forum_channel.threads,
+                [thr async for thr in forum_channel.archived_threads(limit=20)],
+            ):
+                if help_thread.owner_id == payload.user.id:
+                    snakecore.utils.hold_task(
+                        asyncio.create_task(
+                            self.help_thread_deletion_below_size_threshold(
+                                help_thread,
+                                300,
+                                reason="The OP has left the server, and it consists of "
+                                f"less than {THREAD_DELETION_MESSAGE_THRESHOLD} messages.",
+                            )
+                        )
+                    )
+
+    @commands.Cog.listener()
     async def on_raw_reaction_add(self, payload: discord.RawReactionActionEvent):
         try:
             if not snakecore.utils.is_emoji_equal(payload.emoji, "✅"):
@@ -910,8 +940,16 @@ class HelpForumsPreCog(BaseExtCog, name="helpforums-pre"):
                     pass
                 else:
                     continue  # starter message still exists, skip
+
                 snakecore.utils.hold_task(
-                    asyncio.create_task(self.help_thread_deletion_checks(help_thread))
+                    asyncio.create_task(
+                        self.help_thread_deletion_below_size_threshold(
+                            help_thread,
+                            300,
+                            reason="Someone deleted the starter message of this post and it "
+                            f"consists of less than {THREAD_DELETION_MESSAGE_THRESHOLD} messages.",
+                        )
+                    )
                 )
 
     @tasks.loop(hours=1, reconnect=True)
@@ -978,38 +1016,70 @@ class HelpForumsPreCog(BaseExtCog, name="helpforums-pre"):
                     pass
 
     @staticmethod
-    async def help_thread_deletion_checks(thread: discord.Thread):
-        member_msg_count = 0
-        try:
-            async for thread_message in thread.history(
-                limit=max(thread.message_count, 100)
-            ):
-                if (
-                    not thread_message.author.bot
-                    and thread_message.type == discord.MessageType.default
-                ):
-                    member_msg_count += 1
-                    if member_msg_count >= THREAD_DELETION_MESSAGE_THRESHOLD:
-                        break
+    async def count_thread_messages(
+        thread: discord.Thread,
+        maximum: int | None = None,
+        filter_func: Callable[[discord.Message], bool] | None = None,
+        use_cached_value: bool = True,
+    ) -> int:
+        count = 0
+        if filter_func:
+            async for message in thread.history(limit=maximum):
+                if filter_func(message):
+                    count += 1
+        else:
+            if use_cached_value:
+                return thread.message_count
 
-            if member_msg_count < THREAD_DELETION_MESSAGE_THRESHOLD:
-                await thread.send(
-                    embed=discord.Embed(
-                        title="Post scheduled for deletion",
-                        description=(
-                            "Someone deleted the starter message of this post.\n\n"
-                            f"Since it contains less than "
-                            f"{THREAD_DELETION_MESSAGE_THRESHOLD} messages sent by "
-                            "server members, it will be deleted "
-                            f"**<t:{int(time.time()+300)}:R>**."
-                        ),
-                        color=0x551111,
-                    )
+            async for _ in thread.history(limit=maximum):
+                count += 1
+
+        return count
+
+    @staticmethod
+    async def schedule_help_thread_deletion(
+        thread: discord.Thread,
+        when: float,
+        silent: bool = False,
+        reason: str | None = "Someone deleted the starter message of this post "
+        "or its owner has left the server, and it consists of less than "
+        f"{THREAD_DELETION_MESSAGE_THRESHOLD} messages.",
+    ):
+        if not silent:
+            await thread.send(
+                embed=discord.Embed(
+                    title="Post scheduled for deletion",
+                    description=(
+                        "This post is scheduled for deletion"
+                        + (f" for the following reason:\n\n{reason}" if reason else ".")
+                        + "\n\nIt will be deleted "
+                        f"**<t:{int(time.time()+when)}:R>**."
+                    ),
+                    color=0x551111,
                 )
-                await asyncio.sleep(300)
-                await thread.delete()
-        except discord.HTTPException:
+            )
+        await asyncio.sleep(when)
+
+        try:
+            await thread.delete()
+        except discord.NotFound:
             pass
+
+    async def help_thread_deletion_below_size_threshold(
+        self,
+        thread: discord.Thread,
+        when: float,
+        reason: str | None = None,
+    ):
+        if (
+            await self.count_thread_messages(
+                thread,
+                maximum=THREAD_DELETION_MESSAGE_THRESHOLD,
+                filter_func=lambda msg: not msg.author.bot
+                and msg.type == discord.MessageType.default,
+            )
+        ) < THREAD_DELETION_MESSAGE_THRESHOLD:
+            await self.schedule_help_thread_deletion(thread, when=when, reason=reason)
 
     @staticmethod
     def validate_help_forum_channel_thread_name(thread: discord.Thread) -> bool:
