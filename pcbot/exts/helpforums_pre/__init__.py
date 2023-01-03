@@ -73,14 +73,14 @@ class HelpForumsPreCog(BaseExtCog, name="helpforums-pre"):
     async def cog_unload(self) -> None:
         self.inactive_help_thread_alert.stop()
         self.force_help_thread_archive_after_timeout.stop()
-        self.delete_help_threads_without_starter_message.stop()
+        self.delete_help_threads_without_starter_message_or_member.stop()
 
     @commands.Cog.listener()
     async def on_ready(self):
         for task_loop in (
             self.inactive_help_thread_alert,
             self.force_help_thread_archive_after_timeout,
-            self.delete_help_threads_without_starter_message,
+            self.delete_help_threads_without_starter_message_or_member,
         ):
             if not task_loop.is_running():
                 task_loop.start()
@@ -922,7 +922,7 @@ class HelpForumsPreCog(BaseExtCog, name="helpforums-pre"):
                     pass
 
     @tasks.loop(hours=1, reconnect=True)
-    async def delete_help_threads_without_starter_message(self):
+    async def delete_help_threads_without_starter_message_or_member(self):
         for forum_channel in [
             self.bot.get_channel(fid) or (await self.bot.fetch_channel(fid))
             for fid in HELP_FORUM_CHANNEL_IDS.values()
@@ -930,27 +930,32 @@ class HelpForumsPreCog(BaseExtCog, name="helpforums-pre"):
             for help_thread in itertools.chain(
                 forum_channel.threads,  # type: ignore
                 [thr async for thr in forum_channel.archived_threads(limit=20)],  # type: ignore
-            ):
+            ):  
+                if any(tag.name.lower().startswith("solved") for tag in help_thread.applied_tags): # ignore solved posts
+                    continue
+
+                _pass = True
                 try:
                     starter_message = (
                         help_thread.starter_message
                         or await help_thread.fetch_message(help_thread.id)
                     )
-                except discord.NotFound:
-                    pass
-                else:
-                    continue  # starter message still exists, skip
-
-                snakecore.utils.hold_task(
-                    asyncio.create_task(
-                        self.help_thread_deletion_below_size_threshold(
-                            help_thread,
-                            300,
-                            reason="Someone deleted the starter message of this post and it "
-                            f"consists of less than {THREAD_DELETION_MESSAGE_THRESHOLD} messages.",
+                    help_thread_owner = help_thread.guild.get_member(
+                        help_thread.owner_id
+                    ) or await help_thread.guild.fetch_member(help_thread.owner_id)
+                except discord.NotFound:  # starter message was deleted or thread owner has left the server
+                    snakecore.utils.hold_task(
+                        asyncio.create_task(
+                            self.help_thread_deletion_below_size_threshold(
+                                help_thread,
+                                300,
+                                reason="Someone deleted the starter message of this "
+                                "post and/or the OP has left the server, and "
+                                "it consists of less than "
+                                f"{THREAD_DELETION_MESSAGE_THRESHOLD} messages.",
+                            )
                         )
                     )
-                )
 
     @tasks.loop(hours=1, reconnect=True)
     async def force_help_thread_archive_after_timeout(self):
@@ -1069,6 +1074,7 @@ class HelpForumsPreCog(BaseExtCog, name="helpforums-pre"):
         self,
         thread: discord.Thread,
         when: float,
+        silent: bool = False,
         reason: str | None = None,
     ):
         if (
@@ -1079,7 +1085,9 @@ class HelpForumsPreCog(BaseExtCog, name="helpforums-pre"):
                 and msg.type == discord.MessageType.default,
             )
         ) < THREAD_DELETION_MESSAGE_THRESHOLD:
-            await self.schedule_help_thread_deletion(thread, when=when, reason=reason)
+            await self.schedule_help_thread_deletion(
+                thread, when=when, silent=silent, reason=reason
+            )
 
     @staticmethod
     def validate_help_forum_channel_thread_name(thread: discord.Thread) -> bool:
