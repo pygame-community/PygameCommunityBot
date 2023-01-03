@@ -24,7 +24,7 @@ from discord.utils import _ColourFormatter
 from discord.ext import commands, tasks
 import psutil
 import snakecore
-from snakecore.commands.converters import CodeBlock, DateTime, TimeDelta
+from snakecore.commands.converters import CodeBlock, DateTime, TimeDelta, Parens
 from snakecore.commands.decorators import flagconverter_kwargs
 
 from pcbot import constants, PygameCommunityBot, __version__ as bot_version
@@ -536,7 +536,7 @@ class BotManagementCog(BaseExtCog, name="bot-management"):
 
     @is_bot_manager()
     @commands.command(
-        usage="[after: DateTime] [before: DateTime] [limit: Integer]",
+        usage="[after: DateTime] [before: DateTime] [limit: Integer] [levels: Text]",
         extras=dict(invoke_on_message_edit=False),
         hidden=True,
     )
@@ -548,6 +548,7 @@ class BotManagementCog(BaseExtCog, name="bot-management"):
         after: DateTime | None = None,
         before: DateTime | None = None,
         limit: int | None = None,
+        levels: tuple[str, ...] = (),
     ):
         """Get the current log information of this bot application.
 
@@ -560,9 +561,14 @@ class BotManagementCog(BaseExtCog, name="bot-management"):
         > A flag to limit log records to those older than the specified date.
 
         **`[limit: Integer]`**
-        > A total limit on the amount of log records to retrieve.
+        > A flag for the maximum amount of log records to retrieve.
 
-        *If all flags omitted, all log records are returned in files, each ≤ 8 MiB.*
+        **`[levels: Text]`**
+        > A flag to limit log records to those matching the specified log level names.
+        > Omitting this flag permits log records of all levels to be shown.
+        > The filtering process is purely text based, not log level value based.
+
+        *If all flags are omitted, all log records are returned in files, each ≤ 8 MiB.*
         """
         if not self.log_directory:
             raise commands.CommandInvokeError(
@@ -576,7 +582,7 @@ class BotManagementCog(BaseExtCog, name="bot-management"):
                 commands.CommandError("No log data was found.")
             )
 
-        if before is not None or after is not None or limit is not None:
+        if before is not None or after is not None or limit is not None or levels:
             defer_writes = before is None and after is None and limit is not None
             inf = float("inf")
             before_ts = before.timestamp() if before else inf
@@ -608,7 +614,9 @@ class BotManagementCog(BaseExtCog, name="bot-management"):
                                 match.group(1)
                             )  # read timestamp from line
 
-                            if defer_writes:
+                            if defer_writes and (
+                                not levels or match.group(2).lower() in levels
+                            ):  # include only specified log levels
                                 record_strings.append(line)
                                 record_matches.append(match)
                                 last_selected_match = match
@@ -617,6 +625,9 @@ class BotManagementCog(BaseExtCog, name="bot-management"):
                                 previous_match_was_selected := after_ts
                                 < iso_dt.timestamp()
                                 < before_ts
+                                and (
+                                    not levels or match.group(2).lower() in levels
+                                )  # include only specified log levels
                             ):
                                 if total_record_writes + 1 > _limit:
                                     break

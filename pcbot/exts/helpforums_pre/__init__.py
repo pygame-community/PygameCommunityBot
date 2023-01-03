@@ -930,8 +930,11 @@ class HelpForumsPreCog(BaseExtCog, name="helpforums-pre"):
             for help_thread in itertools.chain(
                 forum_channel.threads,  # type: ignore
                 [thr async for thr in forum_channel.archived_threads(limit=20)],  # type: ignore
-            ):  
-                if any(tag.name.lower().startswith("solved") for tag in help_thread.applied_tags): # ignore solved posts
+            ):
+                if any(
+                    tag.name.lower().startswith("solved")
+                    for tag in help_thread.applied_tags
+                ):  # ignore solved posts
                     continue
 
                 _pass = True
