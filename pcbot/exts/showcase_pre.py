@@ -58,7 +58,14 @@ class ShowcasePreCog(BaseExtCog, name="showcase-pre"):
         attachments = ""
         if msg.attachments:
             for i, attachment in enumerate(msg.attachments):
-                attachments += f" • [Link {i + 1}]({attachment.url})\n"
+                if (
+                    len(attachments)
+                    + len((attr_str := f" • [Link {i + 1}]({attachment.url})\n"))
+                    < 1024
+                ):
+                    attachments += attr_str
+                else:
+                    break
         else:
             attachments = "No attachments"
 
@@ -74,7 +81,7 @@ class ShowcasePreCog(BaseExtCog, name="showcase-pre"):
             {"name": "**Attachments**", "value": attachments, "inline": True},
             {
                 "name": "**Description**",
-                "value": desc if len(desc) < 1025 else desc[:1022] + "...",
+                "value": desc if len(desc) < 1024 else desc[:1022] + "...",
                 "inline": True,
             },
         ]
