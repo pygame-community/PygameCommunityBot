@@ -294,7 +294,7 @@ class BotManagementCog(BaseExtCog, name="bot-management"):
         first_record_dt = datetime.datetime.fromtimestamp(recent_records[0].created)
         last_record_dt = datetime.datetime.fromtimestamp(recent_records[-1].created)
         if self.status_message:
-            await self.status_message.edit(
+            self.status_message = await self.status_message.edit(
                 embed=discord.Embed(
                     description="*Next log refresh (last updated on "
                     f"<t:{int((self.status_message.edited_at or self.status_message.created_at).timestamp())}:f>):* "  # type: ignore
