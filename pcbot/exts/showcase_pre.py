@@ -191,7 +191,8 @@ class ShowcasePreCog(BaseExtCog, name="showcase-pre"):
                             warn_msg.id,
                         )
                     except discord.NotFound:  # cancelling didn't work, warning and entry message were already deleted
-                        del self.entry_message_deletion_dict[new.id]
+                        if new.id in self.entry_message_deletion_dict:
+                            del self.entry_message_deletion_dict[new.id]
 
             else:  # an edit led to an invalid entry message from a valid one
                 deletion_datetime = datetime.datetime.now(
@@ -227,7 +228,9 @@ class ShowcasePreCog(BaseExtCog, name="showcase-pre"):
                     await warn_msg.delete()
                 except discord.NotFound:  # cancelling didn't work, warning and entry message were already deleted
                     pass
-            del self.entry_message_deletion_dict[new.id]
+
+            if new.id in self.entry_message_deletion_dict:
+                del self.entry_message_deletion_dict[new.id]
 
         entries_discussion_channel = new.guild.get_channel(  # type: ignore
             ENTRIES_DISCUSSION_CHANNEL
@@ -298,7 +301,8 @@ class ShowcasePreCog(BaseExtCog, name="showcase-pre"):
                     except discord.NotFound:
                         pass
 
-                del self.entry_message_deletion_dict[message.id]
+                if message.id in self.entry_message_deletion_dict:
+                    del self.entry_message_deletion_dict[message.id]
 
             entries_discussion_channel = message.guild.get_channel(
                 ENTRIES_DISCUSSION_CHANNEL
