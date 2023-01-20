@@ -26,6 +26,7 @@ from .migrations import REVISIONS, ROLLBACKS
 from .constants import (
     DB_TABLE_PREFIX,
     HELP_FORUM_CHANNEL_IDS,
+    HELPFULIE_ROLE_ID,
     FORUM_THREAD_TAG_LIMIT,
     INVALID_HELP_THREAD_TITLE_EMBEDS,
     INVALID_HELP_THREAD_TITLE_REGEX_PATTERNS,
@@ -668,14 +669,11 @@ class HelpForumsPreCog(BaseExtCog, name="helpforums-pre"):
                 )
 
                 by_op = payload.user_id == channel.owner_id
+
                 by_admin = (
                     payload.member and payload.member.guild_permissions.administrator
                 )
-                if not msg.pinned and (
-                    by_op
-                    or payload.member
-                    and payload.member.guild_permissions.administrator
-                ):
+                if not msg.pinned and (by_op or by_admin):
                     await msg.pin(
                         reason="The owner of this message's thread has marked it as helpful."
                         if by_op
@@ -694,7 +692,22 @@ class HelpForumsPreCog(BaseExtCog, name="helpforums-pre"):
 
                 if (
                     msg.id == channel.id
-                    and (by_op or by_admin)
+                    and (
+                        by_op
+                        or by_admin
+                        or (
+                            by_helpfulie := payload.member
+                            and discord.utils.find(
+                                lambda role: role.id == HELPFULIE_ROLE_ID,
+                                payload.member.roles,
+                            )
+                            and (
+                                await self.inactive_help_thread_data_exists(
+                                    channel.id
+                                )  # post must be inactive
+                            )
+                        )
+                    )
                     and channel.applied_tags
                     and not any(
                         tag.name.lower() in ("solved", "invalid")
@@ -718,8 +731,14 @@ class HelpForumsPreCog(BaseExtCog, name="helpforums-pre"):
 
                             await channel.edit(
                                 reason="This help post was marked as solved by "
-                                + ("the OP" if by_op else "an admin")
-                                + " (via a ✅ reaction).",
+                                + (
+                                    "the OP"
+                                    if by_op
+                                    else "an admin"
+                                    if by_admin
+                                    else "a Helpfulie"
+                                )
+                                + " (via adding a ✅ reaction).",
                                 applied_tags=new_tags,
                             )
                             break
@@ -776,7 +795,17 @@ class HelpForumsPreCog(BaseExtCog, name="helpforums-pre"):
 
                 if (
                     msg.id == msg.channel.id
-                    and (by_op or by_admin)
+                    and (
+                        by_op
+                        or by_admin
+                        or (
+                            by_helpfulie := payload.member
+                            and discord.utils.find(
+                                lambda role: role.id == HELPFULIE_ROLE_ID,
+                                payload.member.roles,
+                            )
+                        )
+                    )
                     and msg.channel.applied_tags
                     and any(
                         tag.name.lower().startswith("solved")
@@ -792,7 +821,13 @@ class HelpForumsPreCog(BaseExtCog, name="helpforums-pre"):
                             await msg.channel.remove_tags(
                                 tag,
                                 reason="This help post was unmarked as solved by "
-                                + ("the OP" if by_op else "an admin")
+                                + (
+                                    "the OP"
+                                    if by_op
+                                    else "an admin"
+                                    if by_admin
+                                    else "a Helpfulie"
+                                )
                                 + " (via removing a ✅ reaction).",
                             )
                             break
@@ -865,6 +900,7 @@ class HelpForumsPreCog(BaseExtCog, name="helpforums-pre"):
                                             "\nHas your issue been solved? If so, mark it as **Solved** by "
                                             "doing one of these:\n\n"
                                             "  **• React on your starter message with ✅**.\n"
+                                            f"> *Note: <@{HELPFULIE_ROLE_ID}>s can do this too!*"
                                             "  **• Right-click on your post (click and hold on mobile), "
                                             "go to 'Edit Tags', select the `✅ Solved` tag and save your changes.**\n\n"
                                             "**Mark all messages you find helpful here with a ✅ reaction please** "
@@ -1206,7 +1242,9 @@ class HelpForumsPreCog(BaseExtCog, name="helpforums-pre"):
                     "**Mark all messages you find helpful here with a ✅ reaction "
                     "please** <:pg_robot:837389387024957440>\n\n"
                     "The slowmode and archive timeout will both be reverted "
-                    "if this post is unmarked as solved."
+                    "if this post is unmarked as solved. To do so, remove the "
+                    "(`✅ Solved`) tag by removing it manually or removing your "
+                    "✅ reaction."
                 ),
                 color=0x00AA00,
             ),
