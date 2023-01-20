@@ -563,7 +563,7 @@ class BotManagementCog(BaseExtCog, name="bot-management"):
         **`[limit: Integer]`**
         > A flag for the maximum amount of log records to retrieve.
 
-        **`[levels: Text]`**
+        **`[levels: Text...]`**
         > A flag to limit log records to those matching the specified log level names.
         > Omitting this flag permits log records of all levels to be shown.
         > The filtering process is purely text based, not log level value based.
