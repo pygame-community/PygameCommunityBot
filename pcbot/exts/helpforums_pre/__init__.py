@@ -635,7 +635,7 @@ class HelpForumsPreCog(BaseExtCog, name="helpforums-pre"):
                     new_tags = [
                         tag
                         for tag in after.applied_tags
-                        if not tag.name.startswith("abandoned")
+                        if not tag.name.lower().startswith("abandoned")
                     ]
                     for tag in parent.available_tags:
                         if tag.name.lower().startswith("unsolved"):
@@ -1111,7 +1111,7 @@ class HelpForumsPreCog(BaseExtCog, name="helpforums-pre"):
                                 for tag in help_thread.applied_tags
                             )
                             or all(
-                                not tag.name.startswith(
+                                not tag.name.lower().startswith(
                                     ("unsolved", "solved", "abandoned")
                                 )
                                 for tag in help_thread.applied_tags
@@ -1123,7 +1123,7 @@ class HelpForumsPreCog(BaseExtCog, name="helpforums-pre"):
                         ).timestamp()
                         if (
                             now_ts - last_active_ts
-                        ) > 18600 * 28:  # 4 weeks of inactivity
+                        ) > 86400 * 28:  # 4 weeks of inactivity
 
                             thread_edits = {}
                             thread_edits["archived"] = True
@@ -1133,7 +1133,7 @@ class HelpForumsPreCog(BaseExtCog, name="helpforums-pre"):
                                 if not tag.name.lower().startswith("unsolved")
                             ]
                             for tag in forum_channel.available_tags:
-                                if tag.name.startswith("abandoned"):
+                                if tag.name.lower().startswith("abandoned"):
                                     thread_edits["applied_tags"].insert(0, tag)
                                     break
 
