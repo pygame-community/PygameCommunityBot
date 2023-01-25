@@ -1105,9 +1105,17 @@ class HelpForumsPreCog(BaseExtCog, name="helpforums-pre"):
                     if (
                         help_thread.created_at
                         and not (help_thread.locked or help_thread.flags.pinned)
-                        and any(
-                            tag.name.lower().startswith("unsolved")
-                            for tag in help_thread.applied_tags
+                        and (
+                            any(
+                                tag.name.lower().startswith("unsolved")
+                                for tag in help_thread.applied_tags
+                            )
+                            or all(
+                                not tag.name.startswith(
+                                    ("unsolved", "solved", "abandoned")
+                                )
+                                for tag in help_thread.applied_tags
+                            )
                         )
                     ):
                         last_active_ts = (
