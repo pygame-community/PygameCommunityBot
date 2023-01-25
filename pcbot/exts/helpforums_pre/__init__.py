@@ -74,6 +74,7 @@ class HelpForumsPreCog(BaseExtCog, name="helpforums-pre"):
     async def cog_unload(self) -> None:
         self.inactive_help_thread_alert.stop()
         self.force_help_thread_archive_after_timeout.stop()
+        self.tag_inactive_help_threads_as_abandoned.stop()
         self.delete_help_threads_without_starter_message_or_member.stop()
 
     @commands.Cog.listener()
@@ -81,6 +82,7 @@ class HelpForumsPreCog(BaseExtCog, name="helpforums-pre"):
         for task_loop in (
             self.inactive_help_thread_alert,
             self.force_help_thread_archive_after_timeout,
+            self.tag_inactive_help_threads_as_abandoned,
             self.delete_help_threads_without_starter_message_or_member,
         ):
             if not task_loop.is_running():
@@ -285,7 +287,7 @@ class HelpForumsPreCog(BaseExtCog, name="helpforums-pre"):
                     new_tags = [
                         tag
                         for tag in applied_tags
-                        if not tag.name.lower().startswith("solved")
+                        if not tag.name.lower().startswith(("solved", "abandoned"))
                     ]
 
                     for tag in parent.available_tags:  # type: ignore
@@ -511,7 +513,9 @@ class HelpForumsPreCog(BaseExtCog, name="helpforums-pre"):
                             new_tags = [
                                 tag
                                 for tag in after.applied_tags
-                                if not tag.name.lower().startswith("unsolved")
+                                if not tag.name.lower().startswith(
+                                    ("unsolved", "abandoned")
+                                )
                             ]
                             await self.send_help_thread_solved_alert(after)
                             thread_edits.update(
@@ -578,38 +582,67 @@ class HelpForumsPreCog(BaseExtCog, name="helpforums-pre"):
                             **thread_edits
                         )  # apply edits in a batch to save API calls
 
-                elif after.archived and not after.locked:
-                    if any(
+                elif (
+                    after.archived
+                    and not after.locked
+                    and any(
                         tag.name.lower().startswith("solved")
                         for tag in after.applied_tags
-                    ):
-                        thread_edits = {}
-                        parent: discord.ForumChannel = (
-                            after.parent
-                            or self.bot.get_channel(after.parent_id)
-                            or await self.bot.fetch_channel(after.parent_id)
-                        )  # type: ignore
-                        if (
-                            after.slowmode_delay == parent.default_thread_slowmode_delay
-                        ):  # no custom slowmode override
-                            thread_edits["slowmode_delay"] = 60
+                    )
+                ):
+                    thread_edits = {}
+                    parent: discord.ForumChannel = (
+                        after.parent
+                        or self.bot.get_channel(after.parent_id)
+                        or await self.bot.fetch_channel(after.parent_id)
+                    )  # type: ignore
+                    if (
+                        after.slowmode_delay == parent.default_thread_slowmode_delay
+                    ):  # no custom slowmode override
+                        thread_edits["slowmode_delay"] = 60
 
-                        if not (
-                            after.name.endswith(owner_id_suffix)
-                            or str(after.owner_id) in after.name
-                        ):  # wait for a few event loop iterations, before doing a second,
-                            # check, to be sure that a bot edit hasn't already occured
-                            thread_edits["name"] = (
-                                after.name
-                                if len(after.name) < 72
-                                else after.name[:72] + "..."
-                            ) + owner_id_suffix
+                    if not (
+                        after.name.endswith(owner_id_suffix)
+                        or str(after.owner_id) in after.name
+                    ):  # wait for a few event loop iterations, before doing a second,
+                        # check, to be sure that a bot edit hasn't already occured
+                        thread_edits["name"] = (
+                            after.name
+                            if len(after.name) < 72
+                            else after.name[:72] + "..."
+                        ) + owner_id_suffix
 
-                        if thread_edits:
-                            await after.edit(archived=False)
-                            await asyncio.sleep(5)
-                            thread_edits["archived"] = True
-                            await after.edit(**thread_edits)
+                    if thread_edits:
+                        await after.edit(archived=False)
+                        await asyncio.sleep(5)
+                        thread_edits["archived"] = True
+                        await after.edit(**thread_edits)
+
+                elif (
+                    before.archived
+                    and not after.archived
+                    and any(
+                        tag.name.lower().startswith("abandoned")
+                        for tag in after.applied_tags
+                    )
+                ):
+                    parent = (
+                        after.parent
+                        or self.bot.get_channel(after.parent_id)
+                        or await self.bot.fetch_channel(after.parent_id)
+                    )  # type: ignore
+
+                    new_tags = [
+                        tag
+                        for tag in after.applied_tags
+                        if not tag.name.startswith("abandoned")
+                    ]
+                    for tag in parent.available_tags:
+                        if tag.name.lower().startswith("unsolved"):
+                            new_tags.insert(0, tag)  # mark help post as unsolved again
+                            break
+
+                    await after.edit(applied_tags=new_tags)
 
             except discord.HTTPException:
                 pass
@@ -725,7 +758,7 @@ class HelpForumsPreCog(BaseExtCog, name="helpforums-pre"):
                             new_tags = [
                                 tg
                                 for tg in channel.applied_tags
-                                if tg.name.lower() != "unsolved"
+                                if tg.name.lower() not in ("unsolved", "abandoned")
                             ]
                             new_tags.append(tag)
 
@@ -1007,15 +1040,12 @@ class HelpForumsPreCog(BaseExtCog, name="helpforums-pre"):
 
             now_ts = time.time()
             for help_thread in forum_channel.threads:
-                try:
-                    if not help_thread.created_at:
-                        continue
-
-                    if not (
-                        help_thread.archived
-                        or help_thread.locked
-                        or help_thread.flags.pinned
-                    ):
+                if help_thread.created_at and not (
+                    help_thread.archived
+                    or help_thread.locked
+                    or help_thread.flags.pinned
+                ):
+                    try:
                         last_active_ts = (
                             await self.fetch_last_thread_activity_dt(help_thread)
                         ).timestamp()
@@ -1042,9 +1072,7 @@ class HelpForumsPreCog(BaseExtCog, name="helpforums-pre"):
                                     owner_id_suffix := f"│{help_thread.owner_id}"
                                 )
                                 or str(help_thread.owner_id) in help_thread.name
-                            ):  # wait for a few event loop iterations, before doing a second,
-                                # check, to be sure that a bot edit hasn't already occured
-                                thread_edits["archived"] = False
+                            ):
                                 thread_edits["name"] = (
                                     help_thread.name
                                     if len(help_thread.name) < 72
@@ -1056,8 +1084,63 @@ class HelpForumsPreCog(BaseExtCog, name="helpforums-pre"):
                                 "after exceeding its inactivity timeout.",
                                 **thread_edits,
                             )
-                except discord.HTTPException:
-                    pass
+                    except discord.HTTPException:
+                        pass
+
+    @tasks.loop(hours=1, reconnect=True)
+    async def tag_inactive_help_threads_as_abandoned(self):
+        for forum_channel in [
+            self.bot.get_channel(fid) or (await self.bot.fetch_channel(fid))
+            for fid in HELP_FORUM_CHANNEL_IDS.values()
+        ]:
+            if not isinstance(forum_channel, discord.ForumChannel):
+                return
+
+            now_ts = time.time()
+            try:
+                for help_thread in itertools.chain(
+                    forum_channel.threads,  # type: ignore
+                    [thr async for thr in forum_channel.archived_threads(limit=1000)],  # type: ignore
+                ):
+                    if (
+                        help_thread.created_at
+                        and not (help_thread.locked or help_thread.flags.pinned)
+                        and any(
+                            tag.name.lower().startswith("unsolved")
+                            for tag in help_thread.applied_tags
+                        )
+                    ):
+                        last_active_ts = (
+                            await self.fetch_last_thread_activity_dt(help_thread)
+                        ).timestamp()
+                        if (
+                            now_ts - last_active_ts
+                        ) > 18600 * 28:  # 4 weeks of inactivity
+
+                            thread_edits = {}
+                            thread_edits["archived"] = True
+                            thread_edits["applied_tags"] = [
+                                tag  # exclude unsolved tag
+                                for tag in help_thread.applied_tags
+                                if not tag.name.lower().startswith("unsolved")
+                            ]
+                            for tag in forum_channel.available_tags:
+                                if tag.name.startswith("abandoned"):
+                                    thread_edits["applied_tags"].insert(0, tag)
+                                    break
+
+                            if help_thread.archived:
+                                await help_thread.edit(
+                                    archived=False
+                                )  # archived threads can't be modified
+                                await asyncio.sleep(5)
+                            await help_thread.edit(
+                                reason="This help thread has been marked "
+                                "as abandoned after 28 days.",
+                                **thread_edits,
+                            )
+            except discord.HTTPException:
+                pass
 
     @staticmethod
     async def count_thread_messages(
@@ -1189,7 +1272,7 @@ class HelpForumsPreCog(BaseExtCog, name="helpforums-pre"):
             aspect_tags = tuple(
                 tag
                 for tag in applied_tags
-                if not tag.name.lower().startswith(("issue", "unsolved"))
+                if not tag.name.lower().startswith(("issue", "unsolved", "abandoned"))
             )
             if not len(issue_tags) or len(issue_tags) > 1 or not aspect_tags:
                 valid = False
