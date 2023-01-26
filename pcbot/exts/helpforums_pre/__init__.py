@@ -948,7 +948,7 @@ class HelpForumsPreCog(BaseExtCog, name="helpforums-pre"):
                                                 "\nHas your issue been solved? If so, mark it as **Solved** by "
                                                 "doing one of these:\n\n"
                                                 "  **• React on your starter message with ✅**.\n"
-                                                f"> *Note: <@{HELPFULIE_ROLE_ID}>s can do this too!*"
+                                                f"> *Note: <@&{HELPFULIE_ROLE_ID}>s can do this too!*"
                                                 "  **• Right-click on your post (click and hold on mobile), "
                                                 "go to 'Edit Tags', select the `✅ Solved` tag and save your changes.**\n\n"
                                                 "**Mark all messages you find helpful here with a ✅ reaction please** "
