@@ -67,63 +67,59 @@ INVALID_HELP_THREAD_TITLE_EMBEDS = {
         "forced to put a slowmode delay of "
         f"{THREAD_TITLE_TOO_SHORT_SLOWMODE_DELAY//60} minute{'s'*(THREAD_TITLE_TOO_SHORT_SLOWMODE_DELAY > 60)} "
         " on your post (sorry) <:pg_sad:863165920038223912>.\n\n"
-        "To make changes to your post's title, either right-click on it "
-        "(desktop/web) or click and hold on it (mobile), then click on "
-        "**'Edit Post'**. Use the input field called 'POST TITLE' in the "
-        "post settings menu to change your post title. Remember to save "
-        "your changes.\n\n"
+        "**Changing post titles:**\n"
+        "> 1. Right-click post (desktop/web) or click & hold (mobile)\n"
+        "> 2. Click **'Edit Post'** to see the post settings. Make your title changes there.\n"
+        "> 3. Ensure your changes are saved.\n\n"
         "**Thank you for helping us maintain clean help forum channels "
         "<:pg_robot:837389387024957440>**\n\n"
-        "This alert and the slowmode should disappear after you have made appropriate changes.",
+        "This alert and the slowmode should disappear after you've made appropriate changes.",
         "color": 0x36393F,
     },
     "member_asking_for_help": {
         "title": "Please don't ask for help in your post title (no need to). "
         "We'd love to help you either way!",
-        "description": "Instead of asking for help or mentioning that you need "
-        "help, please write a post title and starter message "
-        "that describes the actual issue you're having in more detail.\n"
+        "description": "We already know you need help. "
+        "Please write a post title and text that describes your actual "
+        "issue in more detail.\n"
         "Also send code snippets (no code screenshots), screenshots and "
-        "other media, error messages, etc."
-        "\n\n**[Here's why!](https://www.dontasktoask.com)**\n\n"
-        "To make changes to your post's title, either right-click on it "
-        "(desktop/web) or click and hold on it (mobile), then click on "
-        "**'Edit Post'**. Use the input field called 'POST TITLE' in the "
-        "post settings menu to change your post title. Remember to save "
-        "your changes.\n\n"
-        "This alert should disappear after you have made appropriate changes.",
+        "other media, error messages, etc.\n\n"
+        "**[Here's why!](https://www.dontasktoask.com)**\n\n"
+        "**Changing post titles:**\n"
+        "> 1. Right-click post (desktop/web) or click & hold (mobile)\n"
+        "> 2. Click **'Edit Post'** to see the post settings, and make title changes.\n"
+        "> 3. Ensure your changes are saved.\n\n"
+        "This alert should disappear after you've made appropriate changes.",
         "color": 0x36393F,
     },
     "member_exclaiming_about_not_working_code": {
         "title": "Something doesn't work? Please tell us what.",
-        "description": "Edit your help post title and your starter message "
+        "description": "Edit your help post title and text "
         "to describe the problem that led to that diagnosis. What made your code "
         "stop working? What are you trying to do?\n"
-        "Remember to send along code snippets (no code screenshots), screenshots "
-        "and other media, error messages, etc.\n\n"
-        "To make changes to your post's title, either right-click on it "
-        "(desktop/web) or click and hold on it (mobile), then click on "
-        "**'Edit Post'**. Use the input field called 'POST TITLE' in the "
-        "post settings menu to change your post title. Remember to save "
-        "your changes.\n\n"
-        "This alert should disappear after you have made appropriate changes.",
+        "Also send code snippets (no code screenshots), screenshots and "
+        "other media, error messages, etc.\n\n"
+        "**Changing post titles:**\n"
+        "> 1. Right-click post (desktop/web) or click & hold (mobile)\n"
+        "> 2. Click **'Edit Post'** to see the post settings, and make title changes.\n"
+        "> 3. Ensure your changes are saved.\n\n"
+        "This alert should disappear after you've made appropriate changes.",
         "color": 0x36393F,
     },
     "member_asking_for_code": {
         "title": "Please don't ask if anybody can, wants to, or will fix, correct "
         "or write your code, game, project or assignment for you.",
         "description": "All helpers here are volunteers, who show people how to "
-        "improve or implement things in their code by themselves. They don't do "
+        "improve or add things in their code by themselves. They don't do "
         "all the work for them. Show us what you are working on, what you've "
         "tried, as well as where you got stuck. "
-        "Remember to send along code snippets (no code screenshots), screenshots "
-        "and other media, error messages, etc.\n\n"
-        "To make changes to your post's title, either right-click on it "
-        "(desktop/web) or click and hold on it (mobile), then click on "
-        "**'Edit Post'**. Use the input field called 'POST TITLE' in the "
-        "post settings menu to change your post title. Remember to save "
-        "your changes.\n\n"
-        "This alert should disappear after you have made appropriate changes.",
+        "Also send code snippets (no code screenshots), screenshots and "
+        "other media, error messages, etc.\n\n"
+        "**Changing post titles:**\n"
+        "> 1. Right-click post (desktop/web) or click & hold (mobile)\n"
+        "> 2. Click **'Edit Post'** to see the post settings, and make title changes.\n"
+        "> 3. Ensure your changes are saved.\n\n"
+        "This alert should disappear after you've made appropriate changes.",
         "color": 0x36393F,
     },
     "member_asking_about_problem_with_code": {
@@ -134,12 +130,11 @@ INVALID_HELP_THREAD_TITLE_EMBEDS = {
         "working? What are you trying to do? "
         "Remember to send along code snippets (no code screenshots), screenshots "
         "and other media, error messages, etc.\n\n"
-        "To make changes to your post's title, either right-click on it "
-        "(desktop/web) or click and hold on it (mobile), then click on "
-        "**'Edit Post'**. Use the input field called 'POST TITLE' in the "
-        "post settings menu to change your post title. Remember to save "
-        "your changes.\n\n"
-        "This alert should disappear after you have made appropriate changes.",
+        "**Changing post titles:**\n"
+        "> 1. Right-click post (desktop/web) or click & hold (mobile)\n"
+        "> 2. Click **'Edit Post'** to see the post settings, and make title changes.\n"
+        "> 3. Ensure your changes are saved.\n\n"
+        "This alert should disappear after you've made appropriate changes.",
         "color": 0x36393F,
     },
 }

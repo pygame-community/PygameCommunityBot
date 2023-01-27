@@ -948,7 +948,7 @@ class HelpForumsPreCog(BaseExtCog, name="helpforums-pre"):
                                                 "\nHas your issue been solved? If so, mark it as **Solved** by "
                                                 "doing one of these:\n\n"
                                                 "  **• React on your starter message with ✅**.\n"
-                                                f"> *Note: <@&{HELPFULIE_ROLE_ID}>s can do this too!*"
+                                                f"> *Note: <@&{HELPFULIE_ROLE_ID}>s can do this too!*\n\n"
                                                 "  **• Right-click on your post (click and hold on mobile), "
                                                 "go to 'Edit Tags', select the `✅ Solved` tag and save your changes.**\n\n"
                                                 "**Mark all messages you find helpful here with a ✅ reaction please** "
@@ -1316,17 +1316,17 @@ class HelpForumsPreCog(BaseExtCog, name="helpforums-pre"):
                     "**Aspect Tags** are all non-issue tags in lowercase, e.g. **(`💥 collisions`)**\n\n"
                     "**Example tag combination for reworking collisions:\n"
                     "(`🪛 issue: rework/optim.`) (`💥 collisions`)**.\n\n"
-                    f"See the Post Guidelines of <#{thread.parent_id}> for more details.\n\n"
-                    "To make changes to your post's tags, either right-click on "
-                    "it (desktop/web) or click and hold on it (mobile), then click "
-                    "on **'Edit Tags'** to see a tag selection menu. Remember to save "
-                    "your changes after selecting the correct tag(s).\n\n"
-                    "*Why is there no aspect tag for Python?*\n> "
-                    f"We recommend using <#{HELP_FORUM_CHANNEL_IDS['python']}> for "
-                    "Python-focused questions instead.\n\n"
+                    f"See the Post Guidelines of <#{thread.parent_id}> (click the search "
+                    "bar book icon) for more info .\n\n"
+                    "**Changing post tags:**\n"
+                    "> 1. Right-click post (desktop/web) or click & hold (mobile)\n"
+                    "> 2. Click **'Edit Tags'** to see a tag selection menu, and make changes.\n"
+                    "> 3. Ensure your changes are saved.\n\n"
+                    f"For Python-only questions, use <#{HELP_FORUM_CHANNEL_IDS['python']}>, "
+                    "not this channel.\n\n"
                     "**Thank you for helping us maintain clean help forum channels** "
                     "<:pg_robot:837389387024957440>\n\n"
-                    "This alert should disappear after you have made appropriate changes."
+                    "This alert should disappear after you've made appropriate changes."
                 ),
                 color=0x36393F,
             ),
@@ -1337,20 +1337,19 @@ class HelpForumsPreCog(BaseExtCog, name="helpforums-pre"):
         await thread.send(
             content="help-post-solved",
             embed=discord.Embed(
-                title="Post marked as solved",
+                title="Post is solved",
                 description=(
                     "This help post has been marked as solved.\n"
-                    "It will now close with a 1 minute slowmode "
-                    "after 1 hour of inactivity.\nFor the sake of the "
-                    "OP, please avoid sending any further messages "
+                    "It will close with a 1 min. slowmode "
+                    "after 1 hr. of inactivity.\n"
+                    "For the OP's sake, please avoid sending messages "
                     "that aren't essential additions to the currently "
                     "accepted answers.\n\n"
                     "**Mark all messages you find helpful here with a ✅ reaction "
                     "please** <:pg_robot:837389387024957440>\n\n"
-                    "The slowmode and archive timeout will both be reverted "
-                    "if this post is unmarked as solved. To do so, remove the "
+                    "*To unmark a post as solved, remove the "
                     "(`✅ Solved`) tag by removing it manually or removing your "
-                    "✅ reaction."
+                    "✅ reaction.*"
                 ),
                 color=0x00AA00,
             ),
