@@ -46,7 +46,7 @@ INVALID_HELP_THREAD_TITLE_REGEX_PATTERNS = {
         re.IGNORECASE,
     ),
     "member_exclaiming_about_not_working_code": re.compile(
-        r"[\s]*((why\s+)?(is('nt)?|does(\s+not|'nt)?)?\s*(my|the|this)?)\s*(this|code|game|pygame(\s*(game|program|code|project|assignment)?))\s*(((is|does)(\s*not|n't)?|not)\s*work(s|ed|ing)?)",
+        r"[\s]*(why\s+)?((is|does|(sh|w)ould)(\s+not|n't)?)?\s*(my|the|this|it)?(?<=s|t|e|y|d)\s*(it|this|code|game|pygame(\s*(game|program|code|project|assignment)?))\s*(((is|does)(\s*not|n't)?|not)?\s*(work|runn?|start|break|load)(s|ed|ing)?)",
         re.IGNORECASE,
     ),
     "member_asking_for_code": re.compile(
