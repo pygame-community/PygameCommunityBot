@@ -546,6 +546,14 @@ class HelpForumsPreCog(BaseExtCog, name="helpforums-pre"):
                                     )
 
                         elif solved_in_before and not solved_in_after:
+                            async for message in after.history(limit=20):
+                                if (
+                                    message.author.id == self.bot.user.id  # type: ignore
+                                    and message.content.startswith("help-post-solved")
+                                ):  # find previous alert message, if it exists
+                                    await message.delete()
+                                    break
+                    
                             parent = (
                                 after.parent
                                 or self.bot.get_channel(after.parent_id)
