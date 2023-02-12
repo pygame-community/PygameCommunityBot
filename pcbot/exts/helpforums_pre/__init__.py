@@ -553,7 +553,7 @@ class HelpForumsPreCog(BaseExtCog, name="helpforums-pre"):
                                 ):  # find previous alert message, if it exists
                                     await message.delete()
                                     break
-                    
+
                             parent = (
                                 after.parent
                                 or self.bot.get_channel(after.parent_id)
