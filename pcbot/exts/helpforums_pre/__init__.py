@@ -1332,28 +1332,43 @@ class HelpForumsPreCog(BaseExtCog, name="helpforums-pre"):
             ),
         )
 
-    @staticmethod
-    async def send_help_thread_solved_alert(thread: discord.Thread):
-        await thread.send(
-            content="help-post-solved",
-            embed=discord.Embed(
-                title="Post is solved",
-                description=(
-                    "This help post has been marked as solved.\n"
-                    "It will close with a 1 min. slowmode "
-                    "after 1 hr. of inactivity.\n"
-                    "For the OP's sake, please avoid sending messages "
-                    "that aren't essential additions to the currently "
-                    "accepted answers.\n\n"
-                    "**Mark all messages you find helpful here with a ✅ reaction "
-                    "please** <:pg_robot:837389387024957440>\n\n"
-                    "*To unmark a post as solved, remove the "
-                    "(`✅ Solved`) tag by removing it manually or removing your "
-                    "✅ reaction.*"
+    async def send_help_thread_solved_alert(self, thread: discord.Thread):
+        alert_message = None
+        checks = 0
+        async for message in thread.history(limit=20):
+            if (
+                message.author.id == self.bot.user.id  # type: ignore
+                and message.content.startswith("help-post-solved")
+            ):  # find previous alert message, if it exists
+                if checks > 8:
+                    await message.delete()  # delete it if it has been buried by newer messages
+                else:
+                    alert_message = message
+                break
+
+            checks += 1
+
+        if not alert_message:
+            await thread.send(
+                content="help-post-solved",
+                embed=discord.Embed(
+                    title="Post is solved",
+                    description=(
+                        "This help post has been marked as solved.\n"
+                        "It will close with a 1 min. slowmode "
+                        "after 1 hr. of inactivity.\n"
+                        "For the OP's sake, please avoid sending messages "
+                        "that aren't essential additions to the currently "
+                        "accepted answers.\n\n"
+                        "**Mark all messages you find helpful here with a ✅ reaction "
+                        "please** <:pg_robot:837389387024957440>\n\n"
+                        "*To unmark a post as solved, remove the "
+                        "(`✅ Solved`) tag by removing it manually or removing your "
+                        "✅ reaction.*"
+                    ),
+                    color=0x00AA00,
                 ),
-                color=0x00AA00,
-            ),
-        )
+            )
 
     @staticmethod
     async def fetch_last_thread_activity_dt(
