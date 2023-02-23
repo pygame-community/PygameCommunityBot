@@ -176,12 +176,8 @@ class BotManagementCog(BaseExtCog, name="bot-management"):
                 check=lambda _ctx, exception: _ctx.message.id == ctx.message.id,
             )
         )
-        done, pending = await asyncio.wait(
-            (command_completion_task, command_error_task),
-            return_when=asyncio.FIRST_COMPLETED,
-        )
 
-        await asyncio.sleep(1)  # sleep to make rate-limits less likely
+        await asyncio.sleep(2)  # sleep to make rate-limits less likely
 
         self.cached_invocation_log_messages[
             ctx.message.id
@@ -197,6 +193,11 @@ class BotManagementCog(BaseExtCog, name="bot-management"):
                 )
             ),
             file=log_txt_file,  # type: ignore
+        )
+
+        done, pending = await asyncio.wait(
+            (command_completion_task, command_error_task),
+            return_when=asyncio.FIRST_COMPLETED,
         )
 
         if command_error_task in done and not (
