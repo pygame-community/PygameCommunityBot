@@ -10,6 +10,7 @@ from typing import Optional, Sequence, Union
 
 import discord
 from discord.ext import commands
+from discord.utils import MISSING
 import snakecore
 from snakecore.constants import UNSET
 from sqlalchemy import text
@@ -153,14 +154,16 @@ class BaseExtCog(commands.Cog):
         if response_message := self.cached_response_messages.get(ctx.message.id):
             try:
                 return await response_message.edit(
-                    content=content,
-                    embed=embed,
-                    embeds=embeds,
-                    attachments=attachments,
-                    delete_after=delete_after,
-                    allowed_mentions=allowed_mentions,
-                    suppress=suppress_embeds,
-                    view=view,
+                    content=MISSING if content is UNSET else content,
+                    embed=MISSING if embed is UNSET else embed,
+                    embeds=MISSING if embeds is UNSET else embeds,
+                    attachments=MISSING if attachments is UNSET else attachments,
+                    delete_after=MISSING if delete_after is UNSET else delete_after,
+                    allowed_mentions=MISSING
+                    if allowed_mentions is UNSET
+                    else allowed_mentions,
+                    suppress=MISSING if suppress_embeds is UNSET else suppress_embeds,
+                    view=MISSING if view is UNSET else view,
                 )  # type: ignore
             except discord.NotFound:
                 send = True
