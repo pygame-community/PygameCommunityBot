@@ -1451,7 +1451,7 @@ class Messaging(BaseExtCog, name="messaging"):
 
         destination = to or ctx.channel
 
-        if snakecore.utils.have_permissions_in_channels(
+        if not snakecore.utils.have_permissions_in_channels(
             ctx.author,
             (origin, destination),
             "view_channel",
