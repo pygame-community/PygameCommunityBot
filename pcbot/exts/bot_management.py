@@ -549,6 +549,7 @@ class BotManagementCog(BaseExtCog, name="bot-management"):
         after: DateTime | None = None,
         before: DateTime | None = None,
         limit: int | None = None,
+        level: str | None = None,
         levels: tuple[str, ...] = (),
     ):
         """Get the current log information of this bot application.
@@ -564,9 +565,14 @@ class BotManagementCog(BaseExtCog, name="bot-management"):
         **`[limit: Integer]`**
         > A flag for the maximum amount of log records to retrieve.
 
+        **`[level: Text]`**
+        > A flag to limit log records to those matching the specified log level name.
+        > Omitting this flag and `levels` permits log records of all levels to be shown.
+        > The filtering process is purely text based, not log level value based.
+
         **`[levels: Text...]`**
         > A flag to limit log records to those matching the specified log level names.
-        > Omitting this flag permits log records of all levels to be shown.
+        > Omitting this flag and `level` permits log records of all levels to be shown.
         > The filtering process is purely text based, not log level value based.
 
         *If all flags are omitted, all log records are returned in files, each ≤ 8 MiB.*
@@ -582,6 +588,15 @@ class BotManagementCog(BaseExtCog, name="bot-management"):
             raise commands.CommandInvokeError(
                 commands.CommandError("No log data was found.")
             )
+                
+        if level:
+            if levels:
+                raise commands.CommandInvokeError(
+                    commands.CommandError("Cannot mix `level` and `levels` flags.")
+                )
+            levels = (level,)
+
+        levels = tuple(lvl.lower() for lvl in levels)
 
         if before is not None or after is not None or limit is not None or levels:
             defer_writes = before is None and after is None and limit is not None
