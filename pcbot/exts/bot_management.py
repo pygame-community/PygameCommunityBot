@@ -588,7 +588,7 @@ class BotManagementCog(BaseExtCog, name="bot-management"):
             raise commands.CommandInvokeError(
                 commands.CommandError("No log data was found.")
             )
-                
+
         if level:
             if levels:
                 raise commands.CommandInvokeError(
