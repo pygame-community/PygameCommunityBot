@@ -106,7 +106,7 @@ class ShowcasePreCog(BaseExtCog, name="showcase-pre"):
         if (
             message.content
             and (link_in_msg and len(message.content) > len(first_link_str))
-            and min_chars < len(message.content) < max_chars
+            and min_chars <= len(message.content) < max_chars
         ):
             return True
 
@@ -126,10 +126,11 @@ class ShowcasePreCog(BaseExtCog, name="showcase-pre"):
                 datetime.timezone.utc
             ) + datetime.timedelta(minutes=2)
             warn_msg = await message.reply(
-                "Your entry message must contain an attachment or text and a (Discord recognized) link to be valid."
-                " If it doesn't contain any characters but an attachment, it must be a reply to another entry you created."
-                f" If no attachments are present, it must contain at least 32 characters (including any links, but not links alone)."
-                f" If you meant to comment on another entry, please delete your message and go to <#{ENTRIES_DISCUSSION_CHANNEL}> ."
+                "Your entry message must contain an attachment or text and safe links to be valid.\n\n"
+                "- Attachment-only entries must be replies to a previous entry of yours.\n"
+                "- Text-only entries must contain at least 32 characters (including links, but not links alone).\n\n"
+                "If you meant to comment on another entry, please delete your"
+                f" message and go to <#{ENTRIES_DISCUSSION_CHANNEL}> .\n\n"
                 " If no changes are made, your entry message will be"
                 f" deleted {snakecore.utils.create_markdown_timestamp(deletion_datetime, 'R')}."
             )
