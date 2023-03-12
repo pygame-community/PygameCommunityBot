@@ -149,7 +149,7 @@ class DocsPreCog(BaseExtCog, name="docs-pre"):
 
         header = ""
         if splits[0] == "pygame":
-            doclink = "https://www.pygame.org/docs"
+            doclink = "https://pyga.me/docs"
             if len(splits) > 1:
                 doclink += "/ref/" + splits[1].lower() + ".html"
                 doclink += "#"
