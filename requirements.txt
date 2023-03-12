@@ -6,7 +6,7 @@ packaging~=23.0
 psutil~=5.9
 pygame-ce~=2.1
 pygame_gui>=0.5.7
-snakecore @ git+https://github.com/pygame-community/snakecore.git#egg=snakecore-0.1.6a
+snakecore @ git+https://github.com/pygame-community/snakecore.git#egg=snakecore-0.1.7a
 sqlalchemy[asyncio]~=2.0
 uvloop; sys_platform != "win32" # https://github.com/MagicStack/uvloop/issues/14
 
