@@ -1,14 +1,14 @@
-black~=22.6
+black~=23.1
 click~=8.1
-discord.py~=2.1
+discord.py~=2.2
 numpy~=1.23
-packaging~=21.3
+packaging~=23
 psutil~=5.9
 pygame-ce~=2.1
 pygame_gui>=0.5.7
 snakecore @ git+https://github.com/pygame-community/snakecore.git#egg=snakecore-0.1.6a
-sqlalchemy[asyncio]~=1.4
+sqlalchemy[asyncio]~=2.0
 uvloop; sys_platform != "win32" # https://github.com/MagicStack/uvloop/issues/14
 
 # --- database driver libraries (DP-API 2.0)
-aiosqlite~=0.17
+aiosqlite~=0.18
