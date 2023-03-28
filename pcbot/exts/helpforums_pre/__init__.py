@@ -1194,8 +1194,8 @@ class HelpForumsPreCog(BaseExtCog, name="helpforums-pre"):
 
         return count
 
-    @staticmethod
     async def schedule_help_thread_deletion(
+        self,
         thread: discord.Thread,
         when: float,
         silent: bool = False,
@@ -1203,25 +1203,65 @@ class HelpForumsPreCog(BaseExtCog, name="helpforums-pre"):
         "or its owner has left the server, and it consists of less than "
         f"{THREAD_DELETION_MESSAGE_THRESHOLD} messages.",
     ):
-        if not silent:
-            await thread.send(
-                embed=discord.Embed(
-                    title="Post scheduled for deletion",
-                    description=(
-                        "This post is scheduled for deletion"
-                        + (f" for the following reason:\n\n{reason}" if reason else ".")
-                        + "\n\nIt will be deleted "
-                        f"**<t:{int(time.time()+when)}:R>**."
-                    ),
-                    color=0x551111,
+        if silent:
+            await asyncio.sleep(when)
+            try:
+                await thread.delete()
+            except discord.NotFound:
+                pass
+        else:
+            alert_msg = await thread.send(
+                embed=discord.Embed.from_dict(
+                    dict(
+                        title="Post scheduled for deletion",
+                        description=(
+                            "This post is scheduled for deletion"
+                            + (
+                                f" for the following reason:\n\n{reason}"
+                                if reason
+                                else "."
+                            )
+                            + "\n\nIt will be deleted "
+                            f"**<t:{int(time.time()+when)}:R>**."
+                        ),
+                        color=0x551111,
+                        footer=dict(text="React with ❌ to cancel the deletion."),
+                    )
                 )
             )
-        await asyncio.sleep(when)
+            await alert_msg.add_reaction("❌")
 
-        try:
-            await thread.delete()
-        except discord.NotFound:
-            pass
+            try:
+                await self.bot.wait_for(
+                    "raw_reaction_add",
+                    check=lambda event: event.message_id == alert_msg.id
+                    and (
+                        event.user_id == thread.owner_id
+                        or (
+                            event.member
+                            and not event.member.bot
+                            and (
+                                thread.permissions_for(event.member).administrator
+                                or any(
+                                    role.id == HELPFULIE_ROLE_ID
+                                    for role in event.member.roles
+                                )
+                            )
+                        )
+                    )
+                    and snakecore.utils.is_emoji_equal(event.emoji, "❌"),
+                    timeout=when,
+                )
+            except asyncio.TimeoutError:
+                try:
+                    await thread.delete()
+                except discord.NotFound:
+                    pass
+            else:
+                try:
+                    await alert_msg.delete()
+                except discord.NotFound:
+                    pass
 
     async def help_thread_deletion_below_size_threshold(
         self,
