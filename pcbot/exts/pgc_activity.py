@@ -19,6 +19,10 @@ PGC_GUILD_ID = 772505616680878080
 SERVER_GUIDE_CHANNEL_ID = 772528306615615500
 ROLES_CHANNEL_ID = 772535163195228200
 
+# HACK: Pygame Community Easter Jam 2023
+
+PGC_EJ_2023_THEME_VOTING_THREAD_ID = 1091015480317317201
+
 PRESENCE_MAP = {
     discord.ActivityType.watching: ["the pygame community", "over fellow pygamers"],
     discord.ActivityType.playing: ["Hiss at newcomers", "at Pygame Community Discord"],
@@ -124,13 +128,16 @@ class PGCActivityCog(BaseExtCog, name="pgc-activity"):
         if not (
             message.guild
             and message.guild.id == PGC_GUILD_ID
-            and message.type
-            in (
-                discord.MessageType.premium_guild_subscription,
-                discord.MessageType.premium_guild_tier_1,
-                discord.MessageType.premium_guild_tier_2,
-                discord.MessageType.premium_guild_tier_3,
-            )
+            and (
+                message.type
+                in (
+                    discord.MessageType.premium_guild_subscription,
+                    discord.MessageType.premium_guild_tier_1,
+                    discord.MessageType.premium_guild_tier_2,
+                    discord.MessageType.premium_guild_tier_3,
+                )
+                or message.channel.id == PGC_EJ_2023_THEME_VOTING_THREAD_ID
+            )  # HACK: Temporary solution for Pygame Community Easter Jam 2023
             and message.channel.permissions_for(
                 message.guild.get_member(self.bot.user.id)  # type: ignore
                 or await message.guild.fetch_member(self.bot.user.id)  # type: ignore
@@ -156,10 +163,14 @@ class PGCActivityCog(BaseExtCog, name="pgc-activity"):
                 f"**LEVEL 3** {message.author.mention}!!!"
             )
 
-        else:
+        elif message.type == discord.MessageType.premium_guild_subscription:
             await message.channel.send(
                 f"Wow! Thanks for giving us a boost {message.author.mention}! 🤩"
             )
+
+        # HACK: Temporary solution for Pygame Community Easter Jam 2023
+        if message.channel.id == PGC_EJ_2023_THEME_VOTING_THREAD_ID:
+            await message.add_reaction("⬆️")
 
     @commands.Cog.listener()
     async def on_member_join(self, member: discord.Member):
