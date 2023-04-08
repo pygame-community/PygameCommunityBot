@@ -211,7 +211,9 @@ class Messaging(BaseExtCog, name="messaging"):
         attachments: commands.Greedy[discord.Attachment],
         *,
         content: String | None = None,
-        embeds: tuple[CodeBlock, ...],
+        embeds: tuple[
+            Parens[discord.Message, int] | discord.Message | CodeBlock, ...
+        ] = (),
         to: tuple[MessageableGuildChannel, ...] = (),
         reply_to: discord.PartialMessage | None = None,
         delete_after: float | TimeDelta | None = None,
@@ -260,34 +262,106 @@ class Messaging(BaseExtCog, name="messaging"):
         files = []
 
         if embeds:
-            for i, code_block in enumerate(embeds):
-                if code_block.language in ("json", None):
-                    try:
-                        embed_dict = json.loads(code_block.code)
-                    except Exception as jerr:
+            for i, code_block_or_msg in enumerate(embeds):
+                if isinstance((code_block := code_block_or_msg), CodeBlock):
+                    if code_block.language in ("json", None):
+                        try:
+                            embed_dict = json.loads(code_block.code)
+                        except Exception as jerr:
+                            raise commands.CommandInvokeError(
+                                commands.CommandError(
+                                    "Error while parsing JSON code block "
+                                    f"{i}: {jerr.__class__.__name__}: {jerr.args[0]}"
+                                )
+                            )
+                    elif code_block.language in ("py", "python"):
+                        try:
+                            embed_dict = literal_eval(code_block.code)
+                        except Exception as perr:
+                            raise commands.CommandInvokeError(
+                                commands.CommandError(
+                                    "Error while parsing Python dict code block "
+                                    f"{i}: {perr.__class__.__name__}: {perr.args[0]}"
+                                )
+                            )
+
+                    else:
                         raise commands.CommandInvokeError(
                             commands.CommandError(
-                                "Error while parsing JSON code block "
-                                f"{i}: {jerr.__class__.__name__}: {jerr.args[0]}"
+                                f"Unsupported code block language: {code_block.language}"
                             )
                         )
-                elif code_block.language in ("py", "python"):
-                    try:
-                        embed_dict = literal_eval(code_block.code)
-                    except Exception as perr:
+                elif isinstance(
+                    (embed_msg := code_block_or_msg), (discord.Message, tuple)
+                ):
+                    attachment_index = 0
+                    if isinstance(embed_msg, tuple):
+                        embed_msg, attachment_index = (
+                            embed_msg[0],
+                            embed_msg[1],
+                        )
+
+                    if not (embed_msg_attachments := embed_msg.attachments):
                         raise commands.CommandInvokeError(
                             commands.CommandError(
-                                "Error while parsing Python dict code block "
-                                f"{i}: {perr.__class__.__name__}: {perr.args[0]}"
+                                f"Error with `embeds` argument {i}: Messages "
+                                "speficied for flag `embeds` must have at least one "
+                                "attachment as `.txt`, `.py` file containing a Python "
+                                "dictionary, or a `.json` file containing embed data. "
+                                "It must be less than 10KB in size.",
                             )
                         )
 
-                else:
-                    raise commands.CommandInvokeError(
-                        commands.CommandError(
-                            f"Unsupported code block language: {code_block.language}"
+                    embed_attachment = embed_msg_attachments[
+                        min(attachment_index, len(embed_msg_attachments))
+                    ]
+
+                    if not (
+                        embed_attachment.content_type
+                        and embed_attachment.content_type.startswith(
+                            ("text", "application/json")
                         )
-                    )
+                        and embed_attachment.size < 10240
+                    ):
+                        raise commands.CommandInvokeError(
+                            commands.CommandError(
+                                f"Error with `embeds` argument {i}: Messages "
+                                "speficied for flag `embeds` must have at least one "
+                                "attachment as `.txt`, `.py` file containing a Python "
+                                "dictionary, or a `.json` file containing embed data. "
+                                "It must be less than 10KB in size.",
+                            )
+                        )
+
+                    embed_data = (await embed_attachment.read()).decode("utf-8")
+
+                    if (
+                        embed_attachment.content_type.startswith(
+                            ("application/json", "text")
+                        )
+                        and "x-python" not in embed_attachment.content_type
+                    ):
+                        try:
+                            embed_dict = json.loads(embed_data)
+                        except Exception as jerr:
+                            raise commands.CommandInvokeError(
+                                commands.CommandError(
+                                    "Error while parsing embed JSON from attachment: "
+                                    f"{i}: {jerr.__class__.__name__}: {jerr.args[0]}"
+                                )
+                            )
+                    else:
+                        try:
+                            embed_dict = literal_eval(embed_data)
+                        except Exception as perr:
+                            raise commands.CommandInvokeError(
+                                commands.CommandError(
+                                    "Error while parsing Python embed dict from attachment: "
+                                    f"{i}: {perr.__class__.__name__}: {perr.args[0]}"
+                                )
+                            )
+                else:
+                    continue
 
                 parsed_embeds.append(discord.Embed.from_dict(embed_dict))
 
@@ -367,7 +441,9 @@ class Messaging(BaseExtCog, name="messaging"):
         attachments: commands.Greedy[discord.Attachment],
         *,
         content: String[2000] | None = None,
-        embeds: tuple[CodeBlock, ...] = (),
+        embeds: tuple[
+            Parens[discord.Message, int] | discord.Message | CodeBlock, ...
+        ] = (),
         to: tuple[MessageableGuildChannel, ...] = (),
         reply_to: discord.PartialMessage | None = None,
         delete_after: float | TimeDelta | None = None,
@@ -462,7 +538,9 @@ class Messaging(BaseExtCog, name="messaging"):
         attachments: commands.Greedy[discord.Attachment],
         *,
         content: String[2000] | None = None,
-        embeds: tuple[CodeBlock, ...] = (),
+        embeds: tuple[
+            Parens[discord.Message, int] | discord.Message | CodeBlock, ...
+        ] = (),
         to: tuple[MessageableGuildChannel, ...] = (),
         reply_to: discord.PartialMessage | None = None,
         delete_after: float | TimeDelta | None = None,
@@ -511,7 +589,9 @@ class Messaging(BaseExtCog, name="messaging"):
         to: tuple[discord.ForumChannel, ...],
         name: String[100] = commands.flag(name="name", aliases=["title"]),
         content: String[2000] | None = None,
-        embeds: tuple[CodeBlock, ...] = (),
+        embeds: tuple[
+            Parens[discord.Message, int] | discord.Message | CodeBlock, ...
+        ] = (),
         tags: tuple[str, ...] = (),
         mention_all: bool = False,
         mention_everyone: bool = False,
@@ -616,34 +696,106 @@ class Messaging(BaseExtCog, name="messaging"):
         files = []
 
         if embeds:
-            for i, code_block in enumerate(embeds):
-                if code_block.language in ("json", None):
-                    try:
-                        embed_dict = json.loads(code_block.code)
-                    except Exception as jerr:
+            for i, code_block_or_msg in enumerate(embeds):
+                if isinstance((code_block := code_block_or_msg), CodeBlock):
+                    if code_block.language in ("json", None):
+                        try:
+                            embed_dict = json.loads(code_block.code)
+                        except Exception as jerr:
+                            raise commands.CommandInvokeError(
+                                commands.CommandError(
+                                    "Error while parsing JSON code block "
+                                    f"{i}: {jerr.__class__.__name__}: {jerr.args[0]}"
+                                )
+                            )
+                    elif code_block.language in ("py", "python"):
+                        try:
+                            embed_dict = literal_eval(code_block.code)
+                        except Exception as perr:
+                            raise commands.CommandInvokeError(
+                                commands.CommandError(
+                                    "Error while parsing Python dict code block "
+                                    f"{i}: {perr.__class__.__name__}: {perr.args[0]}"
+                                )
+                            )
+
+                    else:
                         raise commands.CommandInvokeError(
                             commands.CommandError(
-                                "Error while parsing JSON code block "
-                                f"{i}: {jerr.__class__.__name__}: {jerr.args[0]}"
+                                f"Unsupported code block language: {code_block.language}"
                             )
                         )
-                elif code_block.language in ("py", "python"):
-                    try:
-                        embed_dict = literal_eval(code_block.code)
-                    except Exception as perr:
+                elif isinstance(
+                    (embed_msg := code_block_or_msg), (discord.Message, tuple)
+                ):
+                    attachment_index = 0
+                    if isinstance(embed_msg, tuple):
+                        embed_msg, attachment_index = (
+                            embed_msg[0],
+                            embed_msg[1],
+                        )
+
+                    if not (embed_msg_attachments := embed_msg.attachments):
                         raise commands.CommandInvokeError(
                             commands.CommandError(
-                                "Error while parsing Python dict code block "
-                                f"{i}: {perr.__class__.__name__}: {perr.args[0]}"
+                                f"Error with `embeds` argument {i}: Messages "
+                                "speficied for flag `embeds` must have at least one "
+                                "attachment as `.txt`, `.py` file containing a Python "
+                                "dictionary, or a `.json` file containing embed data. "
+                                "It must be less than 10KB in size.",
                             )
                         )
 
-                else:
-                    raise commands.CommandInvokeError(
-                        commands.CommandError(
-                            f"Unsupported code block language: {code_block.language}"
+                    embed_attachment = embed_msg_attachments[
+                        min(attachment_index, len(embed_msg_attachments))
+                    ]
+
+                    if not (
+                        embed_attachment.content_type
+                        and embed_attachment.content_type.startswith(
+                            ("text", "application/json")
                         )
-                    )
+                        and embed_attachment.size < 10240
+                    ):
+                        raise commands.CommandInvokeError(
+                            commands.CommandError(
+                                f"Error with `embeds` argument {i}: Messages "
+                                "speficied for flag `embeds` must have at least one "
+                                "attachment as `.txt`, `.py` file containing a Python "
+                                "dictionary, or a `.json` file containing embed data. "
+                                "It must be less than 10KB in size.",
+                            )
+                        )
+
+                    embed_data = (await embed_attachment.read()).decode("utf-8")
+
+                    if (
+                        embed_attachment.content_type.startswith(
+                            ("application/json", "text")
+                        )
+                        and "x-python" not in embed_attachment.content_type
+                    ):
+                        try:
+                            embed_dict = json.loads(embed_data)
+                        except Exception as jerr:
+                            raise commands.CommandInvokeError(
+                                commands.CommandError(
+                                    "Error while parsing embed JSON from attachment: "
+                                    f"{i}: {jerr.__class__.__name__}: {jerr.args[0]}"
+                                )
+                            )
+                    else:
+                        try:
+                            embed_dict = literal_eval(embed_data)
+                        except Exception as perr:
+                            raise commands.CommandInvokeError(
+                                commands.CommandError(
+                                    "Error while parsing Python embed dict from attachment: "
+                                    f"{i}: {perr.__class__.__name__}: {perr.args[0]}"
+                                )
+                            )
+                else:
+                    continue
 
                 parsed_embeds.append(discord.Embed.from_dict(embed_dict))
 
@@ -851,7 +1003,7 @@ class Messaging(BaseExtCog, name="messaging"):
         *,
         content: String | None = None,
         embeds: tuple[
-            CodeBlock | discord.Message | Parens[discord.Message, int], ...
+            Parens[discord.Message, int] | discord.Message | CodeBlock, ...
         ] = (),
         remove_content: bool = False,
         remove_embeds: bool = False,
