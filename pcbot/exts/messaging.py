@@ -293,10 +293,10 @@ class Messaging(BaseExtCog, name="messaging"):
 
         if attachments:
             for i, att in enumerate(attachments):
-                if att.size > 2**20 * 8:
+                if att.size > 2**20 * 25:
                     raise commands.CommandInvokeError(
                         commands.CommandError(
-                            f"Attachment {i} is too large to be resent (> 8MiB)"
+                            f"Attachment {i} is too large to be resent (> 25MiB)"
                         )
                     )
                 files.append(await att.to_file(use_cached=True))
@@ -353,10 +353,12 @@ class Messaging(BaseExtCog, name="messaging"):
     @commands.group(
         invoke_without_command=True,
         aliases=["msg"],
-        usage="[attachments (upload files < 8 MiB)]... [content: Text[2000]] [embeds: CodeBlock...] "
-        "[to: Channel] [reply_to: Message] [delete_after: Number/TimeDelta] "
-        "[mention_all: yes|no] [mention_everyone: yes|no] "
-        "[mention_users: yes|no] [mention_these_users: User...] [mention_roles: yes|no] [mention_these_roles: Role...] [mention_replied_user: yes|no]",
+        usage="[attachments (upload files < 8 MiB)]... [content: Text[2000]] "
+        "[embeds: CodeBlock...] [to: Channel] [reply_to: Message] "
+        "[delete_after: Number/TimeDelta] [mention_all: yes|no] "
+        "[mention_everyone: yes|no] [mention_users: yes|no] "
+        "[mention_these_users: User...] [mention_roles: yes|no] "
+        "[mention_these_roles: Role...] [mention_replied_user: yes|no]",
     )
     @flagconverter_kwargs()
     async def message(
@@ -381,7 +383,7 @@ class Messaging(BaseExtCog, name="messaging"):
 
         __**Parameters:**__
 
-        **`[attachments (upload files < (8 MiB))]...`**
+        **`[attachments (upload files < (25 MiB))]...`**
         > One or more attachments to add to the message.
 
         **`[content: Text[2000]]`**
@@ -489,6 +491,200 @@ class Messaging(BaseExtCog, name="messaging"):
             mention_replied_user=mention_replied_user,
         )
 
+    @message.command(
+        name="post",
+        usage="[attachments (upload files < 8 MiB)]... <to: ForumChannel> "
+        "<name: Text[100]> [content: Text[2000]] "
+        "[embeds: CodeBlock...]  [reply_to: Message] "
+        "[delete_after: Number/TimeDelta] [mention_all: yes|no] "
+        "[mention_everyone: yes|no] [mention_users: yes|no] "
+        "[mention_these_users: User...] [mention_roles: yes|no] "
+        "[mention_these_roles: Role...] [mention_replied_user: yes|no]",
+        extras=dict(delete_invocation=True),
+    )
+    @flagconverter_kwargs()
+    async def message_post(
+        self,
+        ctx: commands.Context[BotT],
+        attachments: commands.Greedy[discord.Attachment],
+        *,
+        to: tuple[discord.ForumChannel, ...],
+        name: String[100] = commands.flag(name="name", aliases=["title"]),
+        content: String[2000] | None = None,
+        embeds: tuple[CodeBlock, ...] = (),
+        tags: tuple[str, ...] = (),
+        mention_all: bool = False,
+        mention_everyone: bool = False,
+        mention_users: bool = False,
+        mention_these_users: tuple[discord.User, ...] = (),
+        mention_roles: bool = False,
+        mention_these_roles: tuple[discord.Role, ...] = (),
+    ):
+        """Create a post in the specified forum channel(s).
+
+        __**Parameters:**__
+
+        **`[attachments (upload files < (25 MiB))]...`**
+        > One or more attachments to add to the message.
+
+        **`<to: ForumChannel...>`**
+        > A flag for the destination channels to send the post to.
+        > If forum tags are specified, only one destination will be accepted.
+
+        **`<name: Text[100]>` | `<title: Text[100]>**
+        > A flag for the forum post name/title.
+        > It must not exceed 100 characters in length.
+
+        **`[content: Text[2000]]`**
+        > A flag for the text content the message should contain.
+        > It must not exceed 2000 characters in length.
+
+        **`[embeds: CodeBlock...]`**
+        > A flag for the embeds to add to the message, as 1-10 code blocks containing embed data as a JSON object/Python dictionary.
+
+        **`[tags: String[20]...]`**
+        > The tags to apply to the post.
+
+        **`[mention_all: yes|no]`**
+        > A flag for whether all mentionable targets in the message text content (users, roles, user being replied to) should receive a mention ping.
+        > Defaults to 'no'.
+
+        **`[mention_everyone: yes|no]`**
+        > A flag for whether @everyone should be mentioned.
+
+        **`[mention_users: yes|no]`**
+        > A flag for whether any mentioned users in the message text content should receive a mention ping.
+        > Defaults to 'no'.
+
+        **`[mention_these_users: User...]`**
+        > A flag for a sequence of users in the message text content that should receive a mention ping.
+         > This overrides the settings of the `mention_users:` flag.
+
+        **`[mention_roles: yes|no]`**
+        > A flag for whether any mentioned roles in the message text content should receive a mention ping.
+        > Can be either 'yes' or 'no', or a sequence of roles to ping.
+        > Defaults to 'no'.
+
+        **`[mention_these_roles: Role...]`**
+        > > A flag for a sequence of roles in the message text content that should receive a mention ping.
+        > This overrides the settings of the `mention_roles:` flag.
+        """
+        assert (
+            ctx.guild
+            and ctx.bot.user
+            and (bot_member := ctx.guild.get_member(ctx.bot.user.id))
+            and isinstance(
+                ctx.channel,
+                (discord.TextChannel, discord.VoiceChannel, discord.Thread),
+            )
+            and isinstance(ctx.author, discord.Member)
+        )
+
+        if not (content or attachments or embeds):
+            raise commands.CommandInvokeError(
+                commands.CommandError("Not enough arguments given as input.")
+            )
+
+        destinations = to
+        if not destinations:
+            destinations = (ctx.channel,)
+
+        elif len(destinations) > 1 and tags:
+            raise commands.CommandInvokeError(
+                commands.CommandError(
+                    "You cannot specify multiple channels for flag `to:` if flag "
+                    "`tags:` is specified."
+                )
+            )
+
+        tag_names = tuple(tag_name.casefold() for tag_name in tags)
+
+        if not snakecore.utils.have_permissions_in_channels(
+            ctx.author,
+            destinations,
+            "view_channel",
+        ):
+            raise commands.CommandInvokeError(
+                commands.CommandError(
+                    "You do not have enough permissions to run this command on the "
+                    "target channel(s) "
+                    f"({', '.join(f'<#{dest.id}>' for dest in destinations)})."
+                )
+            )
+
+        parsed_embeds = []
+        files = []
+
+        if embeds:
+            for i, code_block in enumerate(embeds):
+                if code_block.language in ("json", None):
+                    try:
+                        embed_dict = json.loads(code_block.code)
+                    except Exception as jerr:
+                        raise commands.CommandInvokeError(
+                            commands.CommandError(
+                                "Error while parsing JSON code block "
+                                f"{i}: {jerr.__class__.__name__}: {jerr.args[0]}"
+                            )
+                        )
+                elif code_block.language in ("py", "python"):
+                    try:
+                        embed_dict = literal_eval(code_block.code)
+                    except Exception as perr:
+                        raise commands.CommandInvokeError(
+                            commands.CommandError(
+                                "Error while parsing Python dict code block "
+                                f"{i}: {perr.__class__.__name__}: {perr.args[0]}"
+                            )
+                        )
+
+                else:
+                    raise commands.CommandInvokeError(
+                        commands.CommandError(
+                            f"Unsupported code block language: {code_block.language}"
+                        )
+                    )
+
+                parsed_embeds.append(discord.Embed.from_dict(embed_dict))
+
+        if attachments:
+            for i, att in enumerate(attachments):
+                if att.size > 2**20 * 25:
+                    raise commands.CommandInvokeError(
+                        commands.CommandError(
+                            f"Attachment {i} is too large to be resent (> 25MiB)"
+                        )
+                    )
+                files.append(await att.to_file(use_cached=True))
+
+        for dest in destinations:
+            assert isinstance(dest, discord.ForumChannel)
+            msg = await dest.create_thread(
+                name=name,
+                content=content,
+                embeds=parsed_embeds,
+                files=files,
+                allowed_mentions=(
+                    discord.AllowedMentions.all()
+                    if mention_all
+                    else discord.AllowedMentions(
+                        everyone=mention_everyone,
+                        users=mention_these_users
+                        if mention_these_users
+                        else mention_users,
+                        roles=mention_these_roles
+                        if mention_these_roles
+                        else mention_roles,
+                    )
+                ),
+                applied_tags=[
+                    tag
+                    for tag in dest.available_tags
+                    if tag.name.casefold() in tag_names
+                ]
+                or discord.utils.MISSING,
+            )
+
     @commands.guild_only()
     @message.command(
         name="sendcontent",
@@ -496,8 +692,9 @@ class Messaging(BaseExtCog, name="messaging"):
         extras=dict(delete_invocation=True),
         usage="<content (Text[2000])> [to: Channel] [reply_to: Message] "
         "[delete_after: Number/TimeDelta] [mention_all: yes|no] "
-        "[mention_everyone: yes|no] [mention_users: User.../yes|no] "
-        "[mention_roles: Role.../yes|no] [mention_replied_user: yes|no]",
+        "[mention_everyone: yes|no] [mention_users: yes|no] "
+        "[mention_these_users: User...] [mention_roles: yes|no] "
+        "[mention_these_roles: Role...] [mention_replied_user: yes|no]",
     )
     @flagconverter_kwargs()
     async def message_sendcontent(
@@ -639,10 +836,10 @@ class Messaging(BaseExtCog, name="messaging"):
     @message.command(
         name="edit",
         usage="[attachments (upload files < 8 MiB)]... [content: Text[2000]] "
-        "[embeds: CodeBlock/Message/( Message Integer ) ... ] [to: Channel] "
-        "[reply_to: Message] [mention_all: yes|no] [mention_everyone: yes|no] "
-        "[mention_users: User.../yes|no] [mention_roles: Role.../yes|no] "
-        "[mention_replied_user: yes|no]",
+        "[embeds: CodeBlock/Message/( Message Integer ) ... ] "
+        "[mention_everyone: yes|no] [mention_users: yes|no] "
+        "[mention_these_users: User...] [mention_roles: yes|no] "
+        "[mention_these_roles: Role...] [mention_replied_user: yes|no]",
         extras=dict(inject_reference_as_first_argument=True, delete_invocation=True),
     )
     @flagconverter_kwargs()
