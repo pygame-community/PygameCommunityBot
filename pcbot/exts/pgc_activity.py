@@ -16,12 +16,6 @@ BotT = snakecore.commands.Bot | snakecore.commands.AutoShardedBot
 MessageableGuildChannel = discord.TextChannel | discord.VoiceChannel | discord.Thread
 
 PGC_GUILD_ID = 772505616680878080
-SERVER_GUIDE_CHANNEL_ID = 772528306615615500
-ROLES_CHANNEL_ID = 772535163195228200
-
-# HACK: Pygame Community Easter Jam 2023
-
-PGC_EJ_2023_THEME_VOTING_THREAD_ID = 1091015480317317201
 
 PRESENCE_MAP = {
     discord.ActivityType.watching: ["the pygame community", "over fellow pygamers"],
@@ -61,25 +55,23 @@ BOT_WELCOME_MSG = {
         "Be sure to read our",
         "Be sure to check the",
         "Be sure to check out our",
-        "Read our",
+        "Complete our",
         "Have a look at our",
-        "To get started here, please read the",
+        "To get started here, please complete the",
     ),
     "grab": (
-        ", grab",
-        ". Then get some",
-        ", take",
-        ", then grab yourself some shiny",
-        ". Get some fancy",
-        ", get some",
-        ", then get yourself some cool",
-        ", then get yourself some",
-        ", take some",
-        ", then take some",
-        ", then take some",
-        ". Go get some cool roles at",
-        ". Then go take some fancy",
-        ", then grab some shiny",
+        ", grab roles and channels at",
+        ". Then get some roles and channels in",
+        ", take some roles and channels from",
+        ", then grab yourself some shiny channels and roles at",
+        ". Get some fancy roles and channels from",
+        ", customize your experience at ",
+        ", then get yourself some cool roles and channels at",
+        ", then adjust your experience via",
+        ", then take some roles and channels at",
+        ". Go get some cool roles and channels at",
+        ". Make yourself comfortable with",
+        ", then grab some shiny roles and channels at",
     ),
     "end": (
         " and have fun!",
@@ -136,8 +128,7 @@ class PGCActivityCog(BaseExtCog, name="pgc-activity"):
                     discord.MessageType.premium_guild_tier_2,
                     discord.MessageType.premium_guild_tier_3,
                 )
-                or message.channel.id == PGC_EJ_2023_THEME_VOTING_THREAD_ID
-            )  # HACK: Temporary solution for Pygame Community Easter Jam 2023
+            )
             and message.channel.permissions_for(
                 message.guild.get_member(self.bot.user.id)  # type: ignore
                 or await message.guild.fetch_member(self.bot.user.id)  # type: ignore
@@ -168,10 +159,6 @@ class PGCActivityCog(BaseExtCog, name="pgc-activity"):
                 f"Wow! Thanks for giving us a boost {message.author.mention}! 🤩"
             )
 
-        # HACK: Temporary solution for Pygame Community Easter Jam 2023
-        if message.channel.id == PGC_EJ_2023_THEME_VOTING_THREAD_ID:
-            await message.add_reaction("⬆️")
-
     @commands.Cog.listener()
     async def on_member_join(self, member: discord.Member):
         if not (
@@ -198,8 +185,8 @@ class PGCActivityCog(BaseExtCog, name="pgc-activity"):
 
         await member.guild.system_channel.send(
             f"{greet} {member.mention}! {check} "
-            + f"<#{SERVER_GUIDE_CHANNEL_ID}>{grab} "
-            + f"<#{ROLES_CHANNEL_ID}>{end}"
+            + f"<id:guide>{grab} "
+            + f"<id:customize> & <id:browse>{end}"
         )
 
 
