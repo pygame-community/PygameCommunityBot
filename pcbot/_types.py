@@ -42,7 +42,7 @@ class ConfigAuthentication(TypedDict):
 class ConfigExtensionDict(TypedDict):
     name: str
     package: NotRequired[str]
-    config: dict[str, Any]
+    config: NotRequired[dict[str, Any]]
 
 
 class Config(TypedDict, total=False):
