@@ -292,6 +292,10 @@ class BotManagementCog(BaseExtCog, name="bot-management"):
         ) + datetime.timedelta(seconds=60)
 
         recent_records = tuple(self.short_log_record_queue)
+        
+        if not recent_records: 
+            return
+        
         first_record_dt = datetime.datetime.fromtimestamp(recent_records[0].created)
         last_record_dt = datetime.datetime.fromtimestamp(recent_records[-1].created)
         if self.status_message:
