@@ -229,7 +229,7 @@ async def print_bot_extension_info(
                     )
                     raise click.Abort()
 
-                row_dict = dict(row)
+                row_dict = row._asdict()
                 max_name_width = max(max_name_width, len(row_dict["name"]))
                 max_last_session_version_width = max(
                     max_last_session_version_width,
@@ -250,7 +250,7 @@ async def print_bot_extension_info(
                 ),
             )
             for row in result.all():
-                row_dict = dict(row)
+                row_dict = row._asdict()
                 max_name_width = max(max_name_width, len(row_dict["name"]))
                 max_last_session_version_width = max(
                     max_last_session_version_width,
@@ -371,7 +371,7 @@ async def delete_bot_extension_data(
                     )
                     raise click.Abort()
 
-                row_dict = dict(row)
+                row_dict = row._asdict()
                 extname_row_map[ext_name] = row_dict
         else:
             result: Result = await conn.execute(
@@ -381,7 +381,7 @@ async def delete_bot_extension_data(
                 ),
             )
             for row in result.all():
-                row_dict = dict(row)
+                row_dict = row._asdict()
                 extname_row_map[row_dict["name"]] = row_dict
 
     if not extname_row_map:
