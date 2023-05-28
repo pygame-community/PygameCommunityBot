@@ -98,13 +98,12 @@ Usage: python -m pcbot [OPTIONS] COMMAND [ARGS]...
   Launch this Discord bot application.
 
 Options:
-  --config, --config-path PATH    A path to the 'config.py' file to use for
+  --config PATH                   A path to the 'config.py' file to use for
                                   configuration. credentials and launching.
                                   Failure will occur silently for an
                                   invalid/non-existing path.  [default:
                                   ./config.py]
-  --localconfig, --localconfig-path PATH
-                                  A path to the optional 'localconfig.py' file
+  --localconfig PATH              A path to the optional 'localconfig.py' file
                                   to use for locally overriding 'config.py'.
                                   Failure will occur silently if this file
                                   could cannot be found/read successfully,
@@ -122,22 +121,17 @@ Options:
                                   intent (1 << 15) flag is not set by default.
                                   See more at https://discord.com/developers/d
                                   ocs/topics/gateway#list-of-intents
-  --command-prefix, --prefix TEXT
-                                  The command prefix(es) to use. By default, !
+  --command-prefix TEXT           The command prefix(es) to use. By default, !
                                   is used as a prefix.
-  --mention-as-command-prefix, --mention-as-prefix
-                                  Enable the usage of bot mentions as a
+  --mention-as-command-prefix     Enable the usage of bot mentions as a
                                   prefix.
   --ignore-ext, --ignore-extension TEXT
                                   The qualified name(s) of the extension(s) to
                                   ignore when loading extensions during
                                   startup.
-  --ignore-all-exts, --ignore-all-extensions
-                                  Ignore all extensions at startup.
-  --ignore-default-exts, --ignore-default-extensions
-                                  Ignore default extensions at startup.
-  --ignore-extra-exts, --ignore-extra-extensions
-                                  Ignore extra (non-default) extensions at
+  --ignore-all-extensions         Ignore all extensions at startup.
+  --ignore-default-extensions     Ignore default extensions at startup.
+  --ignore-extra-extensions       Ignore extra (non-default) extensions at
                                   startup.
   --log-level, --bot-log-level [NOTSET|DEBUG|INFO|WARNING|WARN|ERROR|FATAL|CRITICAL]
                                   The log level to use for the bot's default
