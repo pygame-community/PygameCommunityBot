@@ -13,7 +13,7 @@ import snakecore
 from ..bot import PygameCommunityBot
 
 from .bases import BaseExtCog
-from .text_command_manager import TextCommandManagerCog
+from .text_command_manager.cogs import TextCommandManagerCog
 
 BotT = PygameCommunityBot
 
