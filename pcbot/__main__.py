@@ -493,12 +493,12 @@ async def delete_bot_extension_data(
 
 # fmt: off
 @click.group(invoke_without_command=True, add_help_option=False)
-@click.option("--config", "--config-path", "config_path", default="./config.py",
+@click.option("--config", "config_path", default="./config.py",
     show_default=True, type=click.Path(resolve_path=True),
     help="A path to the 'config.py' file to use for configuration. "
     "credentials and launching. Failure will occur silently for an "
     "invalid/non-existing path.")
-@click.option("--localconfig", "--localconfig-path", "localconfig_path",
+@click.option("--localconfig", "localconfig_path",
     default="./localconfig.py", show_default=True, type=click.Path(resolve_path=True),
     help="A path to the optional 'localconfig.py' file to use for locally overriding "
     "'config.py'. Failure will occur silently if this file could cannot be found/read "
@@ -511,23 +511,23 @@ async def delete_bot_extension_data(
     "It can be specified as a base 2, 8, 10 or 16 integer literal. Note that the "
     "message content intent (1 << 15) flag is not set by default. See more at "
     "https://discord.com/developers/docs/topics/gateway#list-of-intents"))
-@click.option("--command-prefix", "--prefix", "command_prefix", multiple=True,
+@click.option("--command-prefix", "command_prefix", multiple=True,
     show_default=True, type=str,
     help=("The command prefix(es) to use. "
     f"By default, {constants.DEFAULT_CONFIG['command_prefix']} is used as a prefix."))
-@click.option("--mention-as-command-prefix", "--mention-as-prefix",
+@click.option("--mention-as-command-prefix",
     "mention_as_command_prefix", is_flag=True,
     help="Enable the usage of bot mentions as a prefix.")
 @click.option("--ignore-ext", "--ignore-extension", "ignore_extension",
     multiple=True, type=str,
     help="The qualified name(s) of the extension(s) to ignore when loading extensions "
     "during startup.")
-@click.option("--ignore-all-exts", "--ignore-all-extensions", "ignore_all_extensions",
+@click.option("--ignore-all-extensions", "ignore_all_extensions",
     is_flag=True, help="Ignore all extensions at startup.")
-@click.option("--ignore-default-exts", "--ignore-default-extensions",
+@click.option("--ignore-default-extensions",
     "ignore_default_extensions", is_flag=True, help="Ignore default extensions "
     "at startup.")
-@click.option("--ignore-extra-exts", "--ignore-extra-extensions",
+@click.option("--ignore-extra-extensions",
     "ignore_extra_extensions", is_flag=True,
     help="Ignore extra (non-default) extensions at startup.")
 @click.option("--log-level", "--bot-log-level", "log_level",
