@@ -11,7 +11,7 @@ import logging
 import logging.handlers
 from math import log10
 import os
-from typing import Any, Optional
+from typing import Any, Collection, MutableMapping, Optional
 
 import click
 import discord
@@ -21,11 +21,14 @@ from sqlalchemy import text
 from sqlalchemy.engine.result import Result
 from sqlalchemy.ext.asyncio import AsyncConnection
 
+from pcbot.config_parsing import parse_databases, parser_mapping
+
 from . import constants, utils
+from .utils import raise_exc, ParserMapping, ParserMappingValue
 from .bot import (
     PygameCommunityBot as Bot,
 )
-from ._types import DatabaseDict
+from ._types import Config, DatabaseDict
 
 try:
     import uvloop  # type: ignore
@@ -35,55 +38,8 @@ else:
     # uvloop replaces the default Python event loop with a cythonized version.
     asyncio.set_event_loop_policy(uvloop.EventLoopPolicy())
 
-LOG_LEVEL_NAMES: set[str] = {
-    "CRITICAL",
-    "FATAL",
-    "ERROR",
-    "WARN",
-    "WARNING",
-    "INFO",
-    "DEBUG",
-    "NOTSET",
-}
 
-DEFAULT_EXTENSIONS: list[dict[str, Any]] = [
-    # Add extensions here that should always be loaded upon startup.
-    # These can only be excluded through the --ignore-ext' or '--disable-all-exts'
-    # CLI options.
-    {
-        "name": f"{__package__}.exts.bot_management",
-        "config": {
-            "color": constants.DEFAULT_EMBED_COLOR,
-        },
-    },
-    {
-        "name": f"{__package__}.exts.docs_pre",
-        "config": {"color": constants.DEFAULT_EMBED_COLOR},
-    },
-    {
-        "name": f"{__package__}.exts.help",
-        "config": {"color": constants.DEFAULT_EMBED_COLOR},
-    },
-    {
-        "name": f"{__package__}.exts.messaging",
-    },
-    {
-        "name": f"{__package__}.exts.polls_pre",
-    },
-    {
-        "name": f"{__package__}.exts.text_command_manager",
-        "config": {"color": constants.DEFAULT_EMBED_COLOR},
-    },
-]
-
-DEFAULT_CONFIG: dict[str, Any] = {
-    "intents": discord.Intents.default().value,
-    "command_prefix": "!",
-    "mention_as_command_prefix": False,
-    "extensions": [],
-}
-
-config: dict[str, Any] = DEFAULT_CONFIG.copy() | {"extensions": []}
+config: dict[str, Any] = constants.DEFAULT_CONFIG.copy() | {"extensions": []}
 
 
 def setup_logging(log_level) -> None:
@@ -161,7 +117,6 @@ async def close_bot(bot: Bot) -> None:
 def load_config_files(
     config_path: str | None, localconfig_path: str | None, quiet: bool = False
 ) -> None:
-
     if not quiet:
         click.echo("Searching for configuration files...")
 
@@ -239,104 +194,6 @@ def load_config_files(
                 click.echo(
                     f"  Successfully loaded 'localconfig' from {localconfig_path}"
                 )
-
-
-def parse_config_databases(required: bool = False) -> None:
-    if "databases" in config:
-        if not (
-            config["databases"]
-            and isinstance(config["databases"], list)
-            and all(
-                isinstance(db_info_dict, dict)
-                and "name" in db_info_dict
-                and isinstance(db_info_dict["name"], str)
-                and "url" in db_info_dict
-                and isinstance(db_info_dict["url"], str)
-                and isinstance(db_info_dict.get("connect_args", {}), dict)
-                for db_info_dict in config["databases"]
-            )
-        ):
-            click.secho(
-                "  config error: 'databases' variable must be of type "
-                "'list' and must contain one or more database "
-                "dictionaries.\n"
-                "  Each of them must contain at least a 'name' key for the database "
-                "name and a 'url' key mapping to an SQLAlchemy-compatible database "
-                "URL string, see https://docs.sqlalchemy.org/en/14/core/engines.html#database-urls "
-                "for more details.\n"
-                "  The 'connect_args' dictionary for setting up a database "
-                "connection is driver-specific and optional.\n"
-                "  The first database is always the primary one.\n\n"
-                "  {\n"
-                '      "...": {"...": "..."},\n'
-                '      "databases": [\n'
-                '          "my_database": {\n'
-                '              "name": "my_database",\n'
-                '              "url": "engine+driver://url_or_path/to/my_database",\n'
-                '              "connect_args": {"...": "..."}\n'
-                "          },\n"
-                '          {"...": "...", }\n'
-                "      ],\n"
-                '      "...": "...",\n'
-                "  }\n",
-                err=True,
-                fg="red",
-            )
-            raise click.Abort()
-
-        if "main_database_name" in config:
-            if not isinstance(config["main_database_name"], str):
-                click.secho(
-                    "  config error: 'main_database_name' variable must be of type "
-                    "'str' and must be the name of a database specified in 'databases'",
-                    err=True,
-                    fg="red",
-                )
-                raise click.Abort()
-
-            for i in range(len(config["databases"])):
-                if config["databases"][i]["name"] == config["main_database_name"]:
-                    new_main_database = config["databases"].pop(i)
-                    # move selected main db to front
-                    config["databases"].insert(0, new_main_database)
-                    break
-            else:
-                click.secho(
-                    "  config error: 'main_database_name' variable must be "
-                    "the name of a database specified in 'databases'",
-                    err=True,
-                    fg="red",
-                )
-                raise click.Abort()
-
-    elif required:
-        click.secho(
-            "  config error: Required 'databases' variable must be of type "
-            "'list' and must contain one or more database "
-            "dictionaries.\n"
-            "  Each of them must contain at least a 'name' key for the database "
-            "name and a 'url' key mapping to an SQLAlchemy-compatible database "
-            "URL string, see https://docs.sqlalchemy.org/en/14/core/engines.html#database-urls "
-            "for more details.\n"
-            "  The 'connect_args' dictionary for setting up a database "
-            "connection is driver-specific and optional.\n"
-            "  The first database is always the primary one.\n\n"
-            "  {\n"
-            '      "...": {"...": "..."},\n'
-            '      "databases": [\n'
-            '          "my_database": {\n'
-            '              "name": "my_database",\n'
-            '              "url": "engine+driver://url_or_path/to/my_database",\n'
-            '              "connect_args": {"...": "..."}\n'
-            "          },\n"
-            '          {"...": "...", }\n'
-            "      ],\n"
-            '      "...": "...",\n'
-            "  }\n",
-            err=True,
-            fg="red",
-        )
-        raise click.Abort()
 
 
 async def print_bot_extension_info(
@@ -533,7 +390,7 @@ async def delete_bot_extension_data(
 
     if not quiet:
         click.secho(
-            f"\n{len(extname_row_map )} extension data entries found.\n", fg="yellow"
+            f"\n{len(extname_row_map)} extension data entries found.\n", fg="yellow"
         )
 
     deletions = 0
@@ -650,14 +507,14 @@ async def delete_bot_extension_data(
     "will treat them as if they were omitted.")
 @click.option("--intents", type=str,
     help=("The integer of bot intents as bitwise flags to be used by the bot instead "
-    f"of discord.py's defaults ({bin(DEFAULT_CONFIG['intents'])}). "
+    f"of discord.py's defaults ({bin(constants.DEFAULT_CONFIG['intents'])}). "
     "It can be specified as a base 2, 8, 10 or 16 integer literal. Note that the "
     "message content intent (1 << 15) flag is not set by default. See more at "
     "https://discord.com/developers/docs/topics/gateway#list-of-intents"))
 @click.option("--command-prefix", "--prefix", "command_prefix", multiple=True,
     show_default=True, type=str,
     help=("The command prefix(es) to use. "
-    f"By default, {DEFAULT_CONFIG['command_prefix']} is used as a prefix."))
+    f"By default, {constants.DEFAULT_CONFIG['command_prefix']} is used as a prefix."))
 @click.option("--mention-as-command-prefix", "--mention-as-prefix",
     "mention_as_command_prefix", is_flag=True,
     help="Enable the usage of bot mentions as a prefix.")
@@ -702,6 +559,20 @@ def main(
     if ctx.invoked_subcommand is not None:
         return
 
+    config["_cli_args"] = dict(
+        config_path=config_path,
+        localconfig_path=localconfig_path,
+        command_prefix=command_prefix,
+        mention_as_command_prefix=mention_as_command_prefix,
+        intents=intents,
+        ignore_extension=ignore_extension,
+        ignore_all_extensions=ignore_all_extensions,
+        ignore_default_extensions=ignore_default_extensions,
+        ignore_extra_extensions=ignore_extra_extensions,
+        log_level=log_level,
+        quiet=quiet,
+    )
+
     load_config_files(config_path, localconfig_path, quiet)
 
     if not quiet:
@@ -719,359 +590,26 @@ def main(
             fg="yellow",
         )
 
-    # -------------------------------------------------------------------------
-    # config.authentication
-    ## config.authentication.token
-
-    if (
-        "authentication" not in config or not isinstance(config["authentication"], dict)
-    ) or (
-        "token" not in config["authentication"]
-        or not isinstance(config["authentication"]["token"], str)
-    ):
-        click.secho(
-            "  config error: Required 'authentication' variable must be of type 'dict' "
-            "and must at least contain 'token' of type 'str'",
-            err=True,
-            fg="red",
-        )
+    try:
+        config.update(parser_mapping.parse(config))
+    except ParserMapping.ParsingError as p:
+        click.secho(f"  config error: {p.args[0]}", err=True, fg="red")
         raise click.Abort()
-
-    # -------------------------------------------------------------------------
-    # config.intents
-
-    if intents is not None:
-        config["intents"] = intents
-
-    if not isinstance(config["intents"], int):
-        intents_fail = False
-        if isinstance(config["intents"], str):
-            try:
-                config["intents"] = int(
-                    config["intents"],
-                    base=(
-                        2
-                        if (base_hint := config["intents"][:2]) == "0b"
-                        else 8
-                        if base_hint == "0o"
-                        else 16
-                        if base_hint == "0x"
-                        else 10
-                    ),
-                )
-            except ValueError:
-                intents_fail = True
-        else:
-            intents_fail = True
-
-        if intents_fail:
-            click.secho(
-                "  config error: 'intents' variable must be of type 'int' or 'str' (STRING) "
-                "and must be interpretable as an integer.",
-                err=True,
-                fg="red",
-            )
-            raise click.Abort()
-
-    # -------------------------------------------------------------------------
-    # config.command_prefix
-    # config.mention_as_command_prefix
-
-    final_prefix = None
-
-    if command_prefix:
-        config["command_prefix"] = command_prefix
-
-    if (
-        config["command_prefix"] is not None
-        and not isinstance(config["command_prefix"], (str, list, tuple))
-    ) or (
-        isinstance(config["command_prefix"], (list, tuple))
-        and not all(isinstance(pfx, str) for pfx in config["command_prefix"])
-    ):
-        click.secho(
-            "  config error: Optional 'command_prefix' variable must be of type "
-            "'str', of type 'list'/'tuple' containing strings or just None.",
-            err=True,
-            fg="red",
-        )
-        raise click.Abort()
-
-    if mention_as_command_prefix:
-        config["mention_as_command_prefix"] = mention_as_command_prefix
-
-    if not isinstance(config["mention_as_command_prefix"], bool):
-        click.secho(
-            "  config error: 'mention_as_command_prefix' variable must be of type 'bool'.",
-            err=True,
-            fg="red",
-        )
-        raise click.Abort()
-
-    if config["command_prefix"] is not None and config["mention_as_command_prefix"]:
-        final_prefix = commands.when_mentioned_or(
-            *(
-                (config["command_prefix"],)
-                if isinstance(config["command_prefix"], str)
-                else config["command_prefix"]
-            )
-        )
-    elif config["command_prefix"] is not None:
-        final_prefix = config["command_prefix"]
-    elif config["mention_as_command_prefix"]:
-        final_prefix = commands.when_mentioned
-    else:
-        click.secho(
-            "  config error: 'mention_as_command_prefix' variable must be True if 'command_prefix' is None.",
-            err=True,
-            fg="red",
-        )
-        raise click.Abort()
-
-    # -------------------------------------------------------------------------
-    # config.extensions
-
-    if not isinstance(config["extensions"], (list, tuple)):
-        click.secho(
-            "  config error: 'extensions' variable must be a container of type "
-            "'list'/'tuple' containing dictionaries that specify "
-            "parameters for the extensions to load.",
-            err=True,
-            fg="red",
-        )
-        raise click.Abort()
-
-    elif config["extensions"] and not all(
-        isinstance(ext_dict, dict) and "name" in ext_dict
-        for ext_dict in config["extensions"]
-    ):
-        click.secho(
-            "  config error: The objects in the 'extensions' variable container "
-            "must be of type 'dict' and must at least contain the 'name' key "
-            "that maps to the string name of an extension to load.",
-            err=True,
-            fg="red",
-        )
-        raise click.Abort()
-
-    # handle extension dicts
-    if ignore_all_extensions:
-        config["extensions"] = []
-    else:
-        default_extensions = DEFAULT_EXTENSIONS
-        extra_extensions = config["extensions"]
-        final_extensions = []
-
-        if not ignore_default_extensions:
-            final_extensions.extend(default_extensions)
-        if not ignore_extra_extensions:
-            final_extensions.extend(extra_extensions)
-
-        if ignore_extension:
-            ignore_extension_set = set(ignore_extension)
-            final_extensions = [
-                ext_dict
-                for ext_dict in final_extensions
-                if ext_dict["name"] not in ignore_extension_set
-            ]
-        try:
-            config["extensions"] = list(
-                {
-                    resolve_name(dct["name"], dct["package"])
-                    if "package" in dct
-                    else dct["name"]: dct
-                    for dct in final_extensions
-                }.values()
-            )  # allow extension dicts to overwrite each other by their qualified name
-        except Exception as e:
-            click.secho(
-                "  config error: Internal error while processing 'extension' "
-                f"variable: {e.__class__.__name__}: {e}",
-                err=True,
-                fg="red",
-            )
-            raise click.Abort()
-
-    # -------------------------------------------------------------------------
-    # config.databases
-    # config.main_database_name
-
-    parse_config_databases()
-
-    # -------------------------------------------------------------------------
-    # config.log_level
-
-    if "log_level" not in config:  # logging is disabled in the default configuration
-        if log_level is not None:
-            config["log_level"] = (log_level := log_level.upper())
-        else:
-            config["log_level"] = None
-
-    elif config["log_level"] is not None and config["log_level"] not in LOG_LEVEL_NAMES:
-        click.secho(
-            "  config error: 'log_level' variable must be a valid log level name of "
-            "type 'str', or None.",
-            err=True,
-            fg="red",
-        )
-        raise click.Abort()
-
-    # -------------------------------------------------------------------------
-    # config.log_directory
-
-    if "log_directory" in config:
-        if not isinstance(config["log_directory"], str) or not os.path.isdir(
-            config["log_directory"]
-        ):
-            click.secho(
-                "  config error: 'log_directory' variable must be a valid 'str' path "
-                "to a directory.",
-                err=True,
-                fg="red",
-            )
-            raise click.Abort()
-
-    # -------------------------------------------------------------------------
-    # config.log_filename
-
-    if "log_filename" in config:
-        if not isinstance(config["log_filename"], str):
-            click.secho(
-                "  config error: 'log_filename' variable must be a valid file name.",
-                err=True,
-                fg="red",
-            )
-            raise click.Abort()
-
-    # -------------------------------------------------------------------------
-    # config.log_file_extension
-
-    if "log_file_extension" in config:
-        if not isinstance(config["log_file_extension"], str) or config[
-            "log_file_extension"
-        ].startswith("."):
-            click.secho(
-                "  config error: 'log_file_extension' variable must be a 'str'"
-                "representing a file extension (do not prefix it with a '.' symbol).",
-                err=True,
-                fg="red",
-            )
-            raise click.Abort()
-
-    # -------------------------------------------------------------------------
-    # config.owner_id
-
-    if "owner_id" in config and not isinstance(config["owner_id"], (int, type(None))):
-        click.secho(
-            "  config error: 'owner_id' variable must be either an 'int' object or 'None'.",
-            err=True,
-            fg="red",
-        )
-        raise click.Abort()
-
-    # -------------------------------------------------------------------------
-    # config.owner_ids
-
-    if "owner_ids" in config:
-        if "owner_id" in config and config["owner_id"] is not None:
-            click.secho(
-                "  config error: 'owner_id' and 'owner_ids' variables cannot be "
-                "specified together.",
-                err=True,
-                fg="red",
-            )
-            raise click.Abort()
-        try:
-            if not (
-                config["owner_ids"]
-                and all(isinstance(role_id, int) for role_id in config["owner_ids"])
-            ):
-                click.secho(
-                    "  config error: 'owner_ids' variable must be a container "
-                    "(preferably a 'set' object) of 'int's that supports membership testing.",
-                    err=True,
-                    fg="red",
-                )
-                raise click.Abort()
-        except TypeError:
-            click.secho(
-                "  config error: 'owner_ids' variable must be a container "
-                "(preferably a 'set' object) of 'int's that supports membership testing.",
-                err=True,
-                fg="red",
-            )
-            raise click.Abort()
-
-    # -------------------------------------------------------------------------
-    # config.owner_role_ids
-
-    if "owner_role_ids" in config:
-        try:
-            if not (
-                config["owner_role_ids"]
-                and all(
-                    isinstance(role_id, int) for role_id in config["owner_role_ids"]
-                )
-            ):
-                click.secho(
-                    "  config error: 'owner_role_ids' variable must be a container "
-                    "(preferably a 'set' object) of 'int's that supports membership testing.",
-                    err=True,
-                    fg="red",
-                )
-                raise click.Abort()
-        except TypeError:
-            click.secho(
-                "  config error: 'owner_role_ids' variable must be a container "
-                "(preferably a 'set' object) of 'int's that supports membership testing.",
-                err=True,
-                fg="red",
-            )
-            raise click.Abort()
-
-    # -------------------------------------------------------------------------
-    # config.manager_role_ids
-
-    if "manager_role_ids" in config:
-        try:
-            if not all(
-                isinstance(role_id, int) for role_id in config["manager_role_ids"]
-            ):
-                click.secho(
-                    "  config error: 'manager_role_ids' variable must be a container "
-                    "(preferably a 'set' object) of 'int's that supports membership testing.",
-                    err=True,
-                    fg="red",
-                )
-                raise click.Abort()
-        except TypeError:
-            click.secho(
-                "  config error: 'manager_role_ids' variable must be a container "
-                "(preferably a 'set' object) of 'int's that supports membership testing.",
-                err=True,
-                fg="red",
-            )
-            raise click.Abort()
-
-    # -------------------------------------------------------------------------
-    # TODO: Add support for more config variables as desired
 
     if not quiet:
         click.echo("  Finished reading configuration data")
 
     bot = Bot(
-        final_prefix,
+        config["final_prefix"],
         intents=discord.Intents(config["intents"]),  # type: ignore
         strip_after_prefix=True,
         owner_id=config.get("owner_id"),
-        owner_ids=config.get("owner_ids", set()),
+        owner_ids=config.get("owner_ids"),
         config=config,
     )
 
-    if (
-        config["log_level"] is not None
-    ):  #  not specifying a logging level disables logging
-        with logging_handling(log_level=logging.getLevelName(config["log_level"])):
+    if log_level is not None:  #  not specifying a logging level disables logging
+        with logging_handling(log_level=logging.getLevelName(log_level)):
             asyncio.run(start_bot(bot))
             return
 
@@ -1109,20 +647,26 @@ def extdata(
         return
 
     load_config_files(config_path, localconfig_path, quiet)
-    parse_config_databases(required=True)
+
+    try:
+        config.update(
+            ParserMapping(
+                {"databases": ParserMappingValue(parse_databases, required=True)}
+            ).parse(config)
+        )
+    except ParserMapping.ParsingError as p:
+        click.secho(f"  config error: {p.args[0]}", err=True, fg="red")
+        raise click.Abort()
 
     main_database_input_data = config["databases"][0]
 
-    loop = asyncio.get_event_loop()
+    async def _run():
+        main_database_data = (await utils.load_databases([main_database_input_data]))[0]
+        await utils.create_bot_extension_data_table(main_database_data)
+        await print_bot_extension_info(main_database_data, extension, quiet)
+        await utils.unload_databases([main_database_data])
 
-    main_database_data = loop.run_until_complete(
-        utils.load_databases([main_database_input_data])
-    )[0]
-    loop.run_until_complete(utils.create_bot_extension_data_table(main_database_data))
-    loop.run_until_complete(
-        print_bot_extension_info(main_database_data, extension, quiet)
-    )
-    loop.run_until_complete(utils.unload_databases([main_database_data]))
+    asyncio.run(_run())
 
 
 # fmt: off
@@ -1142,7 +686,7 @@ def extdata(
 @click.option("-q", "--quiet",
     is_flag=True, help="Supress informational (non-error) output.")
 @click.option("-y", "--yes",
-    is_flag=True, help="Supress deletetion confirmation messages.")
+    is_flag=True, help="Supress deletion confirmation messages.")
 @click.help_option("-h", "--help", "help")
 # fmt: on
 def delete(
@@ -1154,20 +698,77 @@ def delete(
 ):
     """Delete the bot extension data of all/specific bot extensions."""
     load_config_files(config_path, localconfig_path, quiet)
-    parse_config_databases(required=True)
+
+    try:
+        config.update(
+            ParserMapping(
+                {"databases": ParserMappingValue(parse_databases, required=True)}
+            ).parse(config)
+        )
+    except ParserMapping.ParsingError as p:
+        click.secho(f"  config error: {p.args[0]}", err=True, fg="red")
+        raise click.Abort()
 
     main_database_input_data = config["databases"][0]
 
-    loop = asyncio.get_event_loop()
+    async def _run():
+        main_database_data = (await utils.load_databases([main_database_input_data]))[0]
+        await utils.create_bot_extension_data_table(main_database_data)
+        await delete_bot_extension_data(main_database_data, extension, quiet, yes)
+        await utils.unload_databases([main_database_data])
 
-    main_database_data = loop.run_until_complete(
-        utils.load_databases([main_database_input_data])
-    )[0]
-    loop.run_until_complete(utils.create_bot_extension_data_table(main_database_data))
-    loop.run_until_complete(
-        delete_bot_extension_data(main_database_data, extension, quiet, yes)
-    )
-    loop.run_until_complete(utils.unload_databases([main_database_data]))
+    asyncio.run(_run())
+
+
+# fmt: off
+@extdata.command()
+@click.option("--config", "--config-path", "config_path", default="./config.py",
+    show_default=True, type=click.Path(resolve_path=True),
+    help="A path to the 'config.py' file to use for configuration. "
+    "credentials and launching. Failure will occur silently for an "
+    "invalid/non-existing path.")
+@click.option("--localconfig", "--localconfig-path", "localconfig_path",
+    default="./localconfig.py", show_default=True, type=click.Path(resolve_path=True),
+    help="A path to the optional 'localconfig.py' file to use for locally overriding "
+    "'config.py'. Failure will occur silently if this file could cannot be found/read "
+    "successfully, except when 'config.py' is not provided, in which case an error "
+    "will occur.")
+@click.option("--ext", "--extension", "extension",  multiple=True, help="The qualified name of an extension.")
+@click.option("-q", "--quiet",
+    is_flag=True, help="Supress informational (non-error) output.")
+@click.option("-y", "--yes",
+    is_flag=True, help="Supress deletion confirmation messages.")
+@click.help_option("-h", "--help", "help")
+# fmt: on
+def migratefull(
+    config_path: str | None,
+    localconfig_path: str | None,
+    extension: tuple[str, ...],
+    quiet: bool,
+    yes: bool,
+):
+    """Delete the bot extension data of all/specific bot extensions."""
+    load_config_files(config_path, localconfig_path, quiet)
+
+    try:
+        config.update(
+            ParserMapping(
+                {"databases": ParserMappingValue(parse_databases, required=True)}
+            ).parse(config)
+        )
+    except ParserMapping.ParsingError as p:
+        click.secho(f"  config error: {p.args[0]}", err=True, fg="red")
+        raise click.Abort()
+
+    main_database_input_data = config["databases"][0]
+
+    async def _run():
+        main_database_data = (await utils.load_databases([main_database_input_data]))[0]
+        await utils.create_bot_extension_data_table(main_database_data)
+        await delete_bot_extension_data(main_database_data, extension, quiet, yes)
+        await utils.unload_databases([main_database_data])
+
+    asyncio.run(_run())
 
 
 if __name__ == "__main__":
