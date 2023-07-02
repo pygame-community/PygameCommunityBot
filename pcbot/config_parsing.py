@@ -2,7 +2,7 @@
 This project has been licensed under the MIT license.
 Copyright (c) 2022-present pygame-community.
 
-This file represents the main entry point into the bot application.
+This file defines functionality used to parse bot configuration files.
 """
 
 from importlib.util import resolve_name
@@ -182,7 +182,7 @@ def parse_databases(
             for db_info_dict in databases
         )
     ):
-        click.secho(
+        raise ParserMapping.ParsingError(
             "'databases' variable must be of type "
             "'list' and must contain one or more database "
             "dictionaries.\n"
@@ -204,9 +204,7 @@ def parse_databases(
             '          {"...": "...", }\n'
             "      ],\n"
             '      "...": "...",\n'
-            "  }\n",
-            err=True,
-            fg="red",
+            "  }\n"
         )
 
     return databases
@@ -249,6 +247,8 @@ def parse_log_level(
             "'log_level' variable must be a valid log level name of "
             "type 'str', or None."
         )
+
+    return log_level
 
 
 def parse_owner_ids(
@@ -355,6 +355,7 @@ parser_mapping = ParserMapping(
         "command_prefix": parse_command_prefix,
         "extensions": parse_extensions,
         "databases": parse_databases,
+        "auto_migrate": bool,
         "log_level": parse_log_level,
         "log_directory": (
             lambda key, log_directory, cfg: log_directory

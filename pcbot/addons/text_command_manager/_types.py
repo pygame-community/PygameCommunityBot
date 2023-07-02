@@ -8,10 +8,9 @@ from typing_extensions import NotRequired
 
 
 class GuildTextCommandState(TypedDict):
-
-    tcmd_uuid: str
+    text_command_uuid: str
     "A UUID string representing the command's ID."
-    parent_tcmd_uuid: str
+    parent_text_command_uuid: str
     "A UUID string representing the parent command's ID."
     qualified_name: str
     "The qualified name of the text command."

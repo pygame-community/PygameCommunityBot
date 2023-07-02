@@ -8,7 +8,6 @@ import asyncio
 import datetime
 import io
 import json
-from typing import Optional, Union
 
 import discord
 from discord.ext import commands
@@ -16,12 +15,10 @@ import snakecore
 from snakecore.commands.decorators import flagconverter_kwargs
 from snakecore.commands.converters import CodeBlock, String, Parens, TimeDelta
 
-from .bases import BaseExtCog
+from ..base import BaseExtensionCog
 
 BotT = snakecore.commands.Bot | snakecore.commands.AutoShardedBot
-MessageableGuildChannel = Union[
-    discord.TextChannel, discord.VoiceChannel, discord.Thread
-]
+MessageableGuildChannel = discord.TextChannel | discord.VoiceChannel | discord.Thread
 
 
 def get_markdown_member_info(member: discord.Member | discord.User):
@@ -204,7 +201,7 @@ def get_msg_info_embed(msg: discord.Message, author: bool = True):
     )
 
 
-class Messaging(BaseExtCog, name="messaging"):
+class Messaging(BaseExtensionCog, name="messaging"):
     async def message_send_func(
         self,
         ctx: commands.Context[BotT],

@@ -1,6 +1,8 @@
 """This file is a part of the source code for PygameCommunityBot.
 This project has been licensed under the MIT license.
 Copyright (c) 2022-present pygame-community.
+
+Legacy code for a polling bot addon.
 """
 
 from ast import literal_eval
@@ -15,7 +17,7 @@ import snakecore
 from snakecore.commands.decorators import flagconverter_kwargs
 from snakecore.commands.converters import String, StringExpr, UnicodeEmoji, Parens
 
-from .bases import BaseExtCog
+from ..base import BaseExtensionCog
 
 BotT = snakecore.commands.Bot | snakecore.commands.AutoShardedBot
 
@@ -40,7 +42,7 @@ def parse_text_to_mapping(
     return mapping
 
 
-class PollsPreCog(BaseExtCog, name="polls-pre"):
+class PollsPreCog(BaseExtensionCog, name="polls-pre"):
     @commands.Cog.listener()
     async def on_raw_reaction_add(self, payload: discord.RawReactionActionEvent):
         channel = self.bot.get_channel(payload.channel_id)

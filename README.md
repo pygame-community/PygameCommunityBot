@@ -32,7 +32,7 @@ config = {
     "intents": 0b1100011111111011111101, # https://discord.com/developers/docs/topics/gateway#list-of-intents
     "extensions": [
         {
-        "name": "pcbot.exts.bundled_extension",
+        "name": "pcbot.addons.bundled_extension",
         "config": {
             "a": 1,
             "b": 2
@@ -50,7 +50,7 @@ To override variables as if they were omitted, define them with a value of `...`
 ```py
 from typing import Any
 
-from pcbot._types import Config # helper TypedDict for configuration data type checking, can be subclassed to define new variables, or omitted completely
+from pcbot.types import Config # helper TypedDict for configuration data type checking, can be subclassed to define new variables, or omitted completely
 
 OMIT: Any = Ellipsis # helper constant
 config: Config = {
@@ -62,7 +62,7 @@ config: Config = {
     "manager_role_ids": OMIT, # will override and delete variable
     "extensions": [
         {
-            "name": "pcbot.exts.bundled_extension2",
+            "name": "pcbot.addons.bundled_extension2",
             "config": {
                 "a": 1,
                 "b": 2
@@ -70,7 +70,7 @@ config: Config = {
         },
         # comment out extensions to disable them or use the `--ignore-extension ext_name` option via the CLI.
         # {
-        #     "name": ".exts.bundled_extension3",
+        #     "name": ".addons.bundled_extension3",
         #     "package": "pcbot"
         # },
         {
@@ -90,7 +90,7 @@ config: Config = {
 ```
 
 ## CLI
-The CLI is used to launch the bot application, whilst also allowing for selective overriding of the `config` dictionary specified inside `config.py` or `localconfig.py` using command line options. Subcommands like `extdata` allow for viewing the extensions which are currently occupying database storage, as well as deleting their data.
+The CLI is used to launch the bot application, whilst also allowing for selective overriding of the `config` dictionary specified inside `config.py` or `localconfig.py` using command line options. Subcommands like `extensions` allow for viewing the extensions which are currently occupying database storage, as well as deleting their data.
 
 ```
 Usage: python -m pcbot [OPTIONS] COMMAND [ARGS]...
@@ -140,5 +140,5 @@ Options:
   -h, --help                      Show this message and exit.
 
 Commands:
-  extdata  Show info about all/specific bot extensions with data stored.
+  extensions  Show info about all/specific bot extensions with data stored.
 ```

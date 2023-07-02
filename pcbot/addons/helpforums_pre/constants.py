@@ -6,7 +6,8 @@ Copyright (c) 2022-present pygame-community.
 import re
 
 
-DB_TABLE_PREFIX = f"{__package__}:"
+DB_PREFIX = f"{'hfs_pre'}__"
+DB_SCHEMA_VERSION_NUMBER = 1
 
 CAUTION_WHILE_MESSAGING_COOLDOWN: int = 900
 THREAD_TITLE_TOO_SHORT_SLOWMODE_DELAY: int = 300

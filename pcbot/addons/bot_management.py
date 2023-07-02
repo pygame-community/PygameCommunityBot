@@ -4,7 +4,6 @@ Copyright (c) 2022-present pygame-community.
 """
 
 import asyncio
-from collections import OrderedDict, deque
 import datetime
 import glob
 import io
@@ -17,14 +16,12 @@ import re
 import time
 import traceback
 from types import NoneType
-from typing import Optional, Union
 
 import discord
-from discord.utils import _ColourFormatter
 from discord.ext import commands, tasks
 import psutil
 import snakecore
-from snakecore.commands.converters import CodeBlock, DateTime, TimeDelta, Parens
+from snakecore.commands.converters import CodeBlock, DateTime, TimeDelta
 from snakecore.commands.decorators import flagconverter_kwargs
 
 from pcbot import constants, PygameCommunityBot, __version__ as bot_version
@@ -36,7 +33,7 @@ from pcbot.utils import (
     QueuingFilter,
 )
 
-from .bases import BaseExtCog
+from ..base import BaseExtensionCog
 
 BotT = PygameCommunityBot
 
@@ -62,7 +59,7 @@ def is_bot_manager():
     return commands.check(predicate)
 
 
-class BotManagementCog(BaseExtCog, name="bot-management"):
+class BotManagementCog(BaseExtensionCog, name="bot-management"):
     invoke_on_message_edit: bool = True
 
     def __init__(
@@ -292,10 +289,10 @@ class BotManagementCog(BaseExtCog, name="bot-management"):
         ) + datetime.timedelta(seconds=60)
 
         recent_records = tuple(self.short_log_record_queue)
-        
-        if not recent_records: 
+
+        if not recent_records:
             return
-        
+
         first_record_dt = datetime.datetime.fromtimestamp(recent_records[0].created)
         last_record_dt = datetime.datetime.fromtimestamp(recent_records[-1].created)
         if self.status_message:

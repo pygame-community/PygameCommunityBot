@@ -19,24 +19,29 @@ from typing import (
     Callable,
     Collection,
     Coroutine,
-    Hashable,
     Iterable,
     Mapping,
     MutableMapping,
     Sequence,
-    Union,
 )
 
 import discord
 from discord.ext import commands
 from discord.utils import _ColourFormatter
+from typing_extensions import NotRequired  # type: ignore
 import snakecore
+from snakecore.constants import UNSET
 import sqlalchemy
 import sqlalchemy.exc
 import sqlalchemy.ext.asyncio
-from sqlalchemy.ext.asyncio import create_async_engine, AsyncEngine, AsyncConnection
+from sqlalchemy.ext.asyncio import create_async_engine, AsyncConnection, AsyncEngine
 
-from ._types import DatabaseDict, ConfigDatabaseDict
+import pcbot
+from pcbot.constants import UID
+
+from .types import Config, ConfigDatabaseDict, DatabaseDict, ExtensionData, Revision
+
+_logger = logging.getLogger(__name__)
 
 
 class DefaultFormatter(logging.Formatter):
@@ -154,7 +159,7 @@ class RotatingTextIOHandler(logging.handlers.BaseRotatingHandler):
         return "<%s %s (%s)>" % (self.__class__.__name__, ":memory:", level)
 
 
-class CustomRotatingFileHandler(logging.handlers.RotatingFileHandler):
+class RotatingFileHandler(logging.handlers.RotatingFileHandler):
     """A `RotatingFileHandler` subclass that supports padding backup numbers
     with zeros for alphabetical file name sorting, as well as adding a file
     extension as a suffix behind backup numbers.
@@ -308,10 +313,41 @@ def unimport_module(module: types.ModuleType) -> None:
         del sys.modules[module.__name__]
 
 
+def validate_revision_list(lst: list[Revision]) -> list[Revision]:
+    for j, revision in enumerate(lst):
+        for k in ("date", "description", "migrate", "rollback", "delete"):
+            if k in revision:
+                if not all(
+                    isinstance(dct, dict)
+                    and all(
+                        isinstance(stmt_lst, list)
+                        and all(isinstance(s, str) for s in stmt_lst)
+                        for stmt_lst in dct.values()
+                    )
+                    for k, dct in revision.items()
+                    if k not in ("date", "description")
+                ):
+                    raise ValueError(
+                        f"Invalid structure for revision {j}: Must match "
+                        "'dict[str, dict[str, str | list[str]]]'"
+                    )
+
+            elif k == "delete" and j == 0:
+                raise ValueError(
+                    f"Revision dictionary 0 (first revision) must define "
+                    "field 'delete'"
+                )
+            else:
+                raise ValueError(
+                    f"Revision dictionary {j} does not define required field '{k}'"
+                )
+
+    return lst
+
+
 async def load_databases(
     db_info_data: Sequence[ConfigDatabaseDict],
     raise_exceptions: bool = True,
-    logger: logging.Logger | None = None,
 ) -> list[DatabaseDict]:
     dbs = []
 
@@ -331,17 +367,12 @@ async def load_databases(
                 pass
 
         except sqlalchemy.exc.SQLAlchemyError as exc:
-            if logger is not None:
-                logger.error(
-                    f"Failed to create engine and functioning connection "
-                    + (
-                        f"'{engine.name}+{engine.driver}' "
-                        if engine is not None
-                        else ""
-                    )
-                    + f"for database '{db_name}'",
-                    exc_info=exc,
-                )
+            _logger.error(
+                f"Failed to create engine and functioning connection "
+                + (f"'{engine.name}+{engine.driver}' " if engine is not None else "")
+                + f"for database '{db_name}'",
+                exc_info=exc,
+            )
 
             if raise_exceptions:
                 raise
@@ -351,11 +382,10 @@ async def load_databases(
             if "connect_args" in db_info_dict:
                 dbs[db_name]["connect_args"] = db_info_data["connect_args"]  # type: ignore
 
-            if logger is not None:
-                logger.info(
-                    f"Successfully configured engine '{engine.name}+{engine.driver}' "
-                    f"for database '{db_name}'"
-                )
+            _logger.info(
+                f"Successfully configured engine '{engine.name}+{engine.driver}' "
+                f"for database '{db_name}'"
+            )
 
     return dbs
 
@@ -363,13 +393,13 @@ async def load_databases(
 async def unload_databases(
     dbs: Iterable[DatabaseDict],
     raise_exceptions: bool = True,
-    logger: logging.Logger | None = None,
 ):
     for db_dict in dbs:
         db_name = db_dict["name"]
         if not isinstance(db_dict["engine"], AsyncEngine):
             raise TypeError(
-                "db_dict['engine'] must be instance of AsnycEngine for all dicts in 'dbs'"
+                "Value for 'engine' must be instance of "
+                "'sqlalchemy.ext.asyncio.AsyncEngine' for all dicts in param 'dbs'"
             )
 
         engine: AsyncEngine = db_dict["engine"]
@@ -377,52 +407,571 @@ async def unload_databases(
         try:
             await engine.dispose()
         except sqlalchemy.exc.SQLAlchemyError as err:
-            if logger is not None:
-                logger.error(
-                    f"Failed to dispose connection pool of engine '{engine.name}+{engine.driver}' of database '{db_name}'",
-                    exc_info=err,
-                )
+            _logger.error(
+                f"Failed to dispose connection pool of engine"
+                f" '{engine.name}+{engine.driver}' of database '{db_name}'",
+                exc_info=err,
+            )
 
             if raise_exceptions:
                 raise
         else:
-            if logger is not None:
-                logger.info(
-                    f"Successfully disposed connection pool of engine '{engine.name}+{engine.driver}' of database '{db_name}'"
-                )
+            _logger.info(
+                "Successfully disposed connection pool of engine "
+                f"'{engine.name}+{engine.driver}' of database '{db_name}'"
+            )
 
 
-async def create_bot_extension_data_table(db: DatabaseDict):
+async def pgcbots_db_schema_is_defined(db: DatabaseDict) -> bool:  # type: ignore
     engine = db["engine"]
-    conn: AsyncConnection
-    async with engine.begin() as conn:
+    if engine.name not in ("sqlite", "postgresql"):
+        raise RuntimeError(
+            f"Unsupported database dialect '{engine.name}' for main database,"
+            " must be 'sqlite' or 'postgresql'"
+        )
+
+    async with engine.connect() as conn:
         if engine.name == "sqlite":
-            await conn.execute(
-                sqlalchemy.text(
-                    "CREATE TABLE IF NOT EXISTS bot_extension_data ("
-                    "name VARCHAR(1000), "
-                    "last_session_version VARCHAR(1000), "
-                    "revision_number INTEGER, "
-                    "auto_migrate INTEGER, "
-                    "db_table_prefix VARCHAR(1000), "
-                    "data BLOB)"
-                )
+            return bool(
+                (
+                    await conn.execute(
+                        sqlalchemy.text(
+                            "SELECT EXISTS(SELECT 1 FROM sqlite_schema "
+                            f"WHERE type == 'table' "
+                            "AND name == 'pgcbots_db_schema')"
+                        )
+                    )
+                ).scalar()
             )
 
         elif engine.name == "postgresql":
-            await conn.execute(
-                sqlalchemy.text(
-                    "CREATE TABLE IF NOT EXISTS bot_extension_data ("
-                    "name VARCHAR(1000), "
-                    "last_session_version VARCHAR(1000), "
-                    "revision_number INTEGER, "
-                    "auto_migrate SMALLINT, "
-                    "db_table_prefix VARCHAR(1000), "
-                    "data BYTEA)"
-                )
+            return bool(
+                (
+                    await conn.execute(
+                        sqlalchemy.text(
+                            "SELECT EXISTS(SELECT 1 FROM "
+                            "information_schema.tables "
+                            "WHERE table_name == 'pgcbots_db_schema')"
+                        )
+                    )
+                ).scalar()
             )
+
+
+async def initialize_pgcbots_db_schema(db: DatabaseDict, config: dict[str, Any]) -> int:
+    engine = db["engine"]
+    if engine.name not in ("sqlite", "postgresql"):
+        raise RuntimeError(
+            f"Unsupported database dialect '{engine.name}' for main database,"
+            " must be 'sqlite' or 'postgresql'"
+        )
+
+    should_migrate = False
+    revision_number = -1
+    migration_count = 0
+    is_initial_migration = False
+
+    if await pgcbots_db_schema_is_defined(db):
+        async with engine.connect() as conn:
+            result_row = (
+                await conn.execute(
+                    sqlalchemy.text(
+                        "SELECT value FROM globals " f"WHERE key == 'revision_number'"
+                    )
+                )
+            ).one_or_none()
+
+            if result_row:
+                revision_number = int(result_row.value)
+
+        if revision_number == -1 or (
+            revision_number < len(MIGRATIONS) - 1 and config.get("auto_migrate")
+        ):
+            is_initial_migration = True
+            should_migrate = True
+    else:
+        should_migrate = True
+
+    if should_migrate:
+        _logger.info(
+            f"Performing "
+            + (
+                "initial "
+                if is_initial_migration
+                else "automatic "
+                if config.get("auto_migrate")
+                else ""
+            )
+            + "bot database migration..."
+        )
+        migration_count = await migrate_pgcbots_db_schema(db, 1)
+
+    async with engine.begin() as conn:
+        if not (
+            await conn.execute(
+                sqlalchemy.text("SELECT EXISTS(SELECT 1 FROM bots WHERE uid == :uid)"),
+                dict(uid=UID),
+            )
+        ).scalar():
+            await conn.execute(  # register bot application into database
+                sqlalchemy.text(f"INSERT INTO bots VALUES (:uid, :name)"),
+                dict(uid=UID, name=pcbot.__title__),
+            )
+
+    return migration_count
+
+
+async def get_pgcbots_db_schema_revision_number(db: DatabaseDict) -> int:
+    revision_number = -1
+    engine = db["engine"]
+
+    conn: AsyncConnection
+    async with engine.begin() as conn:
+        if engine.name not in ("sqlite", "postgresql"):
+            raise RuntimeError(
+                f"Unsupported database dialect '{engine.name}' for main database, "
+                "must be 'sqlite' or 'postgresql'"
+            )
+
+        if await pgcbots_db_schema_is_defined(db):
+            result_row = (
+                await conn.execute(
+                    sqlalchemy.text(
+                        "SELECT value FROM globals WHERE key == 'revision_number'"
+                    )
+                )
+            ).one_or_none()
+
+            if result_row:
+                revision_number = int(result_row.value)
+
+    return revision_number
+
+
+async def migrate_pgcbots_db_schema(
+    db: DatabaseDict, steps: int | None = None
+) -> int:  #
+    old_revision_number = revision_number = -1
+    migration_count = 0
+    is_initial_migration = False
+
+    engine = db["engine"]
+
+    if steps and steps <= 0:
+        raise ValueError("argument 'steps' must be None or > 0")
+
+    _logger.info(
+        f"Attempting bot database migration"
+        + (f" ({steps} steps)..." if steps else "...")
+    )
+
+    conn: AsyncConnection
+    async with engine.begin() as conn:
+        if engine.name not in ("sqlite", "postgresql"):
+            raise RuntimeError(
+                f"Unsupported database dialect '{engine.name}' for main database, "
+                "must be 'sqlite' or 'postgresql'"
+            )
+
+        if await pgcbots_db_schema_is_defined(db):
+            result_row = (
+                await conn.execute(
+                    sqlalchemy.text(
+                        "SELECT value FROM globals WHERE key == 'revision_number'"
+                    )
+                )
+            ).one_or_none()
+
+            if result_row:
+                old_revision_number = revision_number = int(result_row.value)
+
         else:
-            raise RuntimeError(f"Unsupported database engine: {engine.name}")
+            is_initial_migration = True
+
+        for revision_number in range(
+            old_revision_number + 1,
+            (
+                len(MIGRATIONS)
+                if not steps
+                else min(old_revision_number + 1 + steps, len(MIGRATIONS))
+            ),
+        ):
+            for statement in MIGRATIONS[revision_number]["migrate"][engine.name]:
+                await conn.execute(sqlalchemy.text(statement))
+
+            migration_count += 1
+
+        # only runs if for-loop above did not run at all
+        if revision_number == old_revision_number:
+            _logger.info(
+                f"Stored revision number {revision_number} already matches the "
+                f"latest available revision ({len(MIGRATIONS)-1}). No migration "
+                "was performed."
+            )
+            return migration_count
+        elif revision_number == old_revision_number == -1:
+            _logger.info(
+                f"No revisions available for migration. No migration was performed."
+            )
+            return migration_count
+
+        _logger.info(
+            f"Successfully performed {'initial ' if is_initial_migration else ''}"
+            "bot database migration from revision number "
+            f"{old_revision_number} to {revision_number}."
+        )
+
+        await conn.execute(
+            sqlalchemy.text(
+                f"INSERT INTO globals "
+                f"VALUES ('revision_number', :new_revision_number_str) "
+                "ON CONFLICT DO UPDATE SET value = :new_revision_number_str "
+                "WHERE key == 'revision_number'"
+            ),
+            dict(new_revision_number_str=revision_number),
+        )
+
+    return migration_count
+
+
+async def rollback_pgcbots_db_schema(db: DatabaseDict, steps: int) -> int:  #
+    old_revision_number = revision_number = -1
+    rollback_count = 0
+
+    engine = db["engine"]
+
+    if steps < 0:
+        raise ValueError("argument 'steps' must be > 0")
+
+    _logger.info(
+        f"Attempting bot database rollback"
+        + (f" ({steps} steps)..." if steps != -1 else "...")
+    )
+
+    conn: AsyncConnection
+    async with engine.begin() as conn:
+        if engine.name not in ("sqlite", "postgresql"):
+            raise RuntimeError(
+                f"Unsupported database dialect '{engine.name}' for main database, "
+                "must be 'sqlite' or 'postgresql'"
+            )
+
+        if await pgcbots_db_schema_is_defined(db):
+            result_row = (
+                await conn.execute(
+                    sqlalchemy.text(
+                        "SELECT value FROM globals WHERE key == 'revision_number'"
+                    )
+                )
+            ).one_or_none()
+
+            if result_row:
+                old_revision_number = revision_number = int(result_row.value)
+
+        else:
+            raise RuntimeError(
+                "Failed to perform bot database rollback: Database is not configured "
+                "or has incorrect schema structure"
+            )
+
+        if old_revision_number >= len(MIGRATIONS):
+            raise RuntimeError(
+                f"Stored revision number {old_revision_number} exceeds "
+                f"highest available revision number {len(MIGRATIONS)-1}"
+            )
+        elif old_revision_number < 0:
+            raise RuntimeError(
+                f"Stored revision number {old_revision_number} must be >= 0 "
+            )
+        elif old_revision_number == 0:
+            _logger.info(
+                f"Stored revision number is already at 0. " "No rollback was performed."
+            )
+            return rollback_count
+
+        for revision_number in range(
+            old_revision_number, max(old_revision_number - steps, -1), -1
+        ):
+            for statement in MIGRATIONS[revision_number]["rollback"][engine.name]:
+                await conn.execute(sqlalchemy.text(statement))
+
+            rollback_count += 1
+
+        revision_number = old_revision_number - steps
+
+        await conn.execute(
+            sqlalchemy.text(
+                f"INSERT INTO globals "
+                f"VALUES ('revision_number', :new_revision_number_str) "
+                "ON CONFLICT DO UPDATE SET value = :new_revision_number_str "
+                "WHERE key == 'revision_number'"
+            ),
+            dict(new_revision_number_str=revision_number),
+        )
+
+    _logger.info(
+        f"Successfully performed "
+        "bot database rollback from revision number "
+        f"{old_revision_number} to {revision_number}."
+    )
+    return rollback_count
+
+
+async def delete_pgcbots_db_schema(db: DatabaseDict):
+    engine = db["engine"]
+    conn: AsyncConnection
+    async with engine.begin() as conn:
+        if engine.name not in ("sqlite", "postgresql"):
+            raise RuntimeError(
+                f"Unsupported database dialect '{engine.name}' for main database, "
+                "must be 'sqlite' or 'postgresql'"
+            )
+
+        for i in range(-1, -len(MIGRATIONS) - 1, -1):
+            if "delete" not in MIGRATIONS[i]:
+                continue
+
+            for statement in MIGRATIONS[i]["migrate"][engine.name]:
+                await conn.execute(sqlalchemy.text(statement))
+
+
+async def create_extension_data(
+    db: DatabaseDict,
+    name: str,
+    revision_number: int,
+    auto_migrate: bool,
+    db_prefix: str,
+    data: bytes | None = None,
+) -> None:
+    if not isinstance(name, str):
+        raise TypeError(
+            f"argument 'name' must be a fully qualified extension "
+            "name of type 'str', not "
+            f"'{name.__class__.__name__}'"
+        )
+    elif not isinstance(revision_number, int):
+        raise TypeError(
+            f"argument 'revision_number' must be of type 'int', not "
+            f"'{revision_number.__class__.__name__}'"
+        )
+    elif not isinstance(auto_migrate, bool):
+        raise TypeError(
+            f"argument 'auto_migrate' must be of type 'bool', not "
+            f"'{auto_migrate.__class__.__name__}'"
+        )
+    elif not isinstance(db_prefix, str):
+        raise TypeError(
+            f"argument 'db_prefix' must be of type 'str', not "
+            f"'{db_prefix.__class__.__name__}'"
+        )
+    elif data is not None and not isinstance(data, bytes):
+        raise TypeError(
+            f"argument 'data' must be 'None' or of type 'bytes', "
+            f"not '{data.__class__.__name__}'"
+        )
+
+    engine: AsyncEngine = db["engine"]  # type: ignore
+    conn: AsyncConnection
+
+    async with engine.begin() as conn:
+        await conn.execute(
+            sqlalchemy.text(
+                "INSERT INTO bot_extensions "
+                "(name, revision_number, auto_migrate, db_prefix, "
+                "data) VALUES (:name, :revision_number, :auto_migrate, "
+                ":db_prefix, :data)"
+            ),
+            dict(
+                name=name,
+                revision_number=revision_number,
+                auto_migrate=auto_migrate,
+                db_prefix=db_prefix,
+                data=data,
+            ),
+        )
+
+
+async def get_extension_data_names(db: DatabaseDict) -> tuple[str, ...]:
+    if not await pgcbots_db_schema_is_defined(db):
+        return ()
+
+    engine: AsyncEngine = db["engine"]
+    conn: AsyncConnection
+    async with engine.connect() as conn:
+        result: sqlalchemy.engine.Result = await conn.execute(
+            sqlalchemy.text(f"SELECT name FROM bot_extensions"),
+        )
+
+        rows: Any = result.all()
+        return tuple(row.name for row in rows)
+
+
+async def read_extension_data(
+    db: DatabaseDict, name: str, data: bool = True
+) -> ExtensionData:
+    if not isinstance(name, str):
+        raise TypeError(
+            f"argument 'name' must be of type 'str', not "
+            f"'{name.__class__.__name__}'"
+        )
+
+    engine: AsyncEngine = db["engine"]
+    conn: AsyncConnection
+
+    columns = "*"
+
+    if not data:
+        columns = "name, revision_number, auto_migrate, db_prefix"
+
+    async with engine.connect() as conn:
+        result: sqlalchemy.engine.Result = await conn.execute(
+            sqlalchemy.text(
+                f"SELECT {columns} FROM bot_extensions WHERE name == :name"
+            ),
+            dict(name=name),
+        )
+
+        row: Any = result.first()
+        if row is None:
+            raise LookupError(
+                f"Could not find extension storage data for extension named "
+                f"'{name}'"
+            )
+
+        return ExtensionData(  # type: ignore
+            name=row.name,
+            revision_number=row.revision_number,
+            auto_migrate=bool(row.auto_migrate),
+            db_prefix=row.db_prefix,
+        ) | (dict(data=row.data) if data else {})
+
+
+async def extension_data_exists(db: DatabaseDict, name: str) -> bool:
+    if not isinstance(name, str):
+        raise TypeError(
+            f"argument 'name' must be a fully qualified extension "
+            "name of type 'str', not "
+            f"'{name.__class__.__name__}'"
+        )
+
+    engine: AsyncEngine = db["engine"]
+    conn: AsyncConnection
+
+    async with engine.connect() as conn:
+        storage_exists = (await pgcbots_db_schema_is_defined(db)) and bool(
+            (
+                await conn.execute(
+                    sqlalchemy.text(
+                        "SELECT EXISTS(SELECT 1 FROM bot_extensions WHERE name == :name)"
+                    ),
+                    dict(name=name),
+                )
+            ).scalar()
+        )
+    return storage_exists
+
+
+async def update_extension_data(
+    db: DatabaseDict,
+    name: str,
+    revision_number: int | None = UNSET,
+    auto_migrate: bool | None = UNSET,
+    db_prefix: str | None = UNSET,
+    data: bytes | None = UNSET,
+) -> None:
+    if not isinstance(name, str):
+        raise TypeError(
+            f"argument 'name' must be a fully qualified extension "
+            "name of type 'str', not "
+            f"'{name.__class__.__name__}'"
+        )
+    elif revision_number is not UNSET and not isinstance(revision_number, int):
+        raise TypeError(
+            f"argument 'revision_number' must be of type 'int', not "
+            f"'{revision_number.__class__.__name__}'"
+        )
+    elif auto_migrate is not UNSET and not isinstance(auto_migrate, bool):
+        raise TypeError(
+            f"argument 'auto_migrate' must be of type 'bool', not "
+            f"'{auto_migrate.__class__.__name__}'"
+        )
+    elif db_prefix is not UNSET and not isinstance(db_prefix, str):
+        raise TypeError(
+            f"argument 'db_prefix' must be of type 'str', not "
+            f"'{db_prefix.__class__.__name__}'"
+        )
+    elif data is not UNSET and not isinstance(data, (bytes, type(None))):
+        raise TypeError(
+            f"argument 'data' must be 'None' or of type 'bytes', "
+            f"not '{data.__class__.__name__}'"
+        )
+
+    if all(
+        field is UNSET for field in (revision_number, auto_migrate, db_prefix, data)
+    ):
+        raise TypeError(
+            f"arguments 'revision_number', 'auto_migrate', 'db_prefix' "
+            "and 'data' cannot all be 'None'"
+        )
+
+    engine: AsyncEngine = db["engine"]
+    conn: AsyncConnection
+
+    async with engine.begin() as conn:
+        if not bool(
+            (
+                await conn.execute(
+                    sqlalchemy.text(
+                        "SELECT EXISTS(SELECT 1 FROM bot_extensions WHERE name == :name)"
+                    ),
+                    dict(name=name),
+                )
+            ).scalar()
+        ):
+            raise LookupError(
+                f"Could not find extension storage data for extension named "
+                f"'{name}'"
+            )
+
+        params = {}
+        params["name"] = name
+        params |= (
+            dict(revision_number=revision_number)
+            if revision_number is not UNSET
+            else {}
+        )
+        params |= dict(auto_migrate=auto_migrate) if auto_migrate is not UNSET else {}
+        params |= dict(db_prefix=db_prefix) if db_prefix is not UNSET else {}
+        params |= dict(data=data) if data is not UNSET else {}
+
+        target_columns = ", ".join((f"{k} = :{k}" for k in params))
+
+        await conn.execute(
+            sqlalchemy.text(
+                "UPDATE bot_extensions AS be"
+                + f" SET {target_columns}"
+                + " WHERE be.name == :name",
+            ),
+            parameters=params,
+        )
+
+
+async def delete_extension_data(db: DatabaseDict, name: str) -> None:
+    if not isinstance(name, str):
+        raise TypeError(
+            f"argument 'name' must be a fully qualified extension "
+            "name of type 'str', not "
+            f"'{name.__class__.__name__}'"
+        )
+
+    engine: AsyncEngine = db["engine"]
+    conn: AsyncConnection
+
+    async with engine.begin() as conn:
+        await conn.execute(
+            sqlalchemy.text("DELETE FROM bot_extensions WHERE name == :name"),
+            dict(name=name),
+        )
 
 
 async def message_delete_reaction_listener(
@@ -528,9 +1077,14 @@ def raise_exc(exc: Exception):
     raise exc
 
 
-class ParserMapping(dict[str, Callable[[str, Any, MutableMapping[str, Any]], Any]
-            | "ParserMapping"
-            | "ParserMappingValue",]):
+class ParserMapping(
+    dict[
+        str,
+        Callable[[str, Any, MutableMapping[str, Any]], Any]
+        | "ParserMapping"
+        | "ParserMappingValue",
+    ]
+):
     """A `dict` subclass that parses and/or validates mapping objects based on the
     structure and callback values of the input mapping given to it. The parsing and/or
     validating occurs in the order of definition of the key-value pairs of the input
@@ -554,7 +1108,7 @@ class ParserMapping(dict[str, Callable[[str, Any, MutableMapping[str, Any]], Any
     parser_mapping = ParserMapping(
         {
             "username": str,
-            "password": lambda key, value, values_map: value # `values_map` is the value of the 
+            "password": lambda key, value, values_map: value # `values_map` is the value of the
             if isinstance(value, str) and len(value) > 8
             else raise_exception(
                 ParserMapping.ParsingError(
@@ -585,11 +1139,12 @@ class ParserMapping(dict[str, Callable[[str, Any, MutableMapping[str, Any]], Any
         "_key",
         "_parent",
         "require_all",
+        "reject_unknown",
     )
 
     class ParsingError(Exception):
-        """A class for :class:`ParserMapping` related parsing errors.
-        """
+        """A class for :class:`ParserMapping` related parsing errors."""
+
         pass
 
     def __init__(
@@ -597,44 +1152,64 @@ class ParserMapping(dict[str, Callable[[str, Any, MutableMapping[str, Any]], Any
         mapping: Mapping[
             str,
             Callable[[str, Any, MutableMapping[str, Any]], Any]
+            | type
             | "ParserMapping"
             | "ParserMappingValue",
         ],
         require_all: bool = False,
+        reject_unknown: bool = False,
     ):
         self._key: str | None = None
         self._parent: ParserMapping | None = None
         self.require_all = require_all
+        self.reject_unknown = reject_unknown
+
         if not isinstance(mapping, Mapping):
             raise TypeError("argument 'mapping' must be a mapping object")
 
         temp_mapping = {}
 
         current_pmv = None
-        for k, v in tuple(mapping.items()): # begin 
-            if isinstance(v, ParserMappingValue): # A ParserMappingValue was explicitly declared
+
+        _parser_lambda_map: dict[str, type] = {}
+        # helper dictionary to hold classes passed as values to 'mapping', to avoid
+        # local scope bugs with lambda functions defined in this method
+
+        for k, v in tuple(mapping.items()):  # begin
+            if isinstance(
+                v, ParserMappingValue
+            ):  # A ParserMappingValue was explicitly declared
                 current_pmv = v
                 v = v.value
 
-            if isinstance(v, self.__class__): # build parent-child references with nested ParserMappings
+            if isinstance(
+                v, self.__class__
+            ):  # build parent-child references with nested ParserMappings
                 v._parent = self
                 v._key = k
-            elif isinstance(v, type):  # convert class object to a validator using issinstance
+            elif isinstance(
+                v, type
+            ):  # convert class object to a validator using isinstance()
+                cls = v
+
                 callback = (
                     lambda key, value, mapping: value
-                    if isinstance(value, v)  # type: ignore
+                    if isinstance(value, _parser_lambda_map[key])  # type: ignore
                     else raise_exc(
                         self.__class__.ParsingError(
                             f"value "
                             + (
-                                f"at fully qualified key '{qk}' "
+                                f"at fully qualified key '{qk}': "
                                 if (qk := self._get_qualified_key())
-                                else " "
+                                else ": "
                             )
                             + f"must be an instance of '{v.__name__}' not '{type(value).__name__}'"
                         )
                     )
                 )
+
+                _parser_lambda_map[k] = v
+
                 if current_pmv:
                     current_pmv.value = callback
                 else:
@@ -675,24 +1250,37 @@ class ParserMapping(dict[str, Callable[[str, Any, MutableMapping[str, Any]], Any
             raise self.__class__.ParsingError(
                 f"value"
                 + (
-                    f"at fully qualified key '{qk}' "
+                    f"at fully qualified key '{qk}': "
                     if (qk := self._get_qualified_key())
-                    else " "
+                    else ": "
                 )
                 + "must be an instance of a mutable mapping "
-                "type instantiable without arguments (e.g. dict)"
+                "type instantiable without arguments"
             )
 
         if self.require_all and len(input_mapping) < len(self):
             raise self.__class__.ParsingError(
-                "Cannot parse input mapping "
+                "Parsing failed"
                 + (
-                    f"at fully qualified key " + f"'{qk}' "
+                    f"at fully qualified key " + f"'{qk}': "
                     if (qk := self._get_qualified_key())
-                    else " "
+                    else ": "
                 )
-                + " as all values are required and some are missing "
+                + "All fields are required "
             )
+
+        elif self.reject_unknown:
+            for key in input_mapping:
+                if key not in self:
+                    raise self.__class__.ParsingError(
+                        "Parsing failed"
+                        + (
+                            f"at fully qualified key " + f"'{qk}': "
+                            if (qk := self._get_qualified_key())
+                            else ": "
+                        )
+                        + f"Key '{key}' is unknown"
+                    )
 
         try:
             output_mapping = input_mapping.__class__()
@@ -700,9 +1288,9 @@ class ParserMapping(dict[str, Callable[[str, Any, MutableMapping[str, Any]], Any
             raise self.__class__.ParsingError(
                 f"value"
                 + (
-                    f"at fully qualified key '{qk}' "
+                    f"at fully qualified key '{qk}': "
                     if (qk := self._get_qualified_key())
-                    else " "
+                    else ": "
                 )
                 + "must be an instance of a mutable mapping "
                 "type instantiable without arguments (e.g. dict)"
@@ -721,7 +1309,7 @@ class ParserMapping(dict[str, Callable[[str, Any, MutableMapping[str, Any]], Any
                     output_mapping[k] = v.parse(input_mapping[k])
                 else:
                     output_mapping[k] = v(k, input_mapping[k], output_mapping)  # type: ignore
-            elif was_pmv and v_or_pmv.required or self.require_all: # type: ignore
+            elif was_pmv and v_or_pmv.required or self.require_all:  # type: ignore
                 raise self.__class__.ParsingError(
                     f"mapping "
                     + (
@@ -737,5 +1325,8 @@ class ParserMapping(dict[str, Callable[[str, Any, MutableMapping[str, Any]], Any
 
 @dataclass
 class ParserMappingValue:
-    value: Callable[[str, Any, MutableMapping], Any] | ParserMapping
+    value: Callable[[str, Any, MutableMapping], Any] | ParserMapping | type
     required: bool = False
+
+
+from .migrations import MIGRATIONS

@@ -3,18 +3,16 @@ This project has been licensed under the MIT license.
 Copyright (c) 2022-present pygame-community.
 """
 
-from typing import Union
 
 import discord
-from discord.ext import commands
 import snakecore
 
-from .bases import BaseExtCog
+from ..base import BaseExtensionCog
 
 BotT = snakecore.commands.Bot | snakecore.commands.AutoShardedBot
 
 
-class MyExtCog(BaseExtCog, name="my-ext"):
+class MyExtensionCog(BaseExtensionCog, name="my-ext"):
     """..."""  # describe your extension cog
 
     def __init__(self, bot: BotT, theme_color: int | discord.Color = 0) -> None:
@@ -28,4 +26,4 @@ async def setup(
     bot: BotT,
     color: int | discord.Color = 0,  # add more optional parameters as desired
 ):
-    await bot.add_cog(MyExtCog(bot, theme_color=color))
+    await bot.add_cog(MyExtensionCog(bot, theme_color=color))

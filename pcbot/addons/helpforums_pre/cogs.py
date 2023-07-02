@@ -20,7 +20,7 @@ from sqlalchemy.engine import Result
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncConnection
 
 from .constants import (
-    DB_TABLE_PREFIX,
+    DB_PREFIX,
     HELP_FORUM_CHANNEL_IDS,
     HELPFULIE_ROLE_ID,
     FORUM_THREAD_TAG_LIMIT,
@@ -33,7 +33,7 @@ from .constants import (
 )
 
 from ... import __version__
-from ..bases import BaseExtCog
+from ...base import BaseExtensionCog
 from ...bot import PygameCommunityBot
 
 if TYPE_CHECKING:
@@ -54,7 +54,7 @@ class InactiveHelpThreadData(TypedDict):
     alert_message_id: NotRequired[int]
 
 
-class HelpForumsPreCog(BaseExtCog, name="helpforums-pre"):
+class HelpForumsPreCog(BaseExtensionCog, name="helpforums-pre"):
     def __init__(
         self,
         bot: BotT,
@@ -105,7 +105,7 @@ class HelpForumsPreCog(BaseExtCog, name="helpforums-pre"):
                 (
                     await conn.execute(
                         text(
-                            f"SELECT EXISTS(SELECT 1 FROM '{DB_TABLE_PREFIX}bad_help_thread_data' "
+                            f"SELECT EXISTS(SELECT 1 FROM '{DB_PREFIX}bad_help_thread_data' "
                             "WHERE thread_id == :thread_id LIMIT 1)"
                         ),
                         dict(thread_id=thread_id),
@@ -118,7 +118,7 @@ class HelpForumsPreCog(BaseExtCog, name="helpforums-pre"):
         async with self.db_engine.connect() as conn:
             result: Result = await conn.execute(
                 text(
-                    f"SELECT * FROM '{DB_TABLE_PREFIX}bad_help_thread_data' "
+                    f"SELECT * FROM '{DB_PREFIX}bad_help_thread_data' "
                     "WHERE thread_id == :thread_id"
                 ),
                 dict(thread_id=thread_id),
@@ -151,14 +151,14 @@ class HelpForumsPreCog(BaseExtCog, name="helpforums-pre"):
             await conn.execute(
                 text(
                     "INSERT INTO "
-                    f"'{DB_TABLE_PREFIX}bad_help_thread_data' AS bad_help_thread_data "
+                    f"'{DB_PREFIX}bad_help_thread_data' AS bad_help_thread_data "
                     f"({', '.join(target_columns)}) "
                     f"VALUES ({', '.join(':'+colname for colname in target_columns)}) "
                     f"ON CONFLICT DO UPDATE SET {target_update_set_columns} "
                     "WHERE bad_help_thread_data.thread_id == :thread_id"
                 ),
                 data
-                | dict(caution_message_ids=pickle.dumps(data["caution_message_ids"])),
+                | dict(caution_message_ids=pickle.dumps(data["caution_message_ids"])),  # type: ignore
             )
 
     async def delete_bad_help_thread_data(self, thread_id: int) -> None:
@@ -166,7 +166,7 @@ class HelpForumsPreCog(BaseExtCog, name="helpforums-pre"):
         async with self.db_engine.connect() as conn:
             await conn.execute(
                 text(
-                    f"DELETE FROM '{DB_TABLE_PREFIX}bad_help_thread_data' "
+                    f"DELETE FROM '{DB_PREFIX}bad_help_thread_data' "
                     "AS bad_help_thread_data "
                     "WHERE bad_help_thread_data.thread_id == :thread_id"
                 ),
@@ -180,7 +180,7 @@ class HelpForumsPreCog(BaseExtCog, name="helpforums-pre"):
                 (
                     await conn.execute(
                         text(
-                            f"SELECT EXISTS(SELECT 1 FROM '{DB_TABLE_PREFIX}inactive_help_thread_data' "
+                            f"SELECT EXISTS(SELECT 1 FROM '{DB_PREFIX}inactive_help_thread_data' "
                             "WHERE thread_id == :thread_id LIMIT 1)"
                         ),
                         dict(thread_id=thread_id),
@@ -195,7 +195,7 @@ class HelpForumsPreCog(BaseExtCog, name="helpforums-pre"):
         async with self.db_engine.connect() as conn:
             result: Result = await conn.execute(
                 text(
-                    f"SELECT * FROM '{DB_TABLE_PREFIX}inactive_help_thread_data' "
+                    f"SELECT * FROM '{DB_PREFIX}inactive_help_thread_data' "
                     "WHERE thread_id == :thread_id"
                 ),
                 dict(thread_id=thread_id),
@@ -233,13 +233,13 @@ class HelpForumsPreCog(BaseExtCog, name="helpforums-pre"):
             await conn.execute(
                 text(
                     "INSERT INTO "
-                    f"'{DB_TABLE_PREFIX}inactive_help_thread_data' AS inactive_help_thread_data "
+                    f"'{DB_PREFIX}inactive_help_thread_data' AS inactive_help_thread_data "
                     f"({', '.join(target_columns)}) "
                     f"VALUES ({', '.join(':'+colname for colname in target_columns)}) "
                     f"ON CONFLICT DO UPDATE SET {target_update_set_columns} "
                     "WHERE inactive_help_thread_data.thread_id == :thread_id "
                 ),
-                data | dict(alert_message_id=data.get("alert_message_id", None)),
+                data | dict(alert_message_id=data.get("alert_message_id", None)),  # type: ignore
             )
 
     async def delete_inactive_help_thread_data(self, thread_id: int) -> None:
@@ -247,7 +247,7 @@ class HelpForumsPreCog(BaseExtCog, name="helpforums-pre"):
         async with self.db_engine.connect() as conn:
             await conn.execute(
                 text(
-                    f"DELETE FROM '{DB_TABLE_PREFIX}inactive_help_thread_data' "
+                    f"DELETE FROM '{DB_PREFIX}inactive_help_thread_data' "
                     "AS inactive_help_thread_data "
                     "WHERE inactive_help_thread_data.thread_id == :thread_id"
                 ),
