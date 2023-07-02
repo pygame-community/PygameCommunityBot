@@ -3,4 +3,5 @@ This project has been licensed under the MIT license.
 Copyright (c) 2022-present pygame-community.
 """
 
-DB_TABLE_PREFIX = f"{__package__}:"
+DB_PREFIX = f"{'_template'}__"  # Always preserve the trailing double underscores! Use only alphanumeric characters
+DB_SCHEMA_VERSION_NUMBER = 1

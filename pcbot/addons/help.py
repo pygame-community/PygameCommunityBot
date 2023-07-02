@@ -4,7 +4,7 @@ Copyright (c) 2022-present pygame-community.
 """
 
 import asyncio
-from typing import Any, Mapping, Optional, Union
+from typing import Any, Mapping
 
 import discord
 from discord.ext import commands
@@ -12,7 +12,7 @@ import snakecore
 
 from ..bot import PygameCommunityBot
 
-from .bases import BaseExtCog
+from ..base import BaseExtensionCog
 from .text_command_manager.cogs import TextCommandManagerCog
 
 BotT = PygameCommunityBot
@@ -101,7 +101,9 @@ class EmbedHelpCommand(commands.HelpCommand):
                     filtered = [
                         cmd
                         for cmd in await self.filter_commands(cmds, sort=True)
-                        if await text_command_manager.tcmd_can_run(self.context, cmd)
+                        if await text_command_manager.text_command_can_run(
+                            self.context, cmd
+                        )
                     ]
                 else:
                     filtered = await self.filter_commands(cmds, sort=True)
@@ -161,7 +163,7 @@ class EmbedHelpCommand(commands.HelpCommand):
             filtered = [
                 cmd
                 for cmd in await self.filter_commands(cog.get_commands(), sort=True)
-                if await text_command_manager.tcmd_can_run(self.context, cmd)
+                if await text_command_manager.text_command_can_run(self.context, cmd)
             ]
         else:
             filtered = await self.filter_commands(cog.get_commands(), sort=True)
@@ -222,7 +224,7 @@ class EmbedHelpCommand(commands.HelpCommand):
 
         text_command_manager: TextCommandManagerCog = self.context.bot.get_cog("text-command-manager")  # type: ignore
         if text_command_manager:
-            if not await text_command_manager.tcmd_can_run(self.context, group):
+            if not await text_command_manager.text_command_can_run(self.context, group):
                 return
 
         if isinstance(group, commands.Group):
@@ -230,7 +232,9 @@ class EmbedHelpCommand(commands.HelpCommand):
                 filtered = [
                     cmd
                     for cmd in await self.filter_commands(group.commands, sort=True)
-                    if await text_command_manager.tcmd_can_run(self.context, cmd)
+                    if await text_command_manager.text_command_can_run(
+                        self.context, cmd
+                    )
                 ]
             else:
                 filtered = await self.filter_commands(group.commands, sort=True)
@@ -280,8 +284,8 @@ class EmbedHelpCommand(commands.HelpCommand):
 
         paginator = None
         cog = self.cog
-        if not isinstance(cog, BaseExtCog):
-            raise RuntimeError("A BaseExtCog cog instance must be set")
+        if not isinstance(cog, BaseExtensionCog):
+            raise RuntimeError("A BaseExtensionCog cog instance must be set")
 
         paginator = None
 
@@ -318,7 +322,6 @@ class EmbedHelpCommand(commands.HelpCommand):
                     theme_color=int(self.theme_color),
                 )
             except discord.NotFound:
-
                 if len(embeds) == 1:
                     cog.cached_response_messages[
                         ctx.message.id
@@ -359,7 +362,7 @@ class EmbedHelpCommand(commands.HelpCommand):
         cog.cached_embed_paginators[response_message.id] = paginator_tuple
 
 
-class HelpCommandCog(BaseExtCog, name="help-commands"):
+class HelpCommandCog(BaseExtensionCog, name="help-commands"):
     pass
 
 

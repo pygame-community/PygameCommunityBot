@@ -6,13 +6,13 @@ Copyright (c) 2022-present pygame-community.
 import asyncio
 import datetime
 import re
-from typing import Union
+
 
 import discord
 from discord.ext import commands
 import snakecore
 
-from .bases import BaseExtCog
+from ..base import BaseExtensionCog
 
 BotT = snakecore.commands.Bot | snakecore.commands.AutoShardedBot
 
@@ -20,7 +20,7 @@ SHOWCASE_ENTRIES_CHANNEL = 772507247540437032
 ENTRIES_DISCUSSION_CHANNEL = 780351772514058291
 
 
-class ShowcasePreCog(BaseExtCog, name="showcase-pre"):
+class ShowcasePreCog(BaseExtensionCog, name="showcase-pre"):
     def __init__(self, bot: BotT, theme_color: int | discord.Color = 0) -> None:
         super().__init__(bot, theme_color=theme_color)
         self.entry_message_deletion_dict: dict[int, tuple[asyncio.Task[None], int]] = {}
@@ -191,7 +191,9 @@ class ShowcasePreCog(BaseExtCog, name="showcase-pre"):
                             ),
                             warn_msg.id,
                         )
-                    except discord.NotFound:  # cancelling didn't work, warning and entry message were already deleted
+                    except (
+                        discord.NotFound
+                    ):  # cancelling didn't work, warning and entry message were already deleted
                         if new.id in self.entry_message_deletion_dict:
                             del self.entry_message_deletion_dict[new.id]
 
@@ -227,7 +229,9 @@ class ShowcasePreCog(BaseExtCog, name="showcase-pre"):
                     deletion_task.cancel()  # try to cancel deletion after noticing valid edit by sender
                     warn_msg = await new.channel.fetch_message(deletion_data_tuple[1])
                     await warn_msg.delete()
-                except discord.NotFound:  # cancelling didn't work, warning and entry message were already deleted
+                except (
+                    discord.NotFound
+                ):  # cancelling didn't work, warning and entry message were already deleted
                     pass
 
             if new.id in self.entry_message_deletion_dict:

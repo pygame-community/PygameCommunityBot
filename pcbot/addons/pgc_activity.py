@@ -10,7 +10,7 @@ import discord
 from discord.ext import commands, tasks
 import snakecore
 
-from .bases import BaseExtCog
+from ..base import BaseExtensionCog
 
 BotT = snakecore.commands.Bot | snakecore.commands.AutoShardedBot
 MessageableGuildChannel = discord.TextChannel | discord.VoiceChannel | discord.Thread
@@ -91,7 +91,7 @@ BOT_WELCOME_MSG = {
 }
 
 
-class PGCActivityCog(BaseExtCog, name="pgc-activity"):
+class PGCActivityCog(BaseExtensionCog, name="pgc-activity"):
     def __init__(self, bot: BotT, theme_color: int | discord.Color = 0) -> None:
         super().__init__(bot, theme_color)
 

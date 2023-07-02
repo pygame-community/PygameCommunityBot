@@ -4,7 +4,13 @@ Copyright (c) 2022-present pygame-community.
 """
 
 from __future__ import annotations
-from typing import TYPE_CHECKING, Any, Collection, Literal, Optional, TypedDict
+from typing import (
+    TYPE_CHECKING,
+    Any,
+    Collection,
+    Literal,
+    TypedDict,
+)
 from sqlalchemy.ext.asyncio import AsyncEngine
 
 if TYPE_CHECKING:
@@ -28,10 +34,9 @@ class DatabaseDict(TypedDict):
 
 class ExtensionData(TypedDict):
     name: str
-    last_session_version: str
     revision_number: int
     auto_migrate: bool
-    db_table_prefix: str
+    db_prefix: str
     data: bytes | None
 
 
@@ -46,7 +51,7 @@ class ConfigExtensionDict(TypedDict):
 
 
 class Config(TypedDict, total=False):
-    """Helper `TypedDict` for defining bot configuration data."""
+    """Helper ``TypedDict`` for defining bot configuration data."""
 
     authentication: Required[ConfigAuthentication | dict[str, Any]]
     intents: int
@@ -63,6 +68,7 @@ class Config(TypedDict, total=False):
 
     databases: list[ConfigDatabaseDict] | tuple[ConfigDatabaseDict, ...]
     main_database_name: str
+    auto_migrate: bool
 
     log_level: Literal[
         "CRITICAL",
@@ -74,6 +80,15 @@ class Config(TypedDict, total=False):
         "DEBUG",
         "NOTSET",
     ]
+
     log_directory: str
     log_filename: str
     log_file_extension: str
+
+
+class Revision(TypedDict):
+    date: str
+    description: str
+    migrate: dict[str, list[str]]
+    rollback: dict[str, list[str]]
+    delete: NotRequired[dict[str, list[str]]]

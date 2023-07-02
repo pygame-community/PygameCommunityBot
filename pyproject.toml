@@ -1,6 +1,6 @@
 [tool.black]
 line-length = 88
-target_version = ['py310']
+target_version = ['py311']
 include = '\.pyi?$'
 exclude = '''
 
@@ -37,4 +37,4 @@ line_length = 88
 exclude = [
   "**/__pycache__",
 ]
-pythonVersion = "3.10"
+pythonVersion = "3.11"

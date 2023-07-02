@@ -6,7 +6,7 @@ Copyright (c) 2022-present pygame-community.
 import asyncio
 from collections import OrderedDict
 import logging
-from typing import Optional, Sequence, Union
+from typing import Any, Sequence
 
 import discord
 from discord.ext import commands
@@ -14,21 +14,24 @@ from discord.utils import MISSING
 import snakecore
 from snakecore.constants import UNSET
 from sqlalchemy import text
-from sqlalchemy.ext.asyncio import AsyncEngine, AsyncConnection, AsyncResult
+from sqlalchemy.ext.asyncio import AsyncEngine, AsyncConnection
 from snakecore.utils.pagination import EmbedPaginator
 
+from .bot import PygameCommunityBot
 
-from ..bot import PygameCommunityBot
+from . import __version__
 
-from .. import __version__
+from .types import Revision
 
 BotT = commands.Bot | commands.AutoShardedBot
 PCBotT = PygameCommunityBot
 
+UnsetType = type(UNSET)
+
 _logger = logging.getLogger(__name__)
 
 
-class BaseExtCog(commands.Cog):
+class BaseExtensionCog(commands.Cog):
     __version__ = __version__
 
     def __init__(self, bot: BotT, theme_color: int | discord.Color = 0) -> None:
@@ -146,7 +149,6 @@ class BaseExtCog(commands.Cog):
         suppress: bool = False,
         destination: discord.abc.Messageable | None = None,
     ) -> discord.Message:  # type: ignore
-
         suppress_embeds = suppress or suppress_embeds
         destination = destination or ctx.channel
 
@@ -205,7 +207,6 @@ class BaseExtCog(commands.Cog):
         | discord.Thread
         | None = None,
     ):
-
         if not ctx.guild:
             raise ValueError(
                 "invocation context 'ctx' must have a '.guild' associated with it."
@@ -250,7 +251,6 @@ class BaseExtCog(commands.Cog):
                     theme_color=int(self.theme_color),
                 )
             except discord.NotFound:
-
                 if len(embeds) == 1:
                     self.cached_response_messages[
                         ctx.message.id
@@ -265,7 +265,7 @@ class BaseExtCog(commands.Cog):
                     theme_color=int(self.theme_color),
                 )
         else:
-            if len(embeds) == 1:
+            if len(embeds) == 1:  # don't use paginator for single embed
                 self.cached_response_messages[ctx.message.id] = await destination.send(
                     embed=embeds[0]
                 )
@@ -293,26 +293,39 @@ class BaseExtCog(commands.Cog):
         self.cached_embed_paginators[response_message.id] = paginator_tuple
 
 
-class ExtSpec:
-    """A helper class for defining extension entry points."""
+class ExtensionManager:
+    """A helper class for managing bot extensions."""
 
     def __init__(
         self,
         name: str,
-        revisions: list[dict[str, str | tuple[str, ...]]],
-        rollbacks: list[dict[str, str | tuple[str, ...]]],
+        migrations: list[Revision],
         default_auto_migrate: bool,
-        db_table_prefix: str,
+        db_prefix: str,
     ) -> None:
-        self.name = name
-        self.revisions = revisions
-        self.rollbacks = rollbacks
-        self.default_auto_migrate = default_auto_migrate
-        self.db_table_prefix = db_table_prefix
+        """Create an extension manager instance for a bot extension module.
 
-    async def migrate(self, bot: PCBotT, steps: int = -1) -> int:
+        Parameters
+        ----------
+        name : str
+            The extension name.
+        migrations : list[Revision]
+            The list of database revision dictionaries used for extension database
+            object migration/rollback.
+        default_auto_migrate : bool
+            Whether automatic migration for extension database objects (upon extension
+            loading at runtime) should be performed by default.
+        db_prefix : str
+            The name prefix to use for all database objects of this extension.
+        """
+        self.name = name
+        self.migrations = migrations
+        self.default_auto_migrate = default_auto_migrate
+        self.db_prefix = db_prefix
+
+    async def migrate(self, bot: PCBotT, steps: int | None = None) -> int:
         """Perform a database migration for all database objects
-        used by this extension.
+        used by the managed extension.
 
         Parameters
         ----------
@@ -322,8 +335,8 @@ class ExtSpec:
             to Discord.
         steps : int, optional
             The maximum amount of migration steps to take (revision count
-            to apply). -1 performs the maximum amount possible.
-            Defaults to -1.
+            to apply). None performs the maximum amount possible.
+            Defaults to None.
 
         Returns
         -------
@@ -343,68 +356,68 @@ class ExtSpec:
             Invalid function arguments.
         """
 
-        migrations = 0
-        db_engine = bot.get_database()
+        migration_count = 0
+        db_engine = bot.get_database_engine()
         if not isinstance(db_engine, AsyncEngine):
             raise RuntimeError(
-                "Could not find primary database interface of type "
+                "Failed to retrieve main database engine of type "
                 "'sqlalchemy.ext.asyncio.AsyncEngine'"
             )
         elif db_engine.name not in ("sqlite", "postgresql"):
-            raise RuntimeError(f"Unsupported database engine: {db_engine.name}")
+            raise RuntimeError(
+                f"Unsupported database dialect '{db_engine.name}' for main database, "
+                "must be 'sqlite' or 'postgresql'"
+            )
 
-        if steps == 0:
-            raise ValueError("argument 'steps' must be -1 (unlimited) or >= 0")
+        if steps and steps <= 0:
+            raise ValueError("argument 'steps' must be None or > 0")
 
         if extension_data_exists := await bot.extension_data_exists(self.name):
             extension_data = await bot.read_extension_data(self.name)
         else:
             extension_data = dict(
                 name=self.name,
-                last_session_version=__version__,
                 revision_number=-1,
                 auto_migrate=self.default_auto_migrate,
-                db_table_prefix=self.db_table_prefix,
+                db_prefix=self.db_prefix,
             )
 
         _logger.info(
-            "Attempting migration "
-            f"({steps if steps > -1 else len(self.revisions)} steps)..."
+            f"Attempting migration for extension '{self.name}' "
+            + (f"({steps} steps)..." if steps != None else "")
         )
-
-        steps = steps if steps > -1 else float("inf")  # type: ignore
 
         is_initial_migration = extension_data["revision_number"] == -1
         old_revision_number: int = extension_data["revision_number"]  # type: ignore
         revision_number = old_revision_number
 
-        if old_revision_number >= len(self.revisions):
+        if old_revision_number >= len(self.migrations):
             raise RuntimeError(
                 f"Stored revision number {old_revision_number} exceeds "
-                f"highest available revision number {len(self.revisions)-1}"
+                f"highest available revision number {len(self.migrations)-1}"
             )
 
         conn: AsyncConnection
         async with db_engine.begin() as conn:
             for revision_number in range(
                 old_revision_number + 1,
-                min(old_revision_number + steps + 1, len(self.revisions)),
+                (
+                    len(self.migrations)
+                    if not steps
+                    else min(old_revision_number + 1 + steps, len(self.migrations))
+                ),
             ):
-                stmt_or_tuple = self.revisions[revision_number][db_engine.name]
-                if isinstance(stmt_or_tuple, tuple):
-                    for stmt in stmt_or_tuple:
-                        await conn.execute(text(stmt))
-                else:
-                    await conn.execute(text(stmt_or_tuple))
+                for stmt in self.migrations[revision_number]["migrate"][db_engine.name]:
+                    await conn.execute(text(stmt))
 
-                migrations += 1
+                migration_count += 1
 
         if revision_number == old_revision_number:
             _logger.info(
                 f"Stored revision number {revision_number} already matches the "
                 "latest available revision, No migration was performed."
             )
-            return migrations
+            return migration_count
 
         extension_data["revision_number"] = revision_number
         if extension_data_exists:
@@ -423,7 +436,7 @@ class ExtSpec:
                 f"revision number {old_revision_number} to {revision_number}."
             )
 
-        return migrations
+        return migration_count
 
     async def rollback(self, bot: PCBotT, steps: int) -> int:
         """Roll back the last 'steps' revisions that were applied
@@ -452,15 +465,18 @@ class ExtSpec:
         ValueError
             Invalid function arguments.
         """
-        rollbacks = 0
-        db_engine = bot.get_database()
+        rollback_count = 0
+        db_engine = bot.get_database_engine()
         if not isinstance(db_engine, AsyncEngine):
             raise RuntimeError(
-                "Could not find primary database interface of type "
+                "Failed to retrieve main database engine of type "
                 "'sqlalchemy.ext.asyncio.AsyncEngine'"
             )
         elif db_engine.name not in ("sqlite", "postgresql"):
-            raise RuntimeError(f"Unsupported database engine: {db_engine.name}")
+            raise RuntimeError(
+                f"Unsupported database dialect '{db_engine.name}' for main database, "
+                "must be 'sqlite' or 'postgresql'"
+            )
 
         if steps <= 0:
             raise ValueError("argument 'steps' must be greater than 0")
@@ -468,20 +484,22 @@ class ExtSpec:
         if await bot.extension_data_exists(self.name):
             extension_data = await bot.read_extension_data(self.name)
         else:
-            raise RuntimeError(f"No extension data found for extension '{self.name}'")
+            raise RuntimeError(
+                f"No bot extension data found for extension '{self.name}'"
+            )
 
         _logger.info(
             f"Attempting rollback for extension '{self.name}' "
-            f"({min(steps, len(self.rollbacks))} steps)..."
+            f"({min(steps, len(self.migrations))} steps)..."
         )
 
         old_revision_number: int = extension_data["revision_number"]  # type: ignore
         revision_number = old_revision_number
 
-        if old_revision_number >= len(self.revisions):
+        if old_revision_number >= len(self.migrations):
             raise RuntimeError(
                 f"Stored revision number {old_revision_number} exceeds "
-                f"highest available revision number {len(self.revisions)-1}"
+                f"highest available revision number {len(self.migrations)-1}"
             )
         elif old_revision_number < 0:
             raise RuntimeError(
@@ -492,32 +510,106 @@ class ExtSpec:
                 f"Stored revision number for extension '{self.name}' is 0 "
                 "No rollback was performed."
             )
-            return rollbacks
+            return rollback_count
 
         conn: AsyncConnection
         async with db_engine.begin() as conn:
             for revision_number in range(
-                old_revision_number, max(old_revision_number - steps - 1, -1), -1
+                old_revision_number, max(old_revision_number - steps, -1), -1
             ):
-                stmt_or_tuple = self.revisions[revision_number][db_engine.name]
-                if isinstance(stmt_or_tuple, tuple):
-                    for stmt in stmt_or_tuple:
-                        await conn.execute(text(stmt))
-                else:
-                    await conn.execute(text(stmt_or_tuple))
-                rollbacks += 1
+                for statement in self.migrations[revision_number]["rollback"][
+                    db_engine.name
+                ]:
+                    await conn.execute(text(statement))
 
+                rollback_count += 1
+
+        revision_number = old_revision_number - steps
+
+        # save new revision number determined by for-loop
         extension_data["revision_number"] = revision_number
+
         await bot.update_extension_data(**extension_data)  # type: ignore
         _logger.info(
-            f"Successfully performed rollback for extension '{self.name}' from "
+            f"Successfully performed {rollback_count} rollbacks for extension "
+            f"'{self.name}' from "
             f"revision number {old_revision_number} to "
             f"{revision_number}."
         )
 
-        return rollbacks
+        return rollback_count
 
-    async def prepare_setup(self, bot: PCBotT):
+    async def delete(self, bot: PCBotT):
+        """Delete all database information of the managed extension.
+
+        Parameters
+        ----------
+        bot : PCBotT
+            The bot object to use for database engine retrieval.
+
+        Raises
+        ------
+        RuntimeError
+            Deletion failed due to an error.
+        DBAPIError
+            DB-API related SQLAlchemyError.
+        SQLAlchemyError
+            Generic SQLAlchemyError.
+        ValueError
+            Invalid function arguments.
+        """
+        db_engine = bot.get_database_engine()
+        if not isinstance(db_engine, AsyncEngine):
+            raise RuntimeError(
+                "Failed to retrieve main database engine of type "
+                "'sqlalchemy.ext.asyncio.AsyncEngine'"
+            )
+        elif db_engine.name not in ("sqlite", "postgresql"):
+            raise RuntimeError(
+                f"Unsupported database dialect '{db_engine.name}' for main database, "
+                "must be 'sqlite' or 'postgresql'"
+            )
+
+        if await bot.extension_data_exists(self.name):
+            extension_data = await bot.read_extension_data(self.name)
+        else:
+            raise RuntimeError(
+                f"No bot extension data found for extension '{self.name}'"
+            )
+
+        _logger.info(f"Attempting data deletion for extension '{self.name}'...")
+
+        old_revision_number: int = extension_data["revision_number"]  # type: ignore
+        revision_number = old_revision_number
+
+        if old_revision_number >= len(self.migrations):
+            raise RuntimeError(
+                f"Stored revision number {old_revision_number} exceeds "
+                f"highest available revision number {len(self.migrations)-1}"
+            )
+
+        conn: AsyncConnection
+        async with db_engine.begin() as conn:
+            for revision_number in range(old_revision_number, -1, -1):
+                if "delete" not in self.migrations[revision_number]:
+                    continue
+
+                for stmt in self.migrations[revision_number]["delete"][db_engine.name]:
+                    await conn.execute(text(stmt))
+
+                break
+
+            else:
+                raise RuntimeError(
+                    f"Bot extension '{self.name}' does not define 'delete' fields"
+                    " in its migration data"
+                )
+
+        await bot.delete_extension_data(self.name)  # type: ignore
+
+        _logger.info(f"Successfully deleted all data of extension '{self.name}'.")
+
+    async def prepare(self, bot: PCBotT, initial_migration_steps: int = UNSET) -> int:
         """Helper method for running database-related boilerplate
         extension setup code.
 
@@ -526,31 +618,49 @@ class ExtSpec:
         bot : PCBotT
             The bot loading this extension.
 
+        initial_migration_steps : int, optional
+            How many initial migration steps to perform if an initial
+            migration was not yet performed for the bot extension.
+            A value of ``0`` implies that no steps should be performed.
+            Omission of this argument implies the maximum possible amount
+            of steps.
+
+        Returns
+        -------
+            The amount of initial migration steps performed successfully.
+
         Raises
         ------
         RuntimeError
             Setup preparation failed.
         """
-        db_engine = bot.get_database()
+
+        migration_count = 0
+        db_engine = bot.get_database_engine()
+
         if not isinstance(db_engine, AsyncEngine):
             raise RuntimeError(
-                "Could not find primary database interface of type "
+                "Failed to retrieve main database engine of type "
                 "'sqlalchemy.ext.asyncio.AsyncEngine'"
             )
         elif db_engine.name not in ("sqlite", "postgresql"):
-            raise RuntimeError(f"Unsupported database engine: {db_engine.name}")
-
-        if not await bot.extension_data_exists(self.name):
-            _logger.info(
-                f"No previous extension data found for extension '{self.name}', "
-                "performing initial migration..."
+            raise RuntimeError(
+                f"Unsupported database dialect '{db_engine.name}' for main database, "
+                "must be 'sqlite' or 'postgresql'"
             )
-            await self.migrate(bot)
 
-        extension_data = await bot.read_extension_data(self.name)
+        if extension_data_existed := await bot.extension_data_exists(self.name):
+            extension_data = await bot.read_extension_data(self.name)
+        else:
+            extension_data = dict(
+                name=self.name,
+                revision_number=-1,
+                auto_migrate=self.default_auto_migrate,
+                db_prefix=self.db_prefix,
+            )
 
-        stored_revision_number = extension_data["revision_number"]
-        max_revision_number = len(self.revisions) - 1
+        stored_revision_number: int = extension_data["revision_number"]  # type: ignore
+        max_revision_number = len(self.migrations) - 1
 
         if stored_revision_number > max_revision_number:
             raise RuntimeError(
@@ -559,20 +669,86 @@ class ExtSpec:
                 f"exceeds highest available revision number {max_revision_number}"
             )
         elif stored_revision_number < max_revision_number:
-            if extension_data["auto_migrate"]:
-                await self.migrate(bot)
-            else:
-                _logger.warning(
-                    "Auto-migration is disabled, and "
-                    f"{max_revision_number-stored_revision_number} migrations are still "
-                    "pending. Some functionality might be unavailable."
+            if not extension_data_existed and initial_migration_steps != 0:
+                _logger.info(
+                    f"No previous extension data found for extension '{self.name}', "
+                    "performing migration..."
+                )
+                migration_count = await self.migrate(
+                    bot, steps=initial_migration_steps or None
                 )
 
-        extension_data["last_session_version"] = __version__
-        await bot.update_extension_data(**extension_data)
+            elif extension_data["auto_migrate"]:
+                _logger.info(
+                    f"Auto-migration is enabled for extension '{self.name}', "
+                    "performing migration..."
+                )
+                await self.migrate(bot)
+            else:
+                raise RuntimeError(
+                    "Extension setup preparation failed: "
+                    "Auto-migration is disabled, and "
+                    f"{max_revision_number-stored_revision_number} migrations are "
+                    "unapplied "
+                )
+
+        async with db_engine.begin() as conn:
+            if (
+                await conn.execute(
+                    text(
+                        f"SELECT EXISTS(SELECT 1 FROM sqlite_master "
+                        f"WHERE type='table' AND name='{self.db_prefix}bots')"
+                        if db_engine.name == "sqlite"
+                        else "SELECT EXISTS(SELECT 1 FROM "
+                        "information_schema.tables "
+                        f"WHERE table_name == '{self.db_prefix}bots')"
+                    )
+                )
+            ).scalar():
+                await conn.execute(  # register bot into extension-specific bots table (needed for bot-specific cascading data deletion per-extension)
+                    text(
+                        f"INSERT INTO {self.db_prefix}bots VALUES (:uid) "
+                        "ON CONFLICT DO NOTHING"
+                    ),
+                    dict(uid=bot.uid),
+                )
+
+        return migration_count
 
     async def setup(self, bot: BotT):
         raise NotImplementedError("This method must be inherited in your bot extension")
 
     async def teardown(self, bot: BotT):
         raise NotImplementedError("This method must be inherited in your bot extension")
+
+
+def validate_revision_list(lst: list[Revision]) -> list[Revision]:
+    for j, revision in enumerate(lst):
+        for k in ("date", "description", "migrate", "rollback", "delete"):
+            if k in revision:
+                if not all(
+                    isinstance(dct, dict)
+                    and all(
+                        isinstance(stmt_lst, list)
+                        and all(isinstance(s, str) for s in stmt_lst)
+                        for stmt_lst in dct.values()
+                    )
+                    for k, dct in revision.items()
+                    if k not in ("date", "description")
+                ):
+                    raise ValueError(
+                        f"Invalid structure for revision {j}: Must match "
+                        "'dict[str, dict[str, str | list[str]]]'"
+                    )
+
+            elif k == "delete" and j == 0:
+                raise ValueError(
+                    f"Revision dictionary 0 (first revision) must define "
+                    "field 'delete'"
+                )
+            else:
+                raise ValueError(
+                    f"Revision dictionary {j} does not define required field '{k}'"
+                )
+
+    return lst

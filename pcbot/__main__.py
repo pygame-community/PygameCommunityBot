@@ -6,29 +6,29 @@ This file represents the main entry point into the bot application.
 """
 import asyncio
 import contextlib
-from importlib.util import resolve_name
 import logging
 import logging.handlers
-from math import log10
 import os
-from typing import Any, Collection, MutableMapping, Optional
+from typing import Any
 
 import click
 import discord
-from discord.ext import commands
 import snakecore
-from sqlalchemy import text
-from sqlalchemy.engine.result import Result
-from sqlalchemy.ext.asyncio import AsyncConnection
+import sqlalchemy.exc
 
-from pcbot.config_parsing import parse_databases, parser_mapping
+from pcbot.config_parsing import (
+    parse_databases,
+    parse_extensions,
+    parse_main_database_name,
+    parser_mapping,
+)
 
-from . import constants, utils
+from . import cli_helpers, constants, utils
 from .utils import raise_exc, ParserMapping, ParserMappingValue
 from .bot import (
     PygameCommunityBot as Bot,
 )
-from ._types import Config, DatabaseDict
+from .migrations import MIGRATIONS
 
 try:
     import uvloop  # type: ignore
@@ -40,19 +40,25 @@ else:
 
 
 config: dict[str, Any] = constants.DEFAULT_CONFIG.copy() | {"extensions": []}
+logging_is_setup = False
 
 
-def setup_logging(log_level) -> None:
+def setup_logging(log_level, stdout: bool = True) -> None:
+    global logging_is_setup
+
     logger = logging.getLogger()
     logger.setLevel(log_level)
 
-    stream_handler = logging.StreamHandler()
-    if discord.utils.stream_supports_colour(stream_handler.stream):
-        stream_formatter = utils.ANSIColorFormatter()
-    else:
-        stream_formatter = utils.DefaultFormatter(
-            "[{asctime}] [ {levelname:<8} ] {name} -- {message}", style="{"
-        )
+    if stdout:
+        stream_handler = logging.StreamHandler()
+        if discord.utils.stream_supports_colour(stream_handler.stream):
+            stream_formatter = utils.ANSIColorFormatter()
+        else:
+            stream_formatter = utils.DefaultFormatter(
+                "[{asctime}] [ {levelname:<8} ] {name} -- {message}", style="{"
+            )
+        stream_handler.setFormatter(stream_formatter)
+        logger.addHandler(stream_handler)
 
     if not os.path.exists("logs/"):
         os.mkdir("logs/")
@@ -61,7 +67,7 @@ def setup_logging(log_level) -> None:
     log_filename = config.get("log_filename", "pygamecommunitybot.0")
     log_file_extension = config.get("log_file_extension", ".log")
 
-    rotating_file_handler = utils.CustomRotatingFileHandler(
+    rotating_file_handler = utils.RotatingFileHandler(
         f"{log_directory}/{log_filename}",
         extension=log_file_extension,
         maxBytes=8 * 2**20,
@@ -74,12 +80,14 @@ def setup_logging(log_level) -> None:
         )
     )
 
-    stream_handler.setFormatter(stream_formatter)
-    logger.addHandler(stream_handler)
     logger.addHandler(rotating_file_handler)
+
+    logging_is_setup = True
 
 
 def clear_logging_handlers(logger: logging.Logger | None = None):
+    global logging_is_setup
+
     if logger is None:
         logger = logging.getLogger()
 
@@ -87,17 +95,19 @@ def clear_logging_handlers(logger: logging.Logger | None = None):
         handler.close()
         logger.removeHandler(handler)
 
+    logging_is_setup = False
+
 
 @contextlib.contextmanager
-def logging_handling(log_level):
+def logging_handling(log_level, stdout: bool = True):
     try:
-        setup_logging(log_level)
+        setup_logging(log_level, stdout)
         yield
     finally:
         clear_logging_handlers()
 
 
-async def start_bot(bot: Bot) -> None:
+async def run_bot(bot: Bot) -> None:
     try:
         await snakecore.init(global_client=bot)
         print(f"\nStarting bot ({bot.__class__.__name__})...")
@@ -196,315 +206,78 @@ def load_config_files(
                 )
 
 
-async def print_bot_extension_info(
-    db: DatabaseDict, extensions: tuple[str, ...], quiet: bool = False
-):
-    engine = db["engine"]
-    info: list[dict[str, str]] = []
-    max_name_width = 4
-    max_last_session_version_width = 20
-    max_revision_number_width = 15
-    max_auto_migrate_width = 12
-    max_db_table_prefix_width = 15
-
-    conn: AsyncConnection
-    async with engine.connect() as conn:
-        if extensions:
-            for ext_name in sorted(set(extensions)):
-                result: Result = await conn.execute(
-                    text(
-                        "SELECT name, last_session_version, revision_number, "
-                        "auto_migrate, db_table_prefix FROM bot_extension_data "
-                        "WHERE name == :name"
-                    ),
-                    dict(name=ext_name),
-                )
-
-                row = result.one_or_none()
-                if not row:
-                    click.secho(
-                        "No extension data could be found for an extension named "
-                        f"'{ext_name}'",
-                        fg="red",
-                    )
-                    raise click.Abort()
-
-                row_dict = row._asdict()
-                max_name_width = max(max_name_width, len(row_dict["name"]))
-                max_last_session_version_width = max(
-                    max_last_session_version_width,
-                    len(row_dict["last_session_version"]),
-                )
-                max_revision_number_width = max(
-                    max_revision_number_width, len(str(row_dict["revision_number"]))
-                )
-                max_db_table_prefix_width = max(
-                    max_db_table_prefix_width, len(row_dict["db_table_prefix"])
-                )
-                info.append(row_dict)
-        else:
-            result: Result = await conn.execute(
-                text(
-                    "SELECT name, last_session_version, revision_number, "
-                    "auto_migrate, db_table_prefix FROM bot_extension_data"
-                ),
-            )
-            for row in result.all():
-                row_dict = row._asdict()
-                max_name_width = max(max_name_width, len(row_dict["name"]))
-                max_last_session_version_width = max(
-                    max_last_session_version_width,
-                    len(row_dict["last_session_version"]),
-                )
-                max_revision_number_width = max(
-                    max_revision_number_width, len(str(row_dict["revision_number"]))
-                )
-                max_db_table_prefix_width = max(
-                    max_db_table_prefix_width, len(row_dict["db_table_prefix"])
-                )
-                info.append(row_dict)
-
-    if not info:
-        click.secho(f"No extension data could be found.", fg="red")
-        raise click.Abort()
-
-    if not quiet:
-        click.secho(f"\n{len(info)} extension data entries found.\n", fg="yellow")
-
-    click.echo(
-        " "
-        + "_"
-        * (
-            max_name_width
-            + 3
-            + max_last_session_version_width
-            + 3
-            + max_revision_number_width
-            + 3
-            + max_auto_migrate_width
-            + 3
-            + max_db_table_prefix_width
-            + 3
-            - 1
-        )
-        + " "
-    )
-    click.echo(
-        "|"
-        + f"{'Name': ^{max_name_width+2}}"
-        + "|"
-        + f"{'Last Session Version': ^{max_last_session_version_width+2}}"
-        + "|"
-        + f"{'Revision Number': ^{max_revision_number_width+2}}"
-        + "|"
-        + f"{'Auto Migrate': ^{max_auto_migrate_width+2}}"
-        + "|"
-        + f"{'DB Table Prefix': ^{max_db_table_prefix_width+2}}"
-        + "|"
-    )
-    click.echo(
-        "|"
-        + "_" * (max_name_width + 2)
-        + "|"
-        + "_" * (max_last_session_version_width + 2)
-        + "|"
-        + "_" * (max_revision_number_width + 2)
-        + "|"
-        + "_" * (max_auto_migrate_width + 2)
-        + "|"
-        + "_" * (max_db_table_prefix_width + 2)
-        + "|"
-    )
-
-    for row_dict in info:
-        click.echo(
-            f"| {row_dict['name']: <{max_name_width+1}}"
-            f"| {row_dict['last_session_version']: <{max_last_session_version_width+1}}"
-            f"| {row_dict['revision_number']: <{max_revision_number_width+1}}"
-            f"| {str(bool(row_dict['auto_migrate'])): <{max_auto_migrate_width+1}}"
-            f"| {row_dict['db_table_prefix']: <{max_db_table_prefix_width+1}}|"
-        )
-
-    click.echo(
-        "|"
-        + "_" * (max_name_width + 2)
-        + "|"
-        + "_" * (max_last_session_version_width + 2)
-        + "|"
-        + "_" * (max_revision_number_width + 2)
-        + "|"
-        + "_" * (max_auto_migrate_width + 2)
-        + "|"
-        + "_" * (max_db_table_prefix_width + 2)
-        + "|"
-    )
+_shared_options_map = dict(
+    config_path=click.option(
+        "--config",
+        "config_path",
+        default="./config.py",
+        show_default=True,
+        type=click.Path(resolve_path=True),
+        help="A path to the 'config.py' file to use for configuration, "
+        "credentials and launching. Failure will occur silently for an "
+        "invalid/non-existing path.",
+    ),
+    localconfig_path=click.option(
+        "--localconfig",
+        "localconfig_path",
+        default="./localconfig.py",
+        show_default=True,
+        type=click.Path(resolve_path=True),
+        help="A path to the optional 'localconfig.py' file to use for locally overriding "
+        "'config.py'. Failure will occur silently if this file could cannot be "
+        "found/read successfully, except when 'config.py' is not provided, in which case "
+        "an error will occur.",
+    ),
+    log_level=click.option(
+        "--log-level",
+        "log_level",
+        show_default=True,
+        type=click.Choice(
+            (
+                "NOTSET",
+                "DEBUG",
+                "INFO",
+                "WARNING",
+                "WARN",
+                "ERROR",
+                "FATAL",
+                "CRITICAL",
+            ),
+            case_sensitive=False,
+        ),
+    ),
+    ignore_failures=click.option(
+        "--ignore-failures",
+        "ignore_failures",
+        is_flag=True,
+        help="Ignore failed attempts.",
+    ),
+    quiet=click.option(
+        "-q",
+        "--quiet",
+        "quiet",
+        is_flag=True,
+        help="Supress informational (non-error) output to the console.",
+    ),
+    yes=click.option(
+        "-y", "--yes", "yes", is_flag=True, help="Supress confirmation messages."
+    ),
+    help=click.help_option("-h", "--help", "help"),
+)
 
 
-async def delete_bot_extension_data(
-    db: DatabaseDict,
-    extensions: tuple[str, ...],
-    quiet: bool = False,
-    yes: bool = False,
-):
-    engine = db["engine"]
-    extname_row_map: dict[str, dict[str, str]] = {}
+def shared_options(*option_names: str):
+    def _shared_options(func):
+        for option_name in reversed(option_names):
+            func = _shared_options_map[option_name](func)
 
-    conn: AsyncConnection
-    async with engine.connect() as conn:
-        if extensions:
-            for ext_name in sorted(set(extensions)):
-                result: Result = await conn.execute(
-                    text(
-                        "SELECT name, last_session_version, revision_number, "
-                        "auto_migrate, db_table_prefix FROM bot_extension_data "
-                        "WHERE name == :name"
-                    ),
-                    dict(name=ext_name),
-                )
+        return func
 
-                row = result.one_or_none()
-                if not row:
-                    click.secho(
-                        "No extension data could be found for an extension named "
-                        f"'{ext_name}'",
-                        fg="red",
-                    )
-                    raise click.Abort()
-
-                row_dict = row._asdict()
-                extname_row_map[ext_name] = row_dict
-        else:
-            result: Result = await conn.execute(
-                text(
-                    "SELECT name, last_session_version, revision_number, "
-                    "auto_migrate, db_table_prefix FROM bot_extension_data"
-                ),
-            )
-            for row in result.all():
-                row_dict = row._asdict()
-                extname_row_map[row_dict["name"]] = row_dict
-
-    if not extname_row_map:
-        click.secho(f"No extension data could be found.", fg="red")
-        raise click.Abort()
-
-    if not quiet:
-        click.secho(
-            f"\n{len(extname_row_map)} extension data entries found.\n", fg="yellow"
-        )
-
-    deletions = 0
-    conn: AsyncConnection
-    async with engine.begin() as conn:
-        for row_dict in extname_row_map.values():
-            click.echo(
-                "Preparing to delete extension data for extension:\n"
-                f"  - Name:                 {row_dict['name']}\n"
-                f"  - Last Session Version: {row_dict['last_session_version']}\n"
-                f"  - Revision Number: {row_dict['revision_number']}\n"
-                f"  - Auto Migrate: {bool(row_dict['auto_migrate'])}\n"
-                f"  - DB Table Prefix: '{row_dict['db_table_prefix']}'"
-            )
-            if not yes:
-                confirm = click.confirm(
-                    click.style(
-                        "This entry and all data associated with it will be deleted."
-                        "\nAre you sure you wish to proceed?",
-                        fg="yellow",
-                        bold=True,
-                    )
-                )
-                if not confirm:
-                    continue
-
-            if engine.name == "sqlite":
-                result: Result = await conn.execute(
-                    text(
-                        "SELECT name FROM sqlite_schema "
-                        f"WHERE type == 'table' AND name LIKE :db_table_prefix || '%'"
-                    ),
-                    dict(db_table_prefix=row_dict["db_table_prefix"]),
-                )
-
-                table_names = []
-
-                for row in result.all():
-                    table_names.append(row.name)  # type: ignore
-
-                for table_name in table_names:
-                    await conn.execute(text(f"DELETE FROM '{table_name}'"))
-                    await conn.execute(text(f"DROP TABLE '{table_name}'"))
-
-                await conn.execute(
-                    text(
-                        "DELETE FROM bot_extension_data as bed "
-                        "WHERE bed.name == :extension"
-                    ),
-                    dict(extension=row_dict["name"]),
-                )
-
-                if not quiet:
-                    click.secho(
-                        f"Successfully deleted all stored data of extension {row_dict['name']}",
-                        fg="green",
-                    )
-
-                deletions += 1
-
-            elif engine.name == "postgresql":
-                result: Result = await conn.execute(
-                    text(
-                        "SELECT tablename AS name FROM pg_tables "
-                        "WHERE pg_tables.tableowner == current_user "
-                        "AND name LIKE :db_table_prefix || '%'"
-                    ),
-                    dict(db_table_prefix=row_dict["db_table_prefix"]),
-                )
-
-                table_names = []
-
-                for row in result.all():
-                    table_names.append(row.name)  # type: ignore
-
-                for table_name in table_names:
-                    await conn.execute(text(f"DELETE FROM '{table_name}'"))
-                    await conn.execute(text(f"DROP TABLE '{table_name}'"))
-
-                await conn.execute(
-                    text(
-                        "DELETE FROM bot_extension_data as bed "
-                        "WHERE bed.name == :extension"
-                    ),
-                    dict(extension=row_dict["name"]),
-                )
-
-                if not quiet:
-                    click.secho(
-                        f"Successfully deleted all stored data of extension {row_dict['name']}",
-                        fg="green",
-                    )
-
-                deletions += 1
-
-    if not (deletions or quiet):
-        click.secho(f"No extension data was deleted.", fg="yellow")
-        raise click.Abort()
+    return _shared_options
 
 
 # fmt: off
 @click.group(invoke_without_command=True, add_help_option=False)
-@click.option("--config", "config_path", default="./config.py",
-    show_default=True, type=click.Path(resolve_path=True),
-    help="A path to the 'config.py' file to use for configuration. "
-    "credentials and launching. Failure will occur silently for an "
-    "invalid/non-existing path.")
-@click.option("--localconfig", "localconfig_path",
-    default="./localconfig.py", show_default=True, type=click.Path(resolve_path=True),
-    help="A path to the optional 'localconfig.py' file to use for locally overriding "
-    "'config.py'. Failure will occur silently if this file could cannot be found/read "
-    "successfully, except when 'config.py' is not provided, in which case an error "
-    "will occur.\nHINT: Setting variables to '...' (Ellipsis) in 'localconfig.py' "
-    "will treat them as if they were omitted.")
 @click.option("--intents", type=str,
     help=("The integer of bot intents as bitwise flags to be used by the bot instead "
     f"of discord.py's defaults ({bin(constants.DEFAULT_CONFIG['intents'])}). "
@@ -518,7 +291,7 @@ async def delete_bot_extension_data(
 @click.option("--mention-as-command-prefix",
     "mention_as_command_prefix", is_flag=True,
     help="Enable the usage of bot mentions as a prefix.")
-@click.option("--ignore-ext", "--ignore-extension", "ignore_extension",
+@click.option("-i", "--ignore-extension", "ignore_extension",
     multiple=True, type=str,
     help="The qualified name(s) of the extension(s) to ignore when loading extensions "
     "during startup.")
@@ -530,14 +303,7 @@ async def delete_bot_extension_data(
 @click.option("--ignore-extra-extensions",
     "ignore_extra_extensions", is_flag=True,
     help="Ignore extra (non-default) extensions at startup.")
-@click.option("--log-level", "--bot-log-level", "log_level",
-    show_default=True, type=click.Choice(
-        ('NOTSET', 'DEBUG', 'INFO', 'WARNING', 'WARN', 'ERROR', 'FATAL', 'CRITICAL'), case_sensitive=False),
-    help="The log level to use for the bot's default logging system.")
-@click.option("-quiet",
-    is_flag=True, help="Supress informational (non-error) output.")
-# TODO: Add more CLI options specific to your application.
-@click.help_option("-h", "--help", "help")
+@shared_options("config_path", "localconfig_path", "log_level", "quiet", "help")
 @click.pass_context
 # fmt: on
 def main(
@@ -556,6 +322,8 @@ def main(
 ):
     """Launch this Discord bot application."""
 
+    print(log_level)
+
     if ctx.invoked_subcommand is not None:
         return
 
@@ -569,9 +337,8 @@ def main(
         ignore_all_extensions=ignore_all_extensions,
         ignore_default_extensions=ignore_default_extensions,
         ignore_extra_extensions=ignore_extra_extensions,
-        log_level=log_level,
         quiet=quiet,
-    )
+    ) | (dict(log_level=log_level) if log_level else {})
 
     load_config_files(config_path, localconfig_path, quiet)
 
@@ -608,165 +375,694 @@ def main(
         config=config,
     )
 
+    log_level = log_level or config.get("log_level")
     if log_level is not None:  #  not specifying a logging level disables logging
-        with logging_handling(log_level=logging.getLevelName(log_level)):
-            asyncio.run(start_bot(bot))
+        with logging_handling(
+            log_level=logging.getLevelName(log_level), stdout=not quiet
+        ):
+            asyncio.run(run_bot(bot))
             return
 
-    asyncio.run(start_bot(bot))
+    asyncio.run(run_bot(bot))
+
+
+# fmt: off
+@main.command(context_settings={"ignore_unknown_options": True})
+@click.argument("specifier", nargs=1)
+@shared_options("config_path", "localconfig_path", "log_level", "quiet", "yes", "help")
+# fmt: on
+def migrate(
+    specifier: str,
+    config_path: str | None,
+    localconfig_path: str | None,
+    log_level: str | None,
+    quiet: bool,
+    yes: bool,
+):
+    """Perform a full bot database migration/rollback. Does not affect bot extensions."""
+
+    config["_cli_args"] = dict(
+        config_path=config_path,
+        localconfig_path=localconfig_path,
+        quiet=quiet,
+    ) | (dict(log_level=log_level) if log_level else {})
+
+    if not (
+        (specifier.isnumeric())
+        or specifier == "+"
+        or (
+            specifier.startswith(("+", "-"))
+            and specifier[1:].isnumeric()
+            and int(specifier[1:])
+        )
+    ):
+        click.secho(
+            f"Argument 'specifier' must match '+', 'n', '+r' or '-r', where 'n' and "
+            "'r' are positive integers and 'r' is nonzero.",
+            err=True,
+            fg="red",
+        )
+        raise click.Abort()
+
+    load_config_files(config_path, localconfig_path, quiet)
+
+    try:
+        config.update(
+            ParserMapping(
+                {
+                    "databases": ParserMappingValue(parse_databases, required=True),
+                    "main_database_name": parse_main_database_name,
+                }
+            ).parse(config)
+        )
+    except ParserMapping.ParsingError as p:
+        click.secho(f"  config error: {p.args[0]}", err=True, fg="red")
+        raise click.Abort()
+
+    main_db_info_dict = None
+    for db_info_dict in config["databases"]:
+        if (
+            "main_database_name" in config
+            and db_info_dict["name"] == config["main_database_name"]
+        ):
+            main_db_info_dict = db_info_dict
+            break
+    else:
+        main_db_info_dict = config["databases"][0]
+
+    async def _run():
+        try:
+            db, *_ = await utils.load_databases([main_db_info_dict])
+            await cli_helpers.migrate(db, specifier, config, quiet, yes)
+            await utils.unload_databases([db])
+        except click.Abort:
+            raise
+        except Exception as exc:
+            click.secho(
+                f"Bot database migration/rollback failed due to an error: "
+                f"{exc.__class__.__name__}: {exc.args[0]}",
+                fg="red",
+            )
+            if logging_is_setup:
+                logging.getLogger().error(
+                    "Bot database migration/rollback failed due to an error",
+                    exc_info=exc,
+                )
+            raise click.Abort()
+
+    log_level = log_level or config.get("log_level")
+    if log_level is not None:  #  not specifying a logging level disables logging
+        with logging_handling(
+            log_level=logging.getLevelName(log_level), stdout=not quiet
+        ):
+            asyncio.run(_run())
+    else:
+        asyncio.run(_run())
+
+
+# fmt: off
+@click.option("-b", "--bot", "bot", multiple=True,
+              help="The unique identifier of the bot whose information should be "
+              "deleted.")
+@shared_options("config_path", "localconfig_path", "log_level", "quiet", "yes", "help")
+# fmt: on
+def delete(
+    bot: tuple[str, ...],
+    config_path: str | None,
+    localconfig_path: str | None,
+    log_level: str | None,
+    quiet: bool,
+    yes: bool,
+):
+    raise click.Abort()
 
 
 # fmt: off
 @main.group(invoke_without_command=True)
-@click.option("--config", "--config-path", "config_path", default="./config.py",
-    show_default=True, type=click.Path(resolve_path=True),
-    help="A path to the 'config.py' file to use for configuration. "
-    "credentials and launching. Failure will occur silently for an "
-    "invalid/non-existing path.")
-@click.option("--localconfig", "--localconfig-path", "localconfig_path",
-    default="./localconfig.py", show_default=True, type=click.Path(resolve_path=True),
-    help="A path to the optional 'localconfig.py' file to use for locally overriding "
-    "'config.py'. Failure will occur silently if this file could cannot be found/read "
-    "successfully, except when 'config.py' is not provided, in which case an error "
-    "will occur.")
-@click.option("--ext", "--extension", "extension",  multiple=True, help="The qualified name of an extension.")
-@click.option("-q", "--quiet",
-    is_flag=True, help="Supress informational (non-error) output.")
-@click.help_option("-h", "--help", "help")
+@shared_options("help")
+@click.pass_context
+def extensions(ctx: click.Context):
+    """Manage bot extensions and their data."""
+
+    if ctx.invoked_subcommand is None:
+        raise click.Abort()
+
+# fmt: off
+@extensions.command("info")
+@click.argument("extensions",  nargs=-1)
+@shared_options("config_path", "localconfig_path", "log_level", "ignore_failures",
+                "quiet", "help")
 @click.pass_context
 # fmt: on
-def extdata(
+def extensions_info(
     ctx: click.Context,
+    extensions: tuple[str, ...],
     config_path: str | None,
     localconfig_path: str | None,
-    extension: tuple[str, ...],
+    log_level: str | None,
+    ignore_failures: bool,
     quiet: bool,
 ):
     """Show info about all/specific bot extensions with data stored."""
-    if ctx.invoked_subcommand is not None:
-        return
+
+    config["_cli_args"] = dict(
+        config_path=config_path,
+        localconfig_path=localconfig_path,
+        quiet=quiet,
+    ) | (dict(log_level=log_level) if log_level else {})
 
     load_config_files(config_path, localconfig_path, quiet)
 
     try:
         config.update(
             ParserMapping(
-                {"databases": ParserMappingValue(parse_databases, required=True)}
+                {
+                    "databases": ParserMappingValue(parse_databases, required=True),
+                    "main_database_name": parse_main_database_name,
+                }
             ).parse(config)
         )
     except ParserMapping.ParsingError as p:
         click.secho(f"  config error: {p.args[0]}", err=True, fg="red")
         raise click.Abort()
 
-    main_database_input_data = config["databases"][0]
+    main_db_info_dict = None
+    for db_info_dict in config["databases"]:
+        if (
+            "main_database_name" in config
+            and db_info_dict["name"] == config["main_database_name"]
+        ):
+            main_db_info_dict = db_info_dict
+            break
+    else:
+        main_db_info_dict = config["databases"][0]
 
     async def _run():
-        main_database_data = (await utils.load_databases([main_database_input_data]))[0]
-        await utils.create_bot_extension_data_table(main_database_data)
-        await print_bot_extension_info(main_database_data, extension, quiet)
-        await utils.unload_databases([main_database_data])
+        try:
+            main_db_dict = (await utils.load_databases([main_db_info_dict]))[0]
+        except sqlalchemy.exc.SQLAlchemyError as error:
+            click.secho(
+                f"An error occured while establishing connection to main database: "
+                f"{error.__class__.__name__}: {error}",
+                fg="red",
+            )
+            raise click.Abort()
 
-    asyncio.run(_run())
+        engine = main_db_dict["engine"]
+        if engine.name not in ("sqlite", "postgresql"):
+            raise RuntimeError(
+                f"Unsupported database dialect '{engine.name}' for main database,"
+                " must be 'sqlite' or 'postgresql'"
+            )
+
+        await utils.initialize_pgcbots_db_schema(main_db_dict, config)
+        await cli_helpers.extract_bot_extension_info(
+            main_db_dict, extensions, ignore_failures, quiet
+        )
+        await utils.unload_databases([main_db_dict])
+
+    log_level = log_level or config.get("log_level")
+    if log_level is not None:  #  not specifying a logging level disables logging
+        with logging_handling(
+            log_level=logging.getLevelName(log_level), stdout=not quiet
+        ):
+            asyncio.run(_run())
+    else:
+        asyncio.run(_run())
 
 
 # fmt: off
-@extdata.command()
-@click.option("--config", "--config-path", "config_path", default="./config.py",
-    show_default=True, type=click.Path(resolve_path=True),
-    help="A path to the 'config.py' file to use for configuration. "
-    "credentials and launching. Failure will occur silently for an "
-    "invalid/non-existing path.")
-@click.option("--localconfig", "--localconfig-path", "localconfig_path",
-    default="./localconfig.py", show_default=True, type=click.Path(resolve_path=True),
-    help="A path to the optional 'localconfig.py' file to use for locally overriding "
-    "'config.py'. Failure will occur silently if this file could cannot be found/read "
-    "successfully, except when 'config.py' is not provided, in which case an error "
-    "will occur.")
-@click.option("--ext", "--extension", "extension",  multiple=True, help="The qualified name of an extension.")
-@click.option("-q", "--quiet",
-    is_flag=True, help="Supress informational (non-error) output.")
-@click.option("-y", "--yes",
-    is_flag=True, help="Supress deletion confirmation messages.")
-@click.help_option("-h", "--help", "help")
+@extensions.command("delete")
+@click.argument("extensions",  nargs=-1)
+@click.option("-b", "--bot", "bot", multiple=True, help="The unique identifier of a "
+              "bot application whose extension-specific data should be deleted alone.")
+@click.option("-a", "--all", "all_extensions", is_flag=True,
+              help="Whether to delete the data of all bot extensions. This overrides "
+              "the 'extensions' arguments.")
+@click.option("-l", "--local", "local_extensions", is_flag=True, help="Whether to "
+              "delete the data of all locally available bot extensions. This "
+              "overrides the 'extensions' arguments.")
+@shared_options("config_path", "localconfig_path", "log_level", "ignore_failures",
+                "quiet", "yes", "help")
 # fmt: on
-def delete(
+def extensions_delete(
+    extensions: tuple[str, ...],
+    bot: tuple[str, ...],
+    all_extensions: bool,
+    local_extensions: bool,
     config_path: str | None,
     localconfig_path: str | None,
-    extension: tuple[str, ...],
+    log_level: str | None,
+    ignore_failures: bool,
     quiet: bool,
     yes: bool,
 ):
-    """Delete the bot extension data of all/specific bot extensions."""
+    """Delete the bot extension data of the specified (or all if omitted) bot extensions."""
+
+    config["_cli_args"] = dict(
+        config_path=config_path,
+        localconfig_path=localconfig_path,
+        quiet=quiet,
+    ) | (dict(log_level=log_level) if log_level else {})
+
+    bots = bot
+
+    if all_extensions and local_extensions:
+        click.secho(
+            "Flags -a/--all and -l/--local are mutually exclusive.", err=True, fg="red"
+        )
+        raise click.Abort()
+
     load_config_files(config_path, localconfig_path, quiet)
 
     try:
         config.update(
             ParserMapping(
-                {"databases": ParserMappingValue(parse_databases, required=True)}
+                {
+                    "databases": ParserMappingValue(parse_databases, required=True),
+                    "main_database_name": parse_main_database_name,
+                    "extensions": parse_extensions,
+                }
             ).parse(config)
         )
     except ParserMapping.ParsingError as p:
         click.secho(f"  config error: {p.args[0]}", err=True, fg="red")
         raise click.Abort()
 
-    main_database_input_data = config["databases"][0]
+    main_db_info_dict = None
+    for db_info_dict in config["databases"]:
+        if (
+            "main_database_name" in config
+            and db_info_dict["name"] == config["main_database_name"]
+        ):
+            main_db_info_dict = db_info_dict
+            break
+    else:
+        main_db_info_dict = config["databases"][0]
 
     async def _run():
-        main_database_data = (await utils.load_databases([main_database_input_data]))[0]
-        await utils.create_bot_extension_data_table(main_database_data)
-        await delete_bot_extension_data(main_database_data, extension, quiet, yes)
-        await utils.unload_databases([main_database_data])
+        nonlocal extensions
+        try:
+            main_db_dict = (await utils.load_databases([main_db_info_dict]))[0]
+        except sqlalchemy.exc.SQLAlchemyError as error:
+            click.secho(
+                f"An error occured while establishing connection to main database: "
+                f"{error.__class__.__name__}: {error}",
+                fg="red",
+            )
+            click.Abort()
+            return
 
-    asyncio.run(_run())
+        engine = main_db_dict["engine"]
+        if engine.name not in ("sqlite", "postgresql"):
+            raise RuntimeError(
+                f"Unsupported database dialect '{engine.name}' for main database,"
+                " must be 'sqlite' or 'postgresql'"
+            )
+
+        if all_extensions:
+            extensions = ()
+
+        elif local_extensions:
+            extensions = (
+                *(ext_dict["name"] for ext_dict in config["extensions"]),
+                *extensions,
+            )
+        elif not extensions:
+            click.secho(f"No bot extensions specified.", err=True, fg="red")
+            raise click.Abort()
+
+        await utils.initialize_pgcbots_db_schema(main_db_dict, config)
+        await cli_helpers.delete_bot_extensions(
+            main_db_dict, extensions, bots, all_extensions, ignore_failures, quiet, yes  # type: ignore
+        )
+        await utils.unload_databases([main_db_dict])
+
+    log_level = log_level or config.get("log_level")
+    if log_level is not None:  #  not specifying a logging level disables logging
+        with logging_handling(
+            log_level=logging.getLevelName(log_level), stdout=not quiet
+        ):
+            asyncio.run(_run())
+    else:
+        asyncio.run(_run())
 
 
 # fmt: off
-@extdata.command()
-@click.option("--config", "--config-path", "config_path", default="./config.py",
-    show_default=True, type=click.Path(resolve_path=True),
-    help="A path to the 'config.py' file to use for configuration. "
-    "credentials and launching. Failure will occur silently for an "
-    "invalid/non-existing path.")
-@click.option("--localconfig", "--localconfig-path", "localconfig_path",
-    default="./localconfig.py", show_default=True, type=click.Path(resolve_path=True),
-    help="A path to the optional 'localconfig.py' file to use for locally overriding "
-    "'config.py'. Failure will occur silently if this file could cannot be found/read "
-    "successfully, except when 'config.py' is not provided, in which case an error "
-    "will occur.")
-@click.option("--ext", "--extension", "extension",  multiple=True, help="The qualified name of an extension.")
-@click.option("-q", "--quiet",
-    is_flag=True, help="Supress informational (non-error) output.")
-@click.option("-y", "--yes",
-    is_flag=True, help="Supress deletion confirmation messages.")
-@click.help_option("-h", "--help", "help")
+@extensions.command("migrate", context_settings={"ignore_unknown_options": True})
+@click.option("-o", "--option", "option", multiple=True, type=(str, str),
+              help="A bot extension migration option, consisting of a extension name "
+              "and a migration/rollback specifier, where the latter must match '+' "
+              "(migrate to latest revision), 'n' (migrate/rollback to revision 'n'), "
+              "'+r' (migrate by '+r') or '-r' (migrate by '-r' (rollback)), where 'n' "
+              "and 'r' are positive integers and 'r' is nonzero.")
+@click.option("-a", "--all-option", "all_option", help="The migration/rollback "
+              "specifier to use for all bot extensions, which must "
+              "match '+' (migrate to latest revision), 'n' (migrate/rollback to "
+              "revision 'n'), '+r' (migrate by '+r') or '-r' (migrate by '-r' "
+              "(rollback)), where 'n' and 'r' are positive integers and 'r' is "
+              "nonzero.")
+@click.option("-l", "--local-option", "local_option", help="The migration/rollback "
+              "specifier to use for all locally available bot extensions, which must "
+              "match '+' (migrate to latest revision), 'n' (migrate/rollback to "
+              "revision 'n'), '+r' (migrate by '+r') or '-r' (migrate by '-r' "
+              "(rollback)), where 'n' and 'r' are positive integers and 'r' is "
+              "nonzero.")
+@shared_options("config_path", "localconfig_path", "log_level", "ignore_failures", 
+                "quiet", "yes", "help")
 # fmt: on
-def migratefull(
+def extensions_migrate(
+    option: tuple[tuple[str, str], ...],
+    all_option: str | None,
+    local_option: str | None,
     config_path: str | None,
     localconfig_path: str | None,
-    extension: tuple[str, ...],
+    log_level: str | None,
+    ignore_failures: bool,
     quiet: bool,
     yes: bool,
 ):
-    """Delete the bot extension data of all/specific bot extensions."""
+    """Perform a full database migration for the specified bot extensions.
+    If omitted, all extensions will be migrated.
+    """
+
+    config["_cli_args"] = dict(
+        config_path=config_path,
+        localconfig_path=localconfig_path,
+        quiet=quiet,
+    ) | (dict(log_level=log_level) if log_level else {})
+
+    if not (option or all_option or local_option):
+        click.secho(
+            f"Flags '--option', '--all-option' and '--local-option' cannot all be empty/omitted.",
+            err=True,
+            fg="red",
+        )
+        raise click.Abort()
+    elif all_option and local_option:
+        click.secho(
+            "Flags -a/--all-option and -l/--local-option are mutually exclusive.",
+            err=True,
+            fg="red",
+        )
+        raise click.Abort()
+
+    if not all(
+        sp is None
+        or (
+            (sp.isnumeric())
+            or sp == "+"
+            or (sp.startswith(("+", "-")) and sp[1:].isnumeric())
+        )
+        for sp in (all_option, local_option)
+    ):
+        click.secho(
+            f"A migration/rollback specifier must match '+', 'n', '+r' or '-r', "
+            "where 'n' and 'r' are positive integers and 'r' is nonzero.",
+            err=True,
+            fg="red",
+        )
+        raise click.Abort()
+
+    options = option
+
     load_config_files(config_path, localconfig_path, quiet)
 
     try:
         config.update(
             ParserMapping(
-                {"databases": ParserMappingValue(parse_databases, required=True)}
+                {
+                    "databases": ParserMappingValue(parse_databases, required=True),
+                    "main_database_name": parse_main_database_name,
+                    "extensions": parse_extensions,
+                }
             ).parse(config)
         )
     except ParserMapping.ParsingError as p:
         click.secho(f"  config error: {p.args[0]}", err=True, fg="red")
         raise click.Abort()
 
-    main_database_input_data = config["databases"][0]
+    if local_option:
+        options = (
+            *options,
+            *(
+                (ext_dict["name"], local_option)
+                for ext_dict in config.get("extensions", ())
+            ),
+        )
+
+    if not all(
+        (sp.isnumeric())
+        or sp == "+"
+        or (sp.startswith(("+", "-")) and sp[1:].isnumeric())
+        for _, sp in options
+    ):
+        click.secho(
+            f"A migration/rollback specifier must match '+', 'n', '+r' or '-r', "
+            "where 'n' and 'r' are positive integers and 'r' is nonzero.",
+            err=True,
+            fg="red",
+        )
+        raise click.Abort()
+
+    bot = Bot(
+        config["final_prefix"],
+        intents=discord.Intents(config["intents"]),  # type: ignore
+        strip_after_prefix=True,
+        owner_id=config.get("owner_id"),
+        owner_ids=config.get("owner_ids"),
+        config=config,
+    )
+
+    main_db_info_dict = None
+    for db_info_dict in config["databases"]:
+        if (
+            "main_database_name" in config
+            and db_info_dict["name"] == config["main_database_name"]
+        ):
+            main_db_info_dict = db_info_dict
+            break
+    else:
+        main_db_info_dict = config["databases"][0]
 
     async def _run():
-        main_database_data = (await utils.load_databases([main_database_input_data]))[0]
-        await utils.create_bot_extension_data_table(main_database_data)
-        await delete_bot_extension_data(main_database_data, extension, quiet, yes)
-        await utils.unload_databases([main_database_data])
+        nonlocal options
+        try:
+            main_db_dict = (await utils.load_databases([main_db_info_dict]))[0]
+        except sqlalchemy.exc.SQLAlchemyError as error:
+            click.secho(
+                f"An error occured while establishing connection to main database: "
+                f"{error.__class__.__name__}: {error}",
+                fg="red",
+            )
+            raise click.Abort()
+
+        engine = main_db_dict["engine"]
+        if engine.name not in ("sqlite", "postgresql"):
+            raise RuntimeError(
+                f"Unsupported database dialect '{engine.name}' for main database,"
+                " must be 'sqlite' or 'postgresql'"
+            )
+
+        bot._main_database = main_db_dict
+
+        if all_option:
+            options = tuple(
+                (name, all_option)
+                for name in await utils.get_extension_data_names(main_db_dict)
+            )
+
+        await utils.initialize_pgcbots_db_schema(main_db_dict, config)
+        successes = await cli_helpers.migrate_bot_extensions(
+            bot, options, ignore_failures, quiet, yes
+        )
+        if not quiet:
+            click.secho(
+                f"\n{successes} bot extension database "
+                "object migrations/rollbacks performed.",
+                fg="green" if successes else "red",
+            )
+        await utils.unload_databases([main_db_dict])
+
+    log_level = log_level or config.get("log_level")
+    if log_level is not None:  #  not specifying a logging level disables logging
+        with logging_handling(log_level=logging.getLevelName(log_level)):
+            asyncio.run(_run())
+    else:
+        asyncio.run(_run())
+
+
+# fmt: off
+@extensions.command("set")
+@click.argument("extensions",  nargs=-1)
+@click.option("-a", "--all", "all_extensions", is_flag=True, default=False,
+              help="Apply the specified changes to all available bot extensions.")
+@click.option("-l", "--local", "local_extensions", is_flag=True, default=False,
+              help="Only apply the specified changes to locally available bot extensions.")
+@click.option("-p", "--pragma", "pragma", type=(str, str), help="A pragma variable to set.", multiple=True)
+@shared_options("config_path", "localconfig_path", "log_level", "ignore_failures", 
+                "quiet", "help")
+# fmt: on
+def extensions_set(
+    extensions: tuple[str, ...],
+    all_extensions: bool,
+    local_extensions: bool,
+    pragma: tuple[tuple[str, str], ...],
+    config_path: str | None,
+    localconfig_path: str | None,
+    log_level: str | None,
+    ignore_failures: bool,
+    quiet: bool,
+):
+    """Set bot extension runtime variables.
+    These variables are stored on a per-extension basis in the primary database.
+
+    Available pragma variables:
+        - auto_migrate: boolean
+            Whether to enable automatic migration of bot extension database objects (at runtime, upon being loaded).
+    """
+
+    config["_cli_args"] = dict(
+        config_path=config_path,
+        localconfig_path=localconfig_path,
+        quiet=quiet,
+    ) | (dict(log_level=log_level) if log_level else {})
+
+    if all_extensions and local_extensions:
+        click.secho(
+            "Flags -a/--all and -l/--local are mutually exclusive.", err=True, fg="red"
+        )
+        raise click.Abort()
+
+    pragmas = pragma
+
+    if not pragmas:
+        click.secho(
+            f"No variables specified.",
+            fg="red",
+        )
+        raise click.Abort()
+
+    pragma_input_map = dict(pragmas)
+
+    try:
+        parsed_pragmas = ParserMapping(
+            dict(
+                auto_migrate=lambda key, auto_migrate, cfg: True
+                if auto_migrate.lower() in ("t", "true", "y", "yes", "1")
+                else False
+                if auto_migrate.lower() in ("f", "false", "n", "no", "0")
+                else raise_exc(
+                    ParserMapping.ParsingError(
+                        "Pragma variable 'auto_migrate' must be set to a boolean value."
+                    )
+                ),
+            ),
+            reject_unknown=True,
+        ).parse(pragma_input_map)
+
+    except ParserMapping.ParsingError as p:
+        click.secho(f"Pragma parsing error: {p.args[0]}", err=True, fg="red")
+        raise click.Abort()
+
+    load_config_files(config_path, localconfig_path, quiet)
+
+    try:
+        config.update(
+            ParserMapping(
+                {
+                    "databases": ParserMappingValue(parse_databases, required=True),
+                    "main_database_name": parse_main_database_name,
+                    "extensions": parse_extensions,
+                }
+            ).parse(config)
+        )
+    except ParserMapping.ParsingError as p:
+        click.secho(f"  config error: {p.args[0]}", err=True, fg="red")
+        raise click.Abort()
+
+    main_db_info_dict = None
+    for db_info_dict in config["databases"]:
+        if (
+            "main_database_name" in config
+            and db_info_dict["name"] == config["main_database_name"]
+        ):
+            main_db_info_dict = db_info_dict
+            break
+    else:
+        main_db_info_dict = config["databases"][0]
+
+    async def _run():
+        nonlocal extensions
+        try:
+            main_db_dict = (await utils.load_databases([main_db_info_dict]))[0]
+        except sqlalchemy.exc.SQLAlchemyError as error:
+            click.secho(
+                f"An error occured while establishing connection to main database: "
+                f"{error.__class__.__name__}: {error}",
+                fg="red",
+            )
+            raise click.Abort()
+
+        engine = main_db_dict["engine"]
+        if engine.name not in ("sqlite", "postgresql"):
+            raise RuntimeError(
+                f"Unsupported database dialect '{engine.name}' for main database,"
+                " must be 'sqlite' or 'postgresql'"
+            )
+
+        if all_extensions:
+            extensions = await utils.get_extension_data_names(main_db_dict)
+            if not extensions:
+                click.secho(
+                    f"No bot extension data could be found in the main database.",
+                    err=True,
+                    fg="red",
+                )
+                raise click.Abort()
+
+        elif local_extensions:
+            extensions = (
+                *(ext_dict["name"] for ext_dict in config["extensions"]),
+                *extensions,
+            )
+        elif not extensions:
+            click.secho(f"No bot extensions specified.", err=True, fg="red")
+            raise click.Abort()
+
+        for extension_name in extensions:
+            if not await utils.extension_data_exists(main_db_dict, extension_name):
+                if not quiet:
+                    click.secho(
+                        f"No bot extension data could be found for '{extension_name}'",
+                        fg="red",
+                    )
+                if ignore_failures:
+                    continue
+
+                raise click.Abort()
+
+            await utils.update_extension_data(
+                main_db_dict, extension_name, **parsed_pragmas
+            )
+            if not quiet:
+                for varname in parsed_pragmas:
+                    click.secho(
+                        f"Updated pragma variable '{varname}' to "
+                        f"'{parsed_pragmas[varname]}' for bot extension "
+                        f"'{extension_name}'.",
+                        fg="green",
+                    )
+
+        await utils.unload_databases([main_db_dict])
+
+    log_level = log_level or config.get("log_level")
+    if log_level is not None:  #  not specifying a logging level disables logging
+        with logging_handling(
+            log_level=logging.getLevelName(log_level), stdout=not quiet
+        ):
+            asyncio.run(_run())
+            return
 
     asyncio.run(_run())
 

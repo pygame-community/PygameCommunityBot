@@ -4,14 +4,14 @@ import discord
 from sqlalchemy.ext.asyncio import AsyncEngine
 
 from ...bot import PygameCommunityBot
-from ..bases import BaseExtCog
+from ...base import BaseExtensionCog
 
 BotT = PygameCommunityBot
 
 _logger = logging.getLogger(__package__)
 
 
-class MyExtCog(BaseExtCog, name="my-ext"):
+class MyExtCog(BaseExtensionCog, name="my-ext"):
     """..."""  # describe your extension
 
     def __init__(

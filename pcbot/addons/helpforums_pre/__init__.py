@@ -8,25 +8,23 @@ from __future__ import annotations
 import discord
 import snakecore
 from ... import __version__
-from ..bases import ExtSpec
+from ...base import ExtensionManager
 from ...bot import PygameCommunityBot
 
-from .constants import DB_TABLE_PREFIX
-from .migrations import REVISIONS, ROLLBACKS
+from .constants import DB_PREFIX
+from .migrations import MIGRATIONS
+
+__all__ = ("extension_manager",)
 
 BotT = PygameCommunityBot
 
-ext_spec = ExtSpec(
+# will be needed for CLI
+extension_manager = ExtensionManager(
     __name__,
-    REVISIONS,
-    ROLLBACKS,
+    MIGRATIONS,
     True,  # Always set to True until CLI supports manual migration
-    DB_TABLE_PREFIX,
+    DB_PREFIX,
 )
-
-# both will be needed for the CLI
-migrate = ext_spec.migrate
-rollback = ext_spec.rollback
 
 
 @snakecore.commands.decorators.with_config_kwargs
@@ -37,12 +35,12 @@ async def setup(
 ):
     from .cogs import HelpForumsPreCog
 
-    await ext_spec.prepare_setup(bot)
-    extension_data = await bot.read_extension_data(ext_spec.name)
+    await extension_manager.prepare(bot)
+    extension_data = await bot.read_extension_data(extension_manager.name)
     await bot.add_cog(
         HelpForumsPreCog(
             bot,
-            bot.get_database(),  # type: ignore
+            bot.get_database_engine(),  # type: ignore
             extension_data["revision_number"],
             theme_color=int(color),
         )

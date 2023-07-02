@@ -77,19 +77,18 @@ for module in pkg_resources.working_set:  # pylint: disable=not-an-iterable
         pass
 
 import random
-from typing import Optional, Sequence, Union
 import discord
 from discord.ext import commands
 import snakecore
 
-from .bases import BaseExtCog
+from ..base import BaseExtensionCog
 
 BotT = snakecore.commands.Bot | snakecore.commands.AutoShardedBot
 
 DOC_EMBED_LIMIT = 3
 
 
-class DocsPreCog(BaseExtCog, name="docs-pre"):
+class DocsPreCog(BaseExtensionCog, name="docs-pre"):
     async def put_main_doc(self, ctx: commands.Context[BotT], name: str):
         """
         Put main part of the doc into embed(s)
