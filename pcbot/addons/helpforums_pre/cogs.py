@@ -1406,7 +1406,8 @@ class HelpForumsPreCog(BaseExtensionCog, name="helpforums-pre"):
                         "**Mark all messages you find helpful here with a ✅ reaction "
                         "please** <:pg_robot:837389387024957440>\n\n"
                         "*To unmark a post as solved, remove the "
-                        "(`✅ Solved`) tag by removing it manually or removing your "
+                        "(`✅ Solved`) tag using the post context menu "
+                        "(right click/click & hold -> Edit Tags) or by removing your "
                         "✅ reaction.*"
                     ),
                     color=0x00AA00,
