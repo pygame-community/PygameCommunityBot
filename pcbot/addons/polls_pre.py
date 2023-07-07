@@ -412,7 +412,7 @@ class PollsPreCog(BaseExtensionCog, name="polls-pre"):
         description: String,
         *,
         option: list[tuple[UnicodeEmoji | discord.PartialEmoji, String]],
-        destination: discord.TextChannel
+        to: discord.TextChannel
         | discord.VoiceChannel
         | discord.Thread
         | None = None,
@@ -433,6 +433,10 @@ class PollsPreCog(BaseExtensionCog, name="polls-pre"):
         **`<option: Emoji Text>...`**
         > A flag representing a poll option as an emoji, followed by description text.
         > Can be specified up to 20 times.
+
+        **`[to: Channel]`**
+        > A flag for the destination channel for the poll.
+        > Defaults to the command invocation channel.
 
         **`[multiple_votes: yes|no]`**
         > A flag for setting whether voting for multiple options should be allowed.
@@ -456,11 +460,15 @@ class PollsPreCog(BaseExtensionCog, name="polls-pre"):
 
         __**Examples:**__
 
-        poll "Which apple is better?"
+        richpoll "Which apple is better?"
+        url: https://www.youtube.com/watch?v=dQw4w9WgXcQ
         option: 🍎 "Red apple"
         option: 🍏 "Green apple"
-        url: https://www.youtube.com/watch?v=dQw4w9WgXcQ
+        to: #polls
         """
+        
+        destination = to
+        
         if not isinstance(
             destination, (discord.TextChannel, discord.VoiceChannel, discord.Thread)
         ):
