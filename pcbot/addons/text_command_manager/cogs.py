@@ -53,7 +53,7 @@ ChannelOrRoleOverrides = list[
 ]
 
 
-class text_commandCantRunReason(enum.Enum):
+class TextCommandCannotRunReason(enum.Enum):
     BAD_CONTEXT = enum.auto()
     DISABLED = enum.auto()
     DISABLED_BY_PARENT = enum.auto()
@@ -108,12 +108,12 @@ class TextCommandManagerCog(BaseExtensionCog, name="text-command-manager"):
         if not cannot_run_reason:
             return True
 
-        elif cannot_run_reason is text_commandCantRunReason.DISABLED:
+        elif cannot_run_reason is TextCommandCannotRunReason.DISABLED:
             raise commands.CheckFailure(
                 f'The "{ctx.command.qualified_name}" command is disabled in this '
                 "guild/server."
             )
-        elif cannot_run_reason is text_commandCantRunReason.DISABLED_BY_PARENT:
+        elif cannot_run_reason is TextCommandCannotRunReason.DISABLED_BY_PARENT:
             split_parent_qualname = ctx.command.qualified_name.split()[:-1]
             possible_parent_qualnames = " or ".join(
                 f"\"{' '.join(split_parent_qualname[:i])}\""
@@ -126,8 +126,8 @@ class TextCommandManagerCog(BaseExtensionCog, name="text-command-manager"):
                 f"({possible_parent_qualnames})."
             )
         elif cannot_run_reason in (
-            text_commandCantRunReason.MISSING_CHANNEL_PERMISSIONS,
-            text_commandCantRunReason.MISSING_ROLE_PERMISSIONS,
+            TextCommandCannotRunReason.MISSING_CHANNEL_PERMISSIONS,
+            TextCommandCannotRunReason.MISSING_ROLE_PERMISSIONS,
         ):
             # sidestep __init__ constructor function
             missing_perms_exc = commands.MissingPermissions.__new__(
@@ -141,7 +141,7 @@ class TextCommandManagerCog(BaseExtensionCog, name="text-command-manager"):
                 + (
                     " in this channel."
                     if cannot_run_reason
-                    is text_commandCantRunReason.MISSING_CHANNEL_PERMISSIONS
+                    is TextCommandCannotRunReason.MISSING_CHANNEL_PERMISSIONS
                     else " in this guild/server."
                 ),
             )
@@ -170,14 +170,14 @@ class TextCommandManagerCog(BaseExtensionCog, name="text-command-manager"):
 
     async def text_command_cannot_run_reason(
         self, ctx: commands.Context[BotT], command: commands.Command | None = None
-    ) -> text_commandCantRunReason | None:
+    ) -> TextCommandCannotRunReason | None:
         if not (
             ctx.guild
             and isinstance(ctx.author, discord.Member)
             and isinstance(ctx.channel, discord.abc.GuildChannel)
             and (command or ctx.command)
         ):
-            return text_commandCantRunReason.BAD_CONTEXT
+            return TextCommandCannotRunReason.BAD_CONTEXT
         elif not (
             isinstance(ctx.command, commands.Command)
             and await self.guild_text_command_states_exists(ctx.guild.id)
@@ -257,11 +257,11 @@ class TextCommandManagerCog(BaseExtensionCog, name="text-command-manager"):
 
             if i == 0 and not text_command_state["enabled"] & 0b01:
                 return (
-                    text_commandCantRunReason.DISABLED
+                    TextCommandCannotRunReason.DISABLED
                 )  # command is disabled via its command bit
             elif i > 0 and not text_command_state["enabled"] & 0b10:
                 return (
-                    text_commandCantRunReason.DISABLED_BY_PARENT
+                    TextCommandCannotRunReason.DISABLED_BY_PARENT
                 )  # command is disabled via a parent's subcommand bit
 
             if (
@@ -311,7 +311,7 @@ class TextCommandManagerCog(BaseExtensionCog, name="text-command-manager"):
                             is True
                         )
                     ):
-                        return text_commandCantRunReason.MISSING_CHANNEL_PERMISSIONS
+                        return TextCommandCannotRunReason.MISSING_CHANNEL_PERMISSIONS
                 elif (
                     i == len(text_command_states) - 1
                 ):  # we're at the fake root command and "All Channels" is not configured as an override on any preceding commands,
@@ -331,7 +331,7 @@ class TextCommandManagerCog(BaseExtensionCog, name="text-command-manager"):
                         is not False
                         or target_channel_overrides.get(ctx.channel.id, False) is True
                     ):
-                        return text_commandCantRunReason.MISSING_CHANNEL_PERMISSIONS
+                        return TextCommandCannotRunReason.MISSING_CHANNEL_PERMISSIONS
 
             if role_overrides := text_command_state.get("roles"):
                 if everyone_role_id in role_overrides:
@@ -367,7 +367,7 @@ class TextCommandManagerCog(BaseExtensionCog, name="text-command-manager"):
                             for i in range(1, len(role_ids))
                         )
                     ):  # will always include @everyone role
-                        return text_commandCantRunReason.MISSING_ROLE_PERMISSIONS
+                        return TextCommandCannotRunReason.MISSING_ROLE_PERMISSIONS
                 elif (
                     i == len(text_command_states) - 1
                 ):  # we're at the fake root command and @everyone role is not configured as an override on any preceding commands
@@ -377,7 +377,7 @@ class TextCommandManagerCog(BaseExtensionCog, name="text-command-manager"):
                         target_role_overrides.get(role_ids[i], False)
                         for i in range(1, len(role_ids))
                     ):
-                        return text_commandCantRunReason.MISSING_ROLE_PERMISSIONS
+                        return TextCommandCannotRunReason.MISSING_ROLE_PERMISSIONS
 
         return None
 
