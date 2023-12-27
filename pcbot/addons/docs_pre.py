@@ -30,9 +30,14 @@ import discord
 from discord.ext import commands
 import numpy
 import pkg_resources
+
 import pygame
+
+# pygame modules to explicitly import
 import pygame._sdl2
+import pygame.camera
 import pygame.gfxdraw
+
 import pygame_gui
 import snakecore
 
