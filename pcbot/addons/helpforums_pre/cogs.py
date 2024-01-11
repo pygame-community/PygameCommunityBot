@@ -1352,7 +1352,7 @@ class HelpForumsPreCog(BaseExtensionCog, name="helpforums-pre"):
         return await thread.send(
             content=f"help-post-alert(<@{thread.owner_id}>, **{thread.name}**)",
             embed=discord.Embed(
-                title="Your tag selection is incomplete",
+                title="Your tag selection is not quite right",
                 description=(
                     "Please pick exactly **1 issue tag** and **1-3 aspect tags**.\n\n"
                     "**Issue Tags** look like this: **(`issue: ...`)**.\n"
