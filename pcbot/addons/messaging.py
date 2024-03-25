@@ -984,7 +984,7 @@ class Messaging(BaseExtensionCog, name="messaging"):
     @commands.max_concurrency(1, per=commands.BucketType.default, wait=True)
     @message.command(
         name="edit",
-        usage="[attachments (upload files < 8 MiB)]... [content: Text[2000]] "
+        usage="[attachments (upload files < 8 MiB)]... <message> [content: Text[2000]] "
         "[embeds: CodeBlock/Message/( Message Integer ) ... ] "
         "[mention_everyone: yes|no] [mention_users: yes|no] "
         "[mention_these_users: User...] [mention_roles: yes|no] "
@@ -1017,6 +1017,9 @@ class Messaging(BaseExtensionCog, name="messaging"):
         """Edit a previously sent message.
 
         __**Parameters:**__
+
+        **`<message: Message>...`**
+        > The message to edit.
 
         **`[attachments (upload files < 8 MiB)]...`**
         > One or more new attachments to add to the message.
