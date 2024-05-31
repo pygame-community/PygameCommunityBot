@@ -29,7 +29,6 @@ import types
 import discord
 from discord.ext import commands
 import numpy
-import pkg_resources
 
 import pygame
 
@@ -74,12 +73,6 @@ for module_obj in doc_module_tuple:
 for module in sys.modules:
     doc_module_dict[module] = sys.modules[module]
 
-
-for module in pkg_resources.working_set:  # pylint: disable=not-an-iterable
-    try:
-        doc_module_dict[module] = __import__(module.project_name.replace("-", "_"))
-    except BaseException:
-        pass
 
 import random
 import discord
