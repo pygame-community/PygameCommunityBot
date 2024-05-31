@@ -35,27 +35,27 @@ DEFAULT_EXTENSIONS: list[dict[str, Any]] = [
     # These can only be excluded through the --ignore-ext' or '--disable-all-exts'
     # CLI options.
     {
-        "name": f"{__package__}.addons.bot_management",
+        "name": f"{__package__}.exts.bot_management",
         "config": {
             "color": DEFAULT_EMBED_COLOR,
         },
     },
     {
-        "name": f"{__package__}.addons.docs_pre",
+        "name": f"{__package__}.exts.docs_pre",
         "config": {"color": DEFAULT_EMBED_COLOR},
     },
     {
-        "name": f"{__package__}.addons.help",
+        "name": f"{__package__}.exts.help",
         "config": {"color": DEFAULT_EMBED_COLOR},
     },
     {
-        "name": f"{__package__}.addons.messaging",
+        "name": f"{__package__}.exts.messaging",
     },
     {
-        "name": f"{__package__}.addons.polls_pre",
+        "name": f"{__package__}.exts.polls_pre",
     },
     {
-        "name": f"{__package__}.addons.text_command_manager",
+        "name": f"{__package__}.exts.text_command_manager",
         "config": {"color": DEFAULT_EMBED_COLOR},
     },
 ]

@@ -24,7 +24,7 @@ exclude = '''
 force-exclude = '''
 config.py
 botconfig.py
-launchconfig.py
+localconfig.py
 '''
 
 [tool.isort]

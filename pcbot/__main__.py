@@ -13,6 +13,7 @@ from typing import Any
 
 import click
 import discord
+from pcbot.utils.parsermapping import PMValue, ParserMapping, ParsingError
 import snakecore
 import sqlalchemy.exc
 
@@ -23,12 +24,13 @@ from pcbot.config_parsing import (
     parser_mapping,
 )
 
-from . import cli_helpers, constants, utils
-from .utils import raise_exc, ParserMapping, ParserMappingValue
+from . import cli_helpers, constants
+from .utils import raise_
 from .bot import (
     PygameCommunityBot as Bot,
 )
 from .migrations import MIGRATIONS
+from pcbot import utils
 
 try:
     import uvloop  # type: ignore
@@ -359,7 +361,7 @@ def main(
 
     try:
         config.update(parser_mapping.parse(config))
-    except ParserMapping.ParsingError as p:
+    except ParsingError as p:
         click.secho(f"  config error: {p.args[0]}", err=True, fg="red")
         raise click.Abort()
 
@@ -430,12 +432,12 @@ def migrate(
         config.update(
             ParserMapping(
                 {
-                    "databases": ParserMappingValue(parse_databases, required=True),
+                    "databases": PMValue(parse_databases, required=True),
                     "main_database_name": parse_main_database_name,
                 }
             ).parse(config)
         )
-    except ParserMapping.ParsingError as p:
+    except ParsingError as p:
         click.secho(f"  config error: {p.args[0]}", err=True, fg="red")
         raise click.Abort()
 
@@ -537,12 +539,12 @@ def extensions_info(
         config.update(
             ParserMapping(
                 {
-                    "databases": ParserMappingValue(parse_databases, required=True),
+                    "databases": PMValue(parse_databases, required=True),
                     "main_database_name": parse_main_database_name,
                 }
             ).parse(config)
         )
-    except ParserMapping.ParsingError as p:
+    except ParsingError as p:
         click.secho(f"  config error: {p.args[0]}", err=True, fg="red")
         raise click.Abort()
 
@@ -639,13 +641,13 @@ def extensions_delete(
         config.update(
             ParserMapping(
                 {
-                    "databases": ParserMappingValue(parse_databases, required=True),
+                    "databases": PMValue(parse_databases, required=True),
                     "main_database_name": parse_main_database_name,
                     "extensions": parse_extensions,
                 }
             ).parse(config)
         )
-    except ParserMapping.ParsingError as p:
+    except ParsingError as p:
         click.secho(f"  config error: {p.args[0]}", err=True, fg="red")
         raise click.Abort()
 
@@ -792,13 +794,13 @@ def extensions_migrate(
         config.update(
             ParserMapping(
                 {
-                    "databases": ParserMappingValue(parse_databases, required=True),
+                    "databases": PMValue(parse_databases, required=True),
                     "main_database_name": parse_main_database_name,
                     "extensions": parse_extensions,
                 }
             ).parse(config)
         )
-    except ParserMapping.ParsingError as p:
+    except ParsingError as p:
         click.secho(f"  config error: {p.args[0]}", err=True, fg="red")
         raise click.Abort()
 
@@ -952,8 +954,8 @@ def extensions_set(
                 if auto_migrate.lower() in ("t", "true", "y", "yes", "1")
                 else False
                 if auto_migrate.lower() in ("f", "false", "n", "no", "0")
-                else raise_exc(
-                    ParserMapping.ParsingError(
+                else raise_(
+                    ParsingError(
                         "Pragma variable 'auto_migrate' must be set to a boolean value."
                     )
                 ),
@@ -961,7 +963,7 @@ def extensions_set(
             reject_unknown=True,
         ).parse(pragma_input_map)
 
-    except ParserMapping.ParsingError as p:
+    except ParsingError as p:
         click.secho(f"Pragma parsing error: {p.args[0]}", err=True, fg="red")
         raise click.Abort()
 
@@ -971,13 +973,13 @@ def extensions_set(
         config.update(
             ParserMapping(
                 {
-                    "databases": ParserMappingValue(parse_databases, required=True),
+                    "databases": PMValue(parse_databases, required=True),
                     "main_database_name": parse_main_database_name,
                     "extensions": parse_extensions,
                 }
             ).parse(config)
         )
-    except ParserMapping.ParsingError as p:
+    except ParsingError as p:
         click.secho(f"  config error: {p.args[0]}", err=True, fg="red")
         raise click.Abort()
 

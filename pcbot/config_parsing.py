@@ -11,9 +11,10 @@ from typing import Any, Collection, MutableMapping
 
 from discord.ext import commands
 import click
-from pcbot import constants
 
-from pcbot.utils import ParserMapping, ParserMappingValue, raise_exc
+from pcbot import constants
+from pcbot.utils import raise_
+from pcbot.utils.parsermapping import ParserMapping, PMValue, ParsingError
 
 
 def parse_intents(key: str, intents: int, cfg: MutableMapping[str, Any]) -> int:
@@ -46,7 +47,7 @@ def parse_intents(key: str, intents: int, cfg: MutableMapping[str, Any]) -> int:
             fail = True
 
         if fail:
-            raise ParserMapping.ParsingError(
+            raise ParsingError(
                 "'intents' variable must be of type 'int' or 'str' (STRING) "
                 "and must be interpretable as an integer."
             )
@@ -67,13 +68,13 @@ def parse_command_prefix(
         isinstance(command_prefix, (list, tuple))
         and not all(isinstance(pfx, str) for pfx in command_prefix)
     ):
-        raise ParserMapping.ParsingError(
+        raise ParsingError(
             "Optional 'command_prefix' variable must be of type "
             "'str', of type 'list'/'tuple' containing strings or just None.",
         )
 
     if not isinstance(cfg["mention_as_command_prefix"], bool):
-        raise ParserMapping.ParsingError(
+        raise ParsingError(
             "'mention_as_command_prefix' variable must be of type 'bool'.",
         )
 
@@ -86,7 +87,7 @@ def parse_command_prefix(
     elif cfg["mention_as_command_prefix"]:
         cfg["final_prefix"] = commands.when_mentioned
     else:
-        raise ParserMapping.ParsingError(
+        raise ParsingError(
             "'mention_as_command_prefix' variable must be True if 'command_prefix' is None.",
         )
 
@@ -97,7 +98,7 @@ def parse_extensions(
     key: str, extensions: Any, cfg: MutableMapping[str, Any]
 ) -> list[dict[str, Any]]:
     if not isinstance(extensions, (list, tuple)):
-        raise ParserMapping.ParsingError(
+        raise ParsingError(
             "'extensions' variable must be a container of type "
             "'list'/'tuple' containing dictionaries that specify "
             "parameters for the extensions to load."
@@ -106,7 +107,7 @@ def parse_extensions(
     elif extensions and not all(
         isinstance(ext_dict, dict) and "name" in ext_dict for ext_dict in extensions
     ):
-        raise ParserMapping.ParsingError(
+        raise ParsingError(
             "The objects in the 'extensions' variable container "
             "must be of type 'dict' and must at least contain the 'name' key "
             "that maps to the string name of an extension to load."
@@ -158,7 +159,7 @@ def parse_extensions(
                 }.values()
             )  # allow extension dicts to overwrite each other by their qualified name
         except Exception as e:
-            raise ParserMapping.ParsingError(
+            raise ParsingError(
                 "Internal error while processing 'extension' "
                 f"variable: {e.__class__.__name__}: {e}"
             )
@@ -182,7 +183,7 @@ def parse_databases(
             for db_info_dict in databases
         )
     ):
-        raise ParserMapping.ParsingError(
+        raise ParsingError(
             "'databases' variable must be of type "
             "'list' and must contain one or more database "
             "dictionaries.\n"
@@ -214,7 +215,7 @@ def parse_main_database_name(
     key: str, main_database_name: Any, cfg: MutableMapping[str, Any]
 ) -> str:
     if not isinstance(main_database_name, str):
-        raise ParserMapping.ParsingError(
+        raise ParsingError(
             "'main_database_name' variable must be of type "
             "'str' and must be the name of a database specified in 'databases'"
         )
@@ -226,7 +227,7 @@ def parse_main_database_name(
             cfg["databases"].insert(0, new_main_database)
             break
     else:
-        raise ParserMapping.ParsingError(
+        raise ParsingError(
             "'main_database_name' variable must be "
             "the name of a database specified in 'databases'"
         )
@@ -243,7 +244,7 @@ def parse_log_level(
     log_level = log_level.upper() if log_level else log_level
 
     if log_level is not None and log_level not in constants.LOG_LEVEL_NAMES:
-        raise ParserMapping.ParsingError(
+        raise ParsingError(
             "'log_level' variable must be a valid log level name of "
             "type 'str', or None."
         )
@@ -255,17 +256,17 @@ def parse_owner_ids(
     key: str, owner_ids: Any, cfg: MutableMapping[str, Any]
 ) -> Collection[int]:
     if "owner_id" in cfg and cfg["owner_id"] is not None:
-        raise ParserMapping.ParsingError(
+        raise ParsingError(
             "'owner_id' and 'owner_ids' variables cannot be " "specified together."
         )
     try:
         if not (owner_ids and all(isinstance(role_id, int) for role_id in owner_ids)):
-            raise ParserMapping.ParsingError(
+            raise ParsingError(
                 "'owner_ids' variable must be a container "
                 "(preferably a 'set' object) of 'int's that supports membership testing."
             )
     except TypeError:
-        raise ParserMapping.ParsingError(
+        raise ParsingError(
             "'owner_ids' variable must be a container "
             "(preferably a 'set' object) of 'int's that supports membership testing."
         )
@@ -289,7 +290,7 @@ def parse_owner_role_ids(
             )
             raise click.Abort()
     except TypeError:
-        raise ParserMapping.ParsingError(
+        raise ParsingError(
             "'owner_role_ids' variable must be a container "
             "(preferably a 'set' object) of 'int's that supports membership testing."
         )
@@ -302,12 +303,12 @@ def parse_manager_role_ids(
 ) -> Collection[int]:
     try:
         if not (all(isinstance(role_id, int) for role_id in manager_role_ids)):
-            raise ParserMapping.ParsingError(
+            raise ParsingError(
                 "'manager_role_ids' variable must be a container "
                 "(preferably a 'set' object) of 'int's that supports membership testing."
             )
     except TypeError:
-        raise ParserMapping.ParsingError(
+        raise ParsingError(
             "'manager_role_ids' variable must be a container "
             "(preferably a 'set' object) of 'int's that supports membership testing."
         )
@@ -317,14 +318,14 @@ def parse_manager_role_ids(
 
 parser_mapping = ParserMapping(
     {
-        "authentication": ParserMappingValue(
+        "authentication": PMValue(
             ParserMapping(
                 {
                     "token": (
                         lambda k, v, m: v
                         if isinstance(v, str)
-                        else raise_exc(
-                            ParserMapping.ParsingError(
+                        else raise_(
+                            ParsingError(
                                 "Required 'authentication' variable must be of type 'dict' "
                                 "and must at least contain 'token' of type 'str'"
                             )
@@ -346,8 +347,8 @@ parser_mapping = ParserMapping(
                 ),
                 bool,
             )
-            else raise_exc(
-                ParserMapping.ParsingError(
+            else raise_(
+                ParsingError(
                     "'mention_as_command_prefix' variable must be of type 'bool'."
                 )
             )
@@ -360,8 +361,8 @@ parser_mapping = ParserMapping(
         "log_directory": (
             lambda key, log_directory, cfg: log_directory
             if isinstance(log_directory, str) and os.path.isdir(log_directory)
-            else raise_exc(
-                ParserMapping.ParsingError(
+            else raise_(
+                ParsingError(
                     "'log_directory' variable must be a valid 'str' path "
                     "to a directory."
                 )
@@ -370,8 +371,8 @@ parser_mapping = ParserMapping(
         "log_filename": (
             lambda key, log_filename, cfg: log_filename
             if isinstance(log_filename, str)
-            else raise_exc(
-                ParserMapping.ParsingError(
+            else raise_(
+                ParsingError(
                     "'log_filename' variable must be a valid file name."
                 )
             )
@@ -379,8 +380,8 @@ parser_mapping = ParserMapping(
         "log_file_extension": (
             lambda key, log_file_extension, cfg: log_file_extension
             if isinstance((log_file_extension := log_file_extension.strip(".")), str)
-            else raise_exc(
-                ParserMapping.ParsingError(
+            else raise_(
+                ParsingError(
                     "'log_file_extension' variable must be a 'str'"
                     "representing a file extension."
                 )
@@ -389,8 +390,8 @@ parser_mapping = ParserMapping(
         "owner_id": (
             lambda k, v, cfg: v
             if isinstance(v, int | None)
-            else raise_exc(
-                ParserMapping.ParsingError(
+            else raise_(
+                ParsingError(
                     "'owner_id' variable must be either an 'int' object or 'None'."
                 )
             )

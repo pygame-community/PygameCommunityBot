@@ -13,6 +13,7 @@ import time
 from types import MappingProxyType
 from typing import Any, Mapping, Optional
 
+from . import utils
 from sqlalchemy.ext.asyncio import AsyncEngine
 import discord
 from discord.ext import commands, tasks
@@ -21,7 +22,7 @@ import snakecore
 from snakecore.constants import UNSET
 from snakecore.utils.pagination import EmbedPaginator
 
-from . import constants, utils
+from . import constants
 from .types import DatabaseDict, ExtensionData
 
 _logger = logging.getLogger(__name__)
@@ -347,6 +348,25 @@ class PygameCommunityBot(snakecore.commands.Bot):
                     f"Successfully loaded extension "
                     f"'{ext_dict.get('package', '')}{ext_dict['name']}' at launch"
                 )
+
+
+        if self.config.get("sync_app_commands") is not None:
+            if self.config.get("dev_guild_id") is not None:
+                if self.config.get("copy_global_app_commands_to_dev_guild") is not None:
+                    self.tree.copy_global_to(
+                        guild=discord.Object(self.config["dev_guild_id"])
+                    )
+                elif self.config.get("clear_dev_guild_app_commands") is not None:
+                    self.tree.clear_commands(
+                        guild=discord.Object(self.config["dev_guild_id"])
+                    )
+
+                await self.tree.sync(guild=discord.Object(self.config["dev_guild_id"]))
+            else:
+                if self.config.get("clear_global_app_commands") is not None:
+                    self.tree.clear_commands()
+
+                await self.tree.sync()
 
     async def teardown_hook(self) -> None:
         if self.handle_loading_reactions.is_running():

@@ -31,7 +31,7 @@ UnsetType = type(UNSET)
 _logger = logging.getLogger(__name__)
 
 
-class BaseExtensionCog(commands.Cog):
+class BaseExtensionCog(commands.GroupCog):
     __version__ = __version__
 
     def __init__(self, bot: BotT, theme_color: int | discord.Color = 0) -> None:
