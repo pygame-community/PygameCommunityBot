@@ -8,6 +8,7 @@ This file should define the `discord.ext.commands.Bot` subclass to use for the p
 import asyncio
 from collections import OrderedDict
 import datetime
+import inspect
 import logging
 import time
 from types import MappingProxyType
@@ -38,9 +39,9 @@ class PygameCommunityBot(snakecore.commands.Bot):
 
         self._recent_response_error_messages: dict[int, discord.Message] = {}
 
-        self._cached_response_messages: OrderedDict[
-            int, discord.Message
-        ] = OrderedDict()
+        self._cached_response_messages: OrderedDict[int, discord.Message] = (
+            OrderedDict()
+        )
 
         self._cached_response_messages_maxsize = 1000
 
@@ -188,7 +189,10 @@ class PygameCommunityBot(snakecore.commands.Bot):
             )
             and (reference := ctx.message.reference)
             and reference.message_id
-            and not isinstance(reference.resolved, discord.DeletedReferencedMessage)
+            and not (
+                reference.message_id is None
+                or isinstance(reference.resolved, discord.DeletedReferencedMessage)
+            )
         ):
             try:
                 message = reference.resolved or await ctx.fetch_message(
@@ -197,6 +201,8 @@ class PygameCommunityBot(snakecore.commands.Bot):
             except discord.NotFound:
                 pass
             else:
+                old_args = ctx.args[:]
+
                 if ctx.args and isinstance(
                     ctx.args[0], commands.Cog
                 ):  # command was defined inside cog
@@ -209,6 +215,14 @@ class PygameCommunityBot(snakecore.commands.Bot):
                         ctx.args[1] = message
                     else:
                         ctx.args.insert(1, message)
+
+                if hasattr(command.callback, "__signature__"):
+                    try:
+                        command.callback.__signature__.bind(
+                            ctx, *ctx.args, **ctx.kwargs
+                        )
+                    except TypeError:
+                        ctx.args[:] = old_args
 
     async def bot_after_invoke(self, ctx: commands.Context):
         assert ctx.command
@@ -348,7 +362,6 @@ class PygameCommunityBot(snakecore.commands.Bot):
                     f"Successfully loaded extension "
                     f"'{ext_dict.get('package', '')}{ext_dict['name']}' at launch"
                 )
-
 
         if self.config.get("sync_app_commands") is not None:
             if self.config.get("dev_guild_id") is not None:
@@ -555,9 +568,9 @@ class PygameCommunityBot(snakecore.commands.Bot):
                     ).set_footer(text=footer_text)
                 )
 
-            self._recent_response_error_messages[
-                context.message.id
-            ] = target_message  # store updated message object
+            self._recent_response_error_messages[context.message.id] = (
+                target_message  # store updated message object
+            )
 
             snakecore.utils.hold_task(
                 asyncio.create_task(
