@@ -32,12 +32,15 @@ config = {
     "intents": 0b1100011111111011111101, # https://discord.com/developers/docs/topics/gateway#list-of-intents
     "extensions": [
         {
-        "name": "pcbot.addons.bundled_extension",
+        "name": "pcbot.exts.bundled_extension",
         "config": {
             "a": 1,
             "b": 2
         }
     }],
+
+    # Application command synchronization flags
+    "sync_app_commands": True,
 }
 ```
 
@@ -62,7 +65,7 @@ config: Config = {
     "manager_role_ids": OMIT, # will override and delete variable
     "extensions": [
         {
-            "name": "pcbot.addons.bundled_extension2",
+            "name": "pcbot.exts.bundled_extension2",
             "config": {
                 "a": 1,
                 "b": 2
@@ -70,7 +73,7 @@ config: Config = {
         },
         # comment out extensions to disable them or use the `--ignore-extension ext_name` option via the CLI.
         # {
-        #     "name": ".addons.bundled_extension3",
+        #     "name": ".exts.bundled_extension3",
         #     "package": "pcbot"
         # },
         {
@@ -86,6 +89,16 @@ config: Config = {
         # other secondary databases would go here
     ],
     "main_database_name": "a_database", # a way to select the main database by name
+
+    
+    # Application command synchronization flags
+    "sync_app_commands": False,
+
+    # synchronization flags dependent on "sync_app_commands" being enabled
+    "clear_global_app_commands": False,
+    "dev_guild_id": 432143214321432143,
+    "copy_global_app_commands_to_dev_guild": False,
+    "clear_dev_guild_app_commands": False,
 }
 ```
 
