@@ -129,8 +129,8 @@ def get_msg_info_embed(msg: discord.Message, author: bool = True):
                         "__Text"
                         + (" (Shortened)" if len(msg.content) > 2000 else "")
                         + "__:",
-                            f"\n {msg.content[:2001]}" + "\n\n[...]"
-                            if len(msg.content) > 2000
+                        f"\n {msg.content[:2001]}" + "\n\n[...]"
+                        if len(msg.content) > 2000
                         else msg.content,
                         "\u200b",
                     )
@@ -998,9 +998,8 @@ class Messaging(BaseExtensionCog, name="messaging"):
         message: discord.Message | None,
         attachments: commands.Greedy[discord.Attachment],
         *,
-        name: String[100] | None = commands.flag(
-            name="name", aliases=["title"], default=None
-        ),
+        name: String[100]
+        | None = commands.flag(name="name", aliases=["title"], default=None),
         content: String | None = None,
         embeds: tuple[
             Parens[discord.Message, int] | discord.Message | CodeBlock, ...
@@ -1287,7 +1286,7 @@ class Messaging(BaseExtensionCog, name="messaging"):
 
         if is_thread_starter_msg:
             await message.channel.edit(
-                name=name or discord.utils.MISSING, # type: ignore
+                name=name or discord.utils.MISSING,  # type: ignore
                 applied_tags=[
                     tag
                     for tag in (message.channel.parent.available_tags)  # type: ignore
@@ -1300,12 +1299,16 @@ class Messaging(BaseExtensionCog, name="messaging"):
             content=(
                 content
                 if content
-                else None if remove_content else discord.utils.MISSING
+                else None
+                if remove_content
+                else discord.utils.MISSING
             ),
             embeds=(
                 parsed_embeds
                 if parsed_embeds
-                else [] if remove_embeds else discord.utils.MISSING
+                else []
+                if remove_embeds
+                else discord.utils.MISSING
             ),
             attachments=final_attachments,
             allowed_mentions=(
