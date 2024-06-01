@@ -129,8 +129,8 @@ def get_msg_info_embed(msg: discord.Message, author: bool = True):
                         "__Text"
                         + (" (Shortened)" if len(msg.content) > 2000 else "")
                         + "__:",
-                        f"\n {msg.content[:2001]}" + "\n\n[...]"
-                        if len(msg.content) > 2000
+                            f"\n {msg.content[:2001]}" + "\n\n[...]"
+                            if len(msg.content) > 2000
                         else msg.content,
                         "\u200b",
                     )
@@ -569,8 +569,8 @@ class Messaging(BaseExtensionCog, name="messaging"):
     @message.command(
         name="post",
         usage="[attachments (upload files < 8 MiB)]... <to: ForumChannel> "
-        "<name: Text[100]> [content: Text[2000]] "
-        "[embeds: CodeBlock...]  [reply_to: Message] "
+        "<name|title: Text[100]> [content: Text[2000]] "
+        "[embeds: CodeBlock...] [tags: String[20]...] [reply_to: Message] "
         "[delete_after: Number/TimeDelta] [mention_all: yes|no] "
         "[mention_everyone: yes|no] [mention_users: yes|no] "
         "[mention_these_users: User...] [mention_roles: yes|no] "
@@ -608,7 +608,7 @@ class Messaging(BaseExtensionCog, name="messaging"):
         > A flag for the destination channels to send the post to.
         > If forum tags are specified, only one destination will be accepted.
 
-        **`<name: Text[100]>` | `<title: Text[100]>**
+        **`<name|title: Text[100]>`**
         > A flag for the forum post name/title.
         > It must not exceed 100 characters in length.
 
@@ -620,7 +620,7 @@ class Messaging(BaseExtensionCog, name="messaging"):
         > A flag for the embeds to add to the message, as 1-10 code blocks containing embed data as a JSON object/Python dictionary.
 
         **`[tags: String[20]...]`**
-        > The tags to apply to the post.
+        > The tags to apply to the post, if they exist.
 
         **`[mention_all: yes|no]`**
         > A flag for whether all mentionable targets in the message text content (users, roles, user being replied to) should receive a mention ping.
@@ -985,7 +985,7 @@ class Messaging(BaseExtensionCog, name="messaging"):
     @message.command(
         name="edit",
         usage="[attachments (upload files < 8 MiB)]... <message> [content: Text[2000]] "
-        "[embeds: CodeBlock/Message/( Message Integer ) ... ] "
+        "[embeds: CodeBlock/Message/( Message Integer ) ... ] [tags: String[20]...] "
         "[mention_everyone: yes|no] [mention_users: yes|no] "
         "[mention_these_users: User...] [mention_roles: yes|no] "
         "[mention_these_roles: Role...] [mention_replied_user: yes|no]",
@@ -998,10 +998,14 @@ class Messaging(BaseExtensionCog, name="messaging"):
         message: discord.Message | None,
         attachments: commands.Greedy[discord.Attachment],
         *,
+        name: String[100] | None = commands.flag(
+            name="name", aliases=["title"], default=None
+        ),
         content: String | None = None,
         embeds: tuple[
             Parens[discord.Message, int] | discord.Message | CodeBlock, ...
         ] = (),
+        tags: tuple[str, ...] = (),
         remove_content: bool = False,
         remove_embeds: bool = False,
         remove_all_attachments: bool = False,
@@ -1025,6 +1029,10 @@ class Messaging(BaseExtensionCog, name="messaging"):
         > One or more new attachments to add to the message.
         > They must not exceed 8 MiB in size.
 
+        **`[name|title: Text[100]]`**
+        > A flag for the message's forum post or thread name/title, if applicable.
+        > It must not exceed 100 characters in length.
+
         **`[content: Text[2000]]`**
         > A flag for the text content the edited message should contain.
         > It must not exceed 2000 characters in length.
@@ -1036,6 +1044,9 @@ class Messaging(BaseExtensionCog, name="messaging"):
         > • A parenthesized pair containing a message containing embed data as a JSON object/Python dictionary in its first attachment, followed by an index (0-9) representing the attachment position.
         >
         > If any of these arguments evaluate to an empty dictionary/JSON object ( `{}` ), the preexisting embeds at their position will be preserved.
+
+        **`[tags: String[20]...]`**
+        > The tags to apply to the message's post, if applicable and they exist.
 
         **`[remove_content: yes|no]`**
         > A flag for whether all mentionable targets in the message text content (users, roles, user being replied to) should receive a mention ping.
@@ -1099,6 +1110,32 @@ class Messaging(BaseExtensionCog, name="messaging"):
                     f"target channel(s) (<#{message.channel.id}>)."  # type: ignore
                 )
             )
+
+        is_thread_starter_msg = False
+
+        if name and not (isinstance(message.channel, discord.Thread)):
+            raise commands.CommandInvokeError(
+                commands.CommandError(
+                    "Flag 'name:' or 'title:' can only be specified if targeting the starter message of a thread."
+                )
+            )
+
+        elif tags and not (
+            isinstance(message.channel, discord.Thread)
+            and message.channel.parent
+            and isinstance(message.channel.parent, discord.ForumChannel)
+        ):
+            raise commands.CommandInvokeError(
+                commands.CommandError(
+                    "Flag 'tags:' can only be specified if targeting the starter message of a forum channel post."
+                )
+            )
+
+        else:
+            assert isinstance(message.channel, discord.Thread)
+            is_thread_starter_msg = True
+
+        tag_names = tuple(tag_name.casefold() for tag_name in tags)
 
         former_embeds = message.embeds
         parsed_embeds = []
@@ -1248,26 +1285,39 @@ class Messaging(BaseExtensionCog, name="messaging"):
                 if value is not None:
                     allowed_mentions_kwargs[kwarg] = value
 
+        if is_thread_starter_msg:
+            await message.channel.edit(
+                name=name or discord.utils.MISSING, # type: ignore
+                applied_tags=[
+                    tag
+                    for tag in (message.channel.parent.available_tags)  # type: ignore
+                    if tag.name.casefold() in tag_names
+                ]
+                or discord.utils.MISSING,
+            )
+
         await message.edit(
-            content=content
-            if content
-            else None
-            if remove_content
-            else discord.utils.MISSING,
-            embeds=parsed_embeds
-            if parsed_embeds
-            else []
-            if remove_embeds
-            else discord.utils.MISSING,
+            content=(
+                content
+                if content
+                else None if remove_content else discord.utils.MISSING
+            ),
+            embeds=(
+                parsed_embeds
+                if parsed_embeds
+                else [] if remove_embeds else discord.utils.MISSING
+            ),
             attachments=final_attachments,
             allowed_mentions=(
                 discord.AllowedMentions.all()
                 if mention_all
-                else discord.AllowedMentions(
-                    **allowed_mentions_kwargs,
+                else (
+                    discord.AllowedMentions(
+                        **allowed_mentions_kwargs,
+                    )
+                    if allowed_mentions_kwargs
+                    else discord.utils.MISSING
                 )
-                if allowed_mentions_kwargs
-                else discord.utils.MISSING
             ),
         )
 
