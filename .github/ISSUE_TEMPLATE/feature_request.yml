@@ -1,6 +1,6 @@
 name: Feature Request
 description: Suggest a feature to add to the bot application.
-labels: feature request
+labels: Type.Feature-Request
 body:
   - type: input
     attributes:

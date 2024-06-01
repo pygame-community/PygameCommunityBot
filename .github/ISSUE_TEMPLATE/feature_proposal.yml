@@ -1,6 +1,6 @@
 name: Feature Proposal
 description: Offer a detailed, actionable proposal for tackling a feature request.
-labels: feature request
+labels: Type.Feature-Request
 body:
   - type: input
     attributes:
