@@ -1076,6 +1076,7 @@ async def message_delete_reaction_listener(
 def raise_exc(exc: Exception):
     raise exc
 
+
 raise_ = raise_exc
 
 from ..migrations import MIGRATIONS

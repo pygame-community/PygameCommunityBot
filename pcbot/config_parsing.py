@@ -372,9 +372,7 @@ parser_mapping = ParserMapping(
             lambda key, log_filename, cfg: log_filename
             if isinstance(log_filename, str)
             else raise_(
-                ParsingError(
-                    "'log_filename' variable must be a valid file name."
-                )
+                ParsingError("'log_filename' variable must be a valid file name.")
             )
         ),
         "log_file_extension": (
