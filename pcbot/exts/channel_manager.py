@@ -55,18 +55,31 @@ async def clone_category(
     clone_channels: bool = True,
     reason: str | None = None,
 ):
-    new_category = await category.clone(name=new_name)
+    new_category = await category.clone(name=new_name, reason=reason)
+    await new_category.move(after=category)
 
     if clone_channels:
         for channel in category.channels:
             if isinstance(channel, discord.ForumChannel):
                 channel_clone = await clone_forum(
-                    channel, new_name=new_name, reason=reason
+                    channel,
+                    new_name=new_name,
+                    reason="Channel created as clone of "
+                    f"#{channel.name} ({channel.mention})",
                 )
             else:
-                channel_clone = await channel.clone()
+                channel_clone = await channel.clone(
+                    reason="Channel created as clone of "
+                    f"#{channel.name} ({channel.mention})"
+                )
 
-            await channel_clone.move(category=new_category)  # type: ignore
+            await channel_clone.move(
+                category=new_category,
+                end=True,
+                reason="Channel "
+                f"moved into #{new_category.name} ({new_category.mention}) "
+                "as part of a bulk cloning process.",
+            )  # type: ignore
 
     return new_category
 
@@ -112,20 +125,26 @@ class ChannelManagerCog(BaseExtensionCog, name="channels"):
         > Defaults to 'no'.
         """
         if isinstance(channel, discord.CategoryChannel):
-            clone = await clone_category(
+            await clone_category(
                 channel,
                 new_name=new_name,
                 clone_channels=deep_clone_category,
-                reason=f"Channel {channel.name} ({channel.mention}) cloned as "
-                f"{clone.name} ({clone.mention}) upon request by "  # type: ignore
-                f"{ctx.author.name} ({ctx.author.mention})",
+                reason=f"Channel #{channel.name} ({channel.mention}) cloned "
+                + ("deeply " if deep_clone_category else "")
+                + f"upon request by {ctx.author.name} ({ctx.author.mention})",
             )
         elif isinstance(channel, discord.ForumChannel):
-            clone = await clone_forum(
+            await clone_forum(
                 channel,
                 reason=f"Channel created as clone of #{channel.name} "
                 f"({channel.mention}) upon request by {ctx.author.name} "
                 f"({ctx.author.mention})",
+            )
+        else:
+            clone = await channel.clone(
+                name=new_name,
+                reason=f"Channel #{channel.name} ({channel.mention}) cloned "
+                f"upon request by {ctx.author.name} ({ctx.author.mention})",
             )
 
 
