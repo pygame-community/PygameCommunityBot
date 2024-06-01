@@ -92,6 +92,7 @@ class ChannelManagerCog(BaseExtensionCog, name="channels"):
             | discord.StageChannel
             | discord.CategoryChannel
         ),
+        *,
         new_name: str | None = None,
         deep_clone_category: bool = False,
     ):
