@@ -22,16 +22,11 @@ body:
         Provide a detailed, high-level breakdown of what is being proposed.
     validations:
       required: true
-        
-    validations:
-      required: true
   - type: textarea
     attributes:
       label: Technical Information
       description: >
         Provide any low-level technical information regarding your proposal.
-    validations:
-      required: true
   - type: textarea
     attributes:
       label: New Bot Commands
