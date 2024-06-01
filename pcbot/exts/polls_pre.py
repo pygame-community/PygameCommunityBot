@@ -412,10 +412,7 @@ class PollsPreCog(BaseExtensionCog, name="polls-pre"):
         description: String,
         *,
         option: list[tuple[UnicodeEmoji | discord.PartialEmoji, String]],
-        to: discord.TextChannel
-        | discord.VoiceChannel
-        | discord.Thread
-        | None = None,
+        to: discord.TextChannel | discord.VoiceChannel | discord.Thread | None = None,
         author: String | None = None,
         color: discord.Color | None = None,
         url: StringExpr[snakecore.utils.regex_patterns.HTTP_URL] | None = None,
@@ -466,9 +463,9 @@ class PollsPreCog(BaseExtensionCog, name="polls-pre"):
         option: 🍏 "Green apple"
         to: #polls
         """
-        
+
         destination = to
-        
+
         if not isinstance(
             destination, (discord.TextChannel, discord.VoiceChannel, discord.Thread)
         ):

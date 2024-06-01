@@ -39,9 +39,9 @@ class PygameCommunityBot(snakecore.commands.Bot):
 
         self._recent_response_error_messages: dict[int, discord.Message] = {}
 
-        self._cached_response_messages: OrderedDict[int, discord.Message] = (
-            OrderedDict()
-        )
+        self._cached_response_messages: OrderedDict[
+            int, discord.Message
+        ] = OrderedDict()
 
         self._cached_response_messages_maxsize = 1000
 
@@ -568,9 +568,9 @@ class PygameCommunityBot(snakecore.commands.Bot):
                     ).set_footer(text=footer_text)
                 )
 
-            self._recent_response_error_messages[context.message.id] = (
-                target_message  # store updated message object
-            )
+            self._recent_response_error_messages[
+                context.message.id
+            ] = target_message  # store updated message object
 
             snakecore.utils.hold_task(
                 asyncio.create_task(
