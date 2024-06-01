@@ -333,15 +333,16 @@ class HelpForumsPreCog(BaseExtensionCog, name="helpforums-pre"):
                         }
                     )
 
-                owner_id_suffix = f"│{thread.owner_id}"
+                owner_id_long_suffix = f"│{thread.owner_id}"
+                owner_id_suffix = f"│{f'{thread.owner_id}'[-6:]}"
                 if not (
-                    thread.name.endswith(owner_id_suffix)
+                    thread.name.endswith((owner_id_long_suffix, owner_id_suffix))
                     or str(thread.owner_id) in thread.name
                 ):
                     thread_edits["name"] = (
                         thread.name
-                        if len(thread.name) < 72
-                        else thread.name[:72] + "..."
+                        if len(thread.name) < 94
+                        else thread.name[:91] + "..."
                     ) + owner_id_suffix
 
                 if thread_edits:
@@ -355,7 +356,8 @@ class HelpForumsPreCog(BaseExtensionCog, name="helpforums-pre"):
         if after.parent_id in HELP_FORUM_CHANNEL_IDS.values():
             try:
                 assert self.bot.user
-                owner_id_suffix = f"│{after.owner_id}"
+                owner_id_long_suffix = f"│{after.owner_id}"
+                owner_id_suffix = f"│{f'{after.owner_id}'[-6:]}"
                 if not (after.archived or after.locked):
                     thread_edits = {}
                     caution_messages: list[discord.Message] = []
@@ -606,14 +608,14 @@ class HelpForumsPreCog(BaseExtensionCog, name="helpforums-pre"):
                         thread_edits["slowmode_delay"] = 60
 
                     if not (
-                        after.name.endswith(owner_id_suffix)
+                        after.name.endswith((owner_id_long_suffix, owner_id_suffix))
                         or str(after.owner_id) in after.name
                     ):  # wait for a few event loop iterations, before doing a second,
                         # check, to be sure that a bot edit hasn't already occured
                         thread_edits["name"] = (
                             after.name
-                            if len(after.name) < 72
-                            else after.name[:72] + "..."
+                            if len(after.name) < 94
+                            else after.name[:91] + "..."
                         ) + owner_id_suffix
 
                     if thread_edits:
@@ -711,9 +713,11 @@ class HelpForumsPreCog(BaseExtensionCog, name="helpforums-pre"):
                 )
                 if not msg.pinned and (by_op or by_admin):
                     await msg.pin(
-                        reason="The owner of this message's thread has marked it as helpful."
-                        if by_op
-                        else "An admin has marked this message as helpful."
+                        reason=(
+                            "The owner of this message's thread has marked it as helpful."
+                            if by_op
+                            else "An admin has marked this message as helpful."
+                        )
                     )
                 elif payload.user_id == msg.author.id and msg.id != channel.id:
                     await msg.remove_reaction("✅", msg.author)
@@ -770,9 +774,7 @@ class HelpForumsPreCog(BaseExtensionCog, name="helpforums-pre"):
                                 + (
                                     "the OP"
                                     if by_op
-                                    else "an admin"
-                                    if by_admin
-                                    else "a Helpfulie"
+                                    else "an admin" if by_admin else "a Helpfulie"
                                 )
                                 + " (via adding a ✅ reaction).",
                                 applied_tags=new_tags,
@@ -860,9 +862,7 @@ class HelpForumsPreCog(BaseExtensionCog, name="helpforums-pre"):
                                 + (
                                     "the OP"
                                     if by_op
-                                    else "an admin"
-                                    if by_admin
-                                    else "a Helpfulie"
+                                    else "an admin" if by_admin else "a Helpfulie"
                                 )
                                 + " (via removing a ✅ reaction).",
                             )
@@ -1088,14 +1088,17 @@ class HelpForumsPreCog(BaseExtensionCog, name="helpforums-pre"):
 
                             if not (
                                 help_thread.name.endswith(
-                                    owner_id_suffix := f"│{help_thread.owner_id}"
+                                    (
+                                        owner_id_long_suffix := f"│{help_thread.owner_id}",
+                                        owner_id_suffix := f"│{f'{help_thread.owner_id}'[-6:]}",
+                                    )
                                 )
                                 or str(help_thread.owner_id) in help_thread.name
                             ):
                                 thread_edits["name"] = (
                                     help_thread.name
-                                    if len(help_thread.name) < 72
-                                    else help_thread.name[:72] + "..."
+                                    if len(help_thread.name) < 94
+                                    else help_thread.name[:91] + "..."
                                 ) + owner_id_suffix
 
                             await help_thread.edit(
