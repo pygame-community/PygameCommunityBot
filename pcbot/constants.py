@@ -58,6 +58,10 @@ DEFAULT_EXTENSIONS: list[dict[str, Any]] = [
         "name": f"{__package__}.exts.text_command_manager",
         "config": {"color": DEFAULT_EMBED_COLOR},
     },
+    {
+        "name": f"{__package__}.exts.channel_manager",
+        "config": {"color": DEFAULT_EMBED_COLOR},
+    },
 ]
 
 DEFAULT_CONFIG: dict[str, Any] = {  # default bot configuration settings
