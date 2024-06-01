@@ -79,6 +79,7 @@ class ChannelManagerCog(BaseExtensionCog, name="channels"):
         pass
 
     @channel.command(
+        name="clone",
         usage="<channel: Channel> [new_name: Text[100]] [deep_clone_category: yes|no]",
     )
     @flagconverter_kwargs()
