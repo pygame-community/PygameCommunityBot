@@ -31,7 +31,7 @@ UnsetType = type(UNSET)
 _logger = logging.getLogger(__name__)
 
 
-class BaseExtensionCog(commands.GroupCog):
+class BaseExtensionCog(commands.Cog):
     __version__ = __version__
 
     def __init__(self, bot: BotT, theme_color: int | discord.Color = 0) -> None:
@@ -139,13 +139,13 @@ class BaseExtensionCog(commands.GroupCog):
         delete_after: float | None = None,
         nonce: str | int | None = None,
         allowed_mentions: discord.AllowedMentions | None = UNSET,
-        reference: discord.Message
-        | discord.MessageReference
-        | discord.PartialMessage
-        | None = None,
+        reference: (
+            discord.Message | discord.MessageReference | discord.PartialMessage | None
+        ) = None,
         mention_author: bool | None = None,
         view: discord.ui.View | None = UNSET,
         suppress_embeds: bool = False,
+        silent: bool = False,
         suppress: bool = False,
         destination: discord.abc.Messageable | None = None,
     ) -> discord.Message:  # type: ignore
@@ -161,9 +161,9 @@ class BaseExtensionCog(commands.GroupCog):
                     embeds=MISSING if embeds is UNSET else embeds,
                     attachments=MISSING if attachments is UNSET else attachments,
                     delete_after=MISSING if delete_after is UNSET else delete_after,
-                    allowed_mentions=MISSING
-                    if allowed_mentions is UNSET
-                    else allowed_mentions,
+                    allowed_mentions=(
+                        MISSING if allowed_mentions is UNSET else allowed_mentions
+                    ),
                     suppress=MISSING if suppress_embeds is UNSET else suppress_embeds,
                     view=MISSING if view is UNSET else view,
                 )  # type: ignore
@@ -182,12 +182,13 @@ class BaseExtensionCog(commands.GroupCog):
                 embeds=None if embeds is UNSET else embeds,
                 file=None if file is UNSET else file,
                 files=None if files is UNSET else files,
+                silent=silent,
                 stickers=stickers,
                 delete_after=delete_after,
                 nonce=nonce,
-                allowed_mentions=None
-                if allowed_mentions is UNSET
-                else allowed_mentions,
+                allowed_mentions=(
+                    None if allowed_mentions is UNSET else allowed_mentions
+                ),
                 reference=reference,
                 mention_author=mention_author,
                 view=None if view is UNSET else view,
@@ -202,10 +203,9 @@ class BaseExtensionCog(commands.GroupCog):
         *embeds: discord.Embed,
         member: discord.Member | Sequence[discord.Member] | None = None,
         inactivity_timeout: int | None = 60,
-        destination: discord.TextChannel
-        | discord.VoiceChannel
-        | discord.Thread
-        | None = None,
+        destination: (
+            discord.TextChannel | discord.VoiceChannel | discord.Thread | None
+        ) = None,
     ):
         if not ctx.guild:
             raise ValueError(
@@ -275,9 +275,9 @@ class BaseExtensionCog(commands.GroupCog):
                 (response_message := await destination.send(content="\u200b")),
                 *embeds,
                 member=member or ctx.author,
-                inactivity_timeout=inactivity_timeout
-                if inactivity_timeout is not None
-                else 60,
+                inactivity_timeout=(
+                    inactivity_timeout if inactivity_timeout is not None else 60
+                ),
                 theme_color=int(self.theme_color),
             )
 

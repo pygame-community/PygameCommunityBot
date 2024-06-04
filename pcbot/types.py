@@ -117,6 +117,12 @@ class Config(TypedDict, total=False):
     Only enable this if actual changes were made to app commands,
     and disable it after syncing. Beware of high rate limits.
     """
+
+    target_app_commands: (
+        list[Literal["CHAT_INPUT", "USER", "MESSAGE"]]
+        | tuple[Literal["CHAT_INPUT", "USER", "MESSAGE"], ...]
+    )
+
     copy_global_app_commands_to_dev_guild: bool
     """Whether to copy all global app commands to the guild with
     the ID specified under ``dev_guild_id``. Only works if ``sync_app_commands``
@@ -131,6 +137,9 @@ class Config(TypedDict, total=False):
     the ID specified under ``dev_guild_id``. Only works if ``sync_app_commands``
     is set to ``True``.
     """
+
+    clear_app_command_type: Literal["CHAT_INPUT", "USER", "MESSAGE"]
+    """The app command type to clear."""
 
 
 class Revision(TypedDict):

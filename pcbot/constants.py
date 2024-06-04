@@ -52,6 +52,9 @@ DEFAULT_EXTENSIONS: list[dict[str, Any]] = [
         "name": f"{__package__}.exts.messaging",
     },
     {
+        "name": f"{__package__}.exts.op",
+    },
+    {
         "name": f"{__package__}.exts.polls_pre",
     },
     {

@@ -152,9 +152,11 @@ def parse_extensions(
         try:
             extensions = list(
                 {
-                    resolve_name(dct["name"], dct["package"])
-                    if "package" in dct
-                    else dct["name"]: dct
+                    (
+                        resolve_name(dct["name"], dct["package"])
+                        if "package" in dct
+                        else dct["name"]
+                    ): dct
                     for dct in final_extensions
                 }.values()
             )  # allow extension dicts to overwrite each other by their qualified name
@@ -322,12 +324,14 @@ parser_mapping = ParserMapping(
             ParserMapping(
                 {
                     "token": (
-                        lambda k, v, m: v
-                        if isinstance(v, str)
-                        else raise_(
-                            ParsingError(
-                                "Required 'authentication' variable must be of type 'dict' "
-                                "and must at least contain 'token' of type 'str'"
+                        lambda k, v, m: (
+                            v
+                            if isinstance(v, str)
+                            else raise_(
+                                ParsingError(
+                                    "Required 'authentication' variable must be of type 'dict' "
+                                    "and must at least contain 'token' of type 'str'"
+                                )
                             )
                         )
                     )
@@ -338,18 +342,22 @@ parser_mapping = ParserMapping(
         ),
         "intents": parse_intents,
         "mention_as_command_prefix": (
-            lambda key, value, cfg: value
-            if isinstance(
-                (
-                    value := cfg["_cli_args"][key]
-                    if "_cli_args" in cfg and key in cfg["_cli_args"]
-                    else value
-                ),
-                bool,
-            )
-            else raise_(
-                ParsingError(
-                    "'mention_as_command_prefix' variable must be of type 'bool'."
+            lambda key, value, cfg: (
+                value
+                if isinstance(
+                    (
+                        value := (
+                            cfg["_cli_args"][key]
+                            if "_cli_args" in cfg and key in cfg["_cli_args"]
+                            else value
+                        )
+                    ),
+                    bool,
+                )
+                else raise_(
+                    ParsingError(
+                        "'mention_as_command_prefix' variable must be of type 'bool'."
+                    )
                 )
             )
         ),
@@ -359,43 +367,64 @@ parser_mapping = ParserMapping(
         "auto_migrate": bool,
         "log_level": parse_log_level,
         "log_directory": (
-            lambda key, log_directory, cfg: log_directory
-            if isinstance(log_directory, str) and os.path.isdir(log_directory)
-            else raise_(
-                ParsingError(
-                    "'log_directory' variable must be a valid 'str' path "
-                    "to a directory."
+            lambda key, log_directory, cfg: (
+                log_directory
+                if isinstance(log_directory, str) and os.path.isdir(log_directory)
+                else raise_(
+                    ParsingError(
+                        "'log_directory' variable must be a valid 'str' path "
+                        "to a directory."
+                    )
                 )
             )
         ),
         "log_filename": (
-            lambda key, log_filename, cfg: log_filename
-            if isinstance(log_filename, str)
-            else raise_(
-                ParsingError("'log_filename' variable must be a valid file name.")
+            lambda key, log_filename, cfg: (
+                log_filename
+                if isinstance(log_filename, str)
+                else raise_(
+                    ParsingError("'log_filename' variable must be a valid file name.")
+                )
             )
         ),
         "log_file_extension": (
-            lambda key, log_file_extension, cfg: log_file_extension
-            if isinstance((log_file_extension := log_file_extension.strip(".")), str)
-            else raise_(
-                ParsingError(
-                    "'log_file_extension' variable must be a 'str'"
-                    "representing a file extension."
+            lambda key, log_file_extension, cfg: (
+                log_file_extension
+                if isinstance(
+                    (log_file_extension := log_file_extension.strip(".")), str
+                )
+                else raise_(
+                    ParsingError(
+                        "'log_file_extension' variable must be a 'str'"
+                        "representing a file extension."
+                    )
                 )
             )
         ),
         "owner_id": (
-            lambda k, v, cfg: v
-            if isinstance(v, int | None)
-            else raise_(
-                ParsingError(
-                    "'owner_id' variable must be either an 'int' object or 'None'."
+            lambda k, v, cfg: (
+                v
+                if isinstance(v, int | None)
+                else raise_(
+                    ParsingError(
+                        "'owner_id' variable must be either an 'int' object or 'None'."
+                    )
                 )
             )
         ),
         "owner_ids": parse_owner_ids,
         "owner_role_ids": parse_owner_role_ids,
         "manager_role_ids": parse_manager_role_ids,
+        "clear_app_command_type": lambda key, app_command_type, cfg: (
+            app_command_type
+            if isinstance(app_command_type, str)
+            and app_command_type.lower() in ("chat_input", "user", "message")
+            else raise_(
+                ParsingError(
+                    "'clear_app_command_type' variable must be one of the strings "
+                    "'CHAT_INPUT', 'USER' or 'MESSAGE'",
+                )
+            )
+        ),
     }
 )

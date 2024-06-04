@@ -11,12 +11,14 @@ import datetime
 import inspect
 import logging
 import time
-from types import MappingProxyType
+from types import MappingProxyType, MethodType
 from typing import Any, Mapping, Optional
+
 
 from . import utils
 from sqlalchemy.ext.asyncio import AsyncEngine
 import discord
+from discord import app_commands
 from discord.ext import commands, tasks
 from discord.ext.commands.view import StringView
 import snakecore
@@ -56,6 +58,13 @@ class PygameCommunityBot(snakecore.commands.Bot):
 
         self.before_invoke(self.bot_before_invoke)
         self.after_invoke(self.bot_after_invoke)
+
+        if (
+            isinstance(self.tree.on_error, MethodType)
+            and self.tree.on_error.__func__ is self.tree.__class__.on_error
+        ):
+            # app command error method was not overridden, add bot-specific one
+            self.tree.error(self.on_app_command_error)
 
     @property
     def config(self) -> Mapping[str, Any]:
@@ -363,21 +372,24 @@ class PygameCommunityBot(snakecore.commands.Bot):
                     f"'{ext_dict.get('package', '')}{ext_dict['name']}' at launch"
                 )
 
-        if self.config.get("sync_app_commands") is not None:
+        if self.config.get("sync_app_commands"):
             if self.config.get("dev_guild_id") is not None:
-                if self.config.get("copy_global_app_commands_to_dev_guild") is not None:
+                if self.config.get("copy_global_app_commands_to_dev_guild"):
                     self.tree.copy_global_to(
                         guild=discord.Object(self.config["dev_guild_id"])
                     )
-                elif self.config.get("clear_dev_guild_app_commands") is not None:
+                elif self.config.get("clear_dev_guild_app_commands"):
                     self.tree.clear_commands(
-                        guild=discord.Object(self.config["dev_guild_id"])
+                        guild=discord.Object(self.config["dev_guild_id"]),
+                        type=self.config.get("clear_app_command_type"),
                     )
 
                 await self.tree.sync(guild=discord.Object(self.config["dev_guild_id"]))
             else:
-                if self.config.get("clear_global_app_commands") is not None:
-                    self.tree.clear_commands()
+                if self.config.get("clear_global_app_commands"):
+                    self.tree.clear_commands(
+                        guild=None, type=self.config.get("clear_app_command_type")
+                    )
 
                 await self.tree.sync()
 
@@ -412,9 +424,31 @@ class PygameCommunityBot(snakecore.commands.Bot):
         context: commands.Context["PygameCommunityBot"],
         exception: commands.CommandError,
     ) -> None:
+        if context.interaction:
+            if isinstance(exception, commands.CommandInvokeError):
+                app_command_exc = app_commands.CommandInvokeError(
+                    context.interaction.command, exception.original  # type: ignore
+                ).with_traceback(exception.__traceback__)
+
+                app_command_exc.original = exception.original
+                app_command_exc.__cause__ = getattr(exception, "__cause__", None)
+                app_command_exc.__notes__ = getattr(exception, "__notes__", [])
+
+                return await self.on_app_command_error(
+                    context.interaction, app_command_exc
+                )
+
+            elif (
+                isinstance(exception, commands.HybridCommandError)
+                and exception.original
+            ):
+                return await self.on_app_command_error(
+                    context.interaction, exception.original
+                )
+
         send_error_message = True
 
-        if self.extra_events.get("on_command_error", None):
+        if self.extra_events.get("command_error", None):
             send_error_message = False
 
         if not (command := context.command):
@@ -556,16 +590,20 @@ class PygameCommunityBot(snakecore.commands.Bot):
                     )
                 else:
                     target_message = await context.send(
+                        reference=context.message,
+                        mention_author=False,
                         embed=discord.Embed(
                             title=title, description=description, color=color
-                        ).set_footer(text=footer_text)
+                        ).set_footer(text=footer_text),
                     )
             except discord.NotFound:
                 # response message was deleted, send a new message
                 target_message = await context.send(
+                    reference=context.message,
+                    mention_author=False,
                     embed=discord.Embed(
                         title=title, description=description, color=color
-                    ).set_footer(text=footer_text)
+                    ).set_footer(text=footer_text),
                 )
 
             self._recent_response_error_messages[
@@ -592,6 +630,124 @@ class PygameCommunityBot(snakecore.commands.Bot):
             _logger.error(
                 "An unhandled exception occured in command '%s'",
                 context.command.qualified_name,
+                exc_info=main_exception,
+            )
+
+    async def on_app_command_error(
+        self,
+        interaction: discord.Interaction,
+        exception: app_commands.AppCommandError,
+    ) -> None:
+        send_error_message = True
+
+        if not (command := interaction.command):
+            return
+
+        if self.extra_events.get("app_command_error", None):
+            send_error_message = False
+
+        if command.on_error is not None:
+            send_error_message = False
+
+        slash = "/" if isinstance(interaction.command, app_commands.Command) else ""
+
+        parent = getattr(command, "parent", None)
+        if parent is not None:
+            # Check if the on_error is overridden
+            if not hasattr(parent.on_error, "__discord_app_commands_base_function__"):
+                send_error_message = False
+
+            elif parent.parent is not None:
+                if not hasattr(
+                    parent.parent.on_error, "__discord_app_commands_base_function__"
+                ):
+                    send_error_message = False
+
+        # Check if we have a bound error handler
+        elif (
+            getattr(
+                getattr(command, "binding", None),
+                "__discord_app_commands_error_handler__",
+                None,
+            )
+            is not None
+        ):
+            send_error_message = False
+
+        title = exception.__class__.__name__
+        description = exception.args[0] if isinstance(exception.args[0], str) else ""
+        if len(description) > 3800:
+            description = description[:3801] + "..."
+        footer_text = exception.__class__.__name__
+
+        log_exception = False
+        has_cause = False
+
+        color = 0x170401
+
+        if isinstance(
+            exception, app_commands.CommandNotFound
+        ):  # prevent potentially unintended command invocations
+            return
+
+        elif isinstance(exception, app_commands.CheckFailure):
+            title = "Command invocation check(s) failed"
+
+        elif isinstance(
+            exception, (app_commands.CommandInvokeError, app_commands.TransformerError)
+        ):
+            if isinstance(exception, app_commands.CommandInvokeError) and (
+                not exception.__cause__
+                or isinstance(
+                    exception.__cause__, (discord.HTTPException, discord.RateLimited)
+                )
+            ):
+                # Handles library level and custom app command errors.
+                # Custom app command errors can be specified as
+                # `CommandInvokeError(interaction.command, CommandError(...))`
+
+                title = f"Command `{slash}{interaction.command.qualified_name}` reported an error"
+                description = exception.args[0] if exception.args else ""
+                description = description.replace(
+                    f"Command raised an exception: {exception.original.__class__.__name__}: ",
+                    "",
+                )
+                footer_text = exception.__class__.__name__
+
+            elif exception.__cause__:
+                log_exception = True
+                has_cause = True
+                title = "Unknown error"
+                description = (
+                    "An unknown error occured while running the "
+                    f"`{slash}{interaction.command.qualified_name}` command.\n"
+                    "This is most likely a bug, "
+                    "please report this to the bot team.\n\n"
+                    f"```\n{exception.__cause__.args[0] if exception.__cause__.args else ''}```"
+                )
+                color = constants.UNKNOWN_COMMAND_ERROR_COLOR
+                footer_text = exception.__cause__.__class__.__name__
+
+        if send_error_message:
+            await (
+                interaction.followup.send
+                if interaction.response.is_done()
+                else interaction.response.send_message
+            )(
+                embed=discord.Embed(
+                    title=title, description=description, color=color
+                ).set_footer(text=footer_text),
+                ephemeral=True,
+            )
+
+        main_exception = exception
+        if log_exception:
+            if has_cause:
+                main_exception = exception.__cause__
+
+            _logger.error(
+                f"An unhandled exception occured in command '{slash}%s'",
+                interaction.command.qualified_name,
                 exc_info=main_exception,
             )
 
