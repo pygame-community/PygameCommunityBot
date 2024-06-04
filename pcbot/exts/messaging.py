@@ -18,7 +18,9 @@ from snakecore.commands.converters import CodeBlock, String, Parens, TimeDelta
 from ..base import BaseExtensionCog
 
 BotT = snakecore.commands.Bot | snakecore.commands.AutoShardedBot
-MessageableGuildChannel = discord.TextChannel | discord.VoiceChannel | discord.Thread
+MessageableGuildChannel = (
+    discord.TextChannel | discord.VoiceChannel | discord.StageChannel | discord.Thread
+)
 
 
 def get_markdown_member_info(member: discord.Member | discord.User):
@@ -129,9 +131,11 @@ def get_msg_info_embed(msg: discord.Message, author: bool = True):
                         "__Text"
                         + (" (Shortened)" if len(msg.content) > 2000 else "")
                         + "__:",
-                        f"\n {msg.content[:2001]}" + "\n\n[...]"
-                        if len(msg.content) > 2000
-                        else msg.content,
+                        (
+                            f"\n {msg.content[:2001]}" + "\n\n[...]"
+                            if len(msg.content) > 2000
+                            else msg.content
+                        ),
                         "\u200b",
                     )
                 ),
@@ -179,9 +183,11 @@ def get_msg_info_embed(msg: discord.Message, author: bool = True):
                     "__Text"
                     + (" (Shortened)" if len(msg.content) > 2000 else "")
                     + "__:",
-                    f"\n {msg.content[:2001]}" + "\n[...]"
-                    if len(msg.content) > 2000
-                    else msg.content,
+                    (
+                        f"\n {msg.content[:2001]}" + "\n[...]"
+                        if len(msg.content) > 2000
+                        else msg.content
+                    ),
                     "\u200b",
                 )
             ),
@@ -383,18 +389,24 @@ class Messaging(BaseExtensionCog, name="messaging"):
                         if mention_all
                         else discord.AllowedMentions(
                             everyone=mention_everyone,
-                            users=mention_these_users
-                            if mention_these_users
-                            else mention_users,
-                            roles=mention_these_roles
-                            if mention_these_roles
-                            else mention_roles,
+                            users=(
+                                mention_these_users
+                                if mention_these_users
+                                else mention_users
+                            ),
+                            roles=(
+                                mention_these_roles
+                                if mention_these_roles
+                                else mention_roles
+                            ),
                             replied_user=mention_replied_user,
                         )
                     ),
-                    delete_after=delete_after.total_seconds()
-                    if isinstance(delete_after, datetime.timedelta)
-                    else delete_after,  # type: ignore
+                    delete_after=(
+                        delete_after.total_seconds()
+                        if isinstance(delete_after, datetime.timedelta)
+                        else delete_after
+                    ),  # type: ignore
                 )
                 if reply_to
                 else dest.send(
@@ -406,18 +418,24 @@ class Messaging(BaseExtensionCog, name="messaging"):
                         if mention_all
                         else discord.AllowedMentions(
                             everyone=mention_everyone,
-                            users=mention_these_users
-                            if mention_these_users
-                            else mention_users,
-                            roles=mention_these_roles
-                            if mention_these_roles
-                            else mention_roles,
+                            users=(
+                                mention_these_users
+                                if mention_these_users
+                                else mention_users
+                            ),
+                            roles=(
+                                mention_these_roles
+                                if mention_these_roles
+                                else mention_roles
+                            ),
                             replied_user=mention_replied_user,
                         )
                     ),
-                    delete_after=delete_after.total_seconds()
-                    if isinstance(delete_after, datetime.timedelta)
-                    else delete_after,  # type: ignore
+                    delete_after=(
+                        delete_after.total_seconds()
+                        if isinstance(delete_after, datetime.timedelta)
+                        else delete_after
+                    ),  # type: ignore
                 )
             )
 
@@ -818,12 +836,16 @@ class Messaging(BaseExtensionCog, name="messaging"):
                     if mention_all
                     else discord.AllowedMentions(
                         everyone=mention_everyone,
-                        users=mention_these_users
-                        if mention_these_users
-                        else mention_users,
-                        roles=mention_these_roles
-                        if mention_these_roles
-                        else mention_roles,
+                        users=(
+                            mention_these_users
+                            if mention_these_users
+                            else mention_users
+                        ),
+                        roles=(
+                            mention_these_roles
+                            if mention_these_roles
+                            else mention_roles
+                        ),
                     )
                 ),
                 applied_tags=[
@@ -944,12 +966,16 @@ class Messaging(BaseExtensionCog, name="messaging"):
                         if mention_all
                         else discord.AllowedMentions(
                             everyone=mention_everyone,
-                            users=mention_these_users
-                            if mention_these_users
-                            else mention_users,
-                            roles=mention_these_roles
-                            if mention_these_roles
-                            else mention_roles,
+                            users=(
+                                mention_these_users
+                                if mention_these_users
+                                else mention_users
+                            ),
+                            roles=(
+                                mention_these_roles
+                                if mention_these_roles
+                                else mention_roles
+                            ),
                             replied_user=mention_replied_user,
                         )
                     ),
@@ -962,12 +988,16 @@ class Messaging(BaseExtensionCog, name="messaging"):
                         if mention_all
                         else discord.AllowedMentions(
                             everyone=mention_everyone,
-                            users=mention_these_users
-                            if mention_these_users
-                            else mention_users,
-                            roles=mention_these_roles
-                            if mention_these_roles
-                            else mention_roles,
+                            users=(
+                                mention_these_users
+                                if mention_these_users
+                                else mention_users
+                            ),
+                            roles=(
+                                mention_these_roles
+                                if mention_these_roles
+                                else mention_roles
+                            ),
                             replied_user=mention_replied_user,
                         )
                     ),
@@ -975,9 +1005,11 @@ class Messaging(BaseExtensionCog, name="messaging"):
             )
             if delete_after:
                 await msg.delete(
-                    delay=delete_after.total_seconds()
-                    if isinstance(delete_after, datetime.timedelta)
-                    else delete_after
+                    delay=(
+                        delete_after.total_seconds()
+                        if isinstance(delete_after, datetime.timedelta)
+                        else delete_after
+                    )
                 )
 
     @commands.guild_only()
@@ -1334,8 +1366,9 @@ class Messaging(BaseExtensionCog, name="messaging"):
     async def message_editcontent(
         self,
         ctx: commands.Context[BotT],
-        message: discord.Message
-        | None,  # required for injecting reference messages to work
+        message: (
+            discord.Message | None
+        ),  # required for injecting reference messages to work
         content: String[2000],
     ):
         """Edit an existing message with new text content.
@@ -1532,10 +1565,12 @@ class Messaging(BaseExtensionCog, name="messaging"):
                         "__Text"
                         + (" (Shortened)" if len(escaped_msg_content) > 2000 else "")
                         + "__:",
-                        f"\n\n ```\n{escaped_msg_content[:2001]}\n\n[...]\n```"
-                        + "\n\u200b"
-                        if len(escaped_msg_content) > 2000
-                        else "\n\u200b",
+                        (
+                            f"\n\n ```\n{escaped_msg_content[:2001]}\n\n[...]\n```"
+                            + "\n\u200b"
+                            if len(escaped_msg_content) > 2000
+                            else "\n\u200b"
+                        ),
                     )
                 )
 
@@ -1743,9 +1778,11 @@ class Messaging(BaseExtensionCog, name="messaging"):
                     attached_files = [
                         (
                             await a.to_file(
-                                spoiler=as_spoiler
-                                if as_spoiler is not None
-                                else a.is_spoiler()
+                                spoiler=(
+                                    as_spoiler
+                                    if as_spoiler is not None
+                                    else a.is_spoiler()
+                                )
                             )
                             if (cum_size := cum_size + a.size) <= filesize_limit
                             else discord.File(strio, f"filetoolarge - {a.filename}.txt")  # type: ignore
