@@ -206,7 +206,6 @@ def get_msg_info_embed(msg: discord.Message, author: bool = True):
         )
     )
 
-
 class Messaging(BaseExtensionCog, name="messaging"):
     async def message_send_func(
         self,
@@ -1030,8 +1029,9 @@ class Messaging(BaseExtensionCog, name="messaging"):
         message: discord.Message | None,
         attachments: commands.Greedy[discord.Attachment],
         *,
-        name: String[100]
-        | None = commands.flag(name="name", aliases=["title"], default=None),
+        name: String[100] | None = commands.flag(
+            name="name", aliases=["title"], default=None
+        ),
         content: String | None = None,
         embeds: tuple[
             Parens[discord.Message, int] | discord.Message | CodeBlock, ...
@@ -1113,7 +1113,7 @@ class Messaging(BaseExtensionCog, name="messaging"):
             and (bot_member := ctx.guild.get_member(ctx.bot.user.id))
             and isinstance(
                 ctx.channel,
-                (discord.TextChannel, discord.VoiceChannel, discord.Thread),
+                MessageableGuildChannel.__args__,
             )
             and isinstance(ctx.author, discord.Member)
         )
@@ -1162,8 +1162,7 @@ class Messaging(BaseExtensionCog, name="messaging"):
                 )
             )
 
-        else:
-            assert isinstance(message.channel, discord.Thread)
+        elif (name or tags) and isinstance(message.channel, discord.Thread):
             is_thread_starter_msg = True
 
         tag_names = tuple(tag_name.casefold() for tag_name in tags)
@@ -1331,16 +1330,12 @@ class Messaging(BaseExtensionCog, name="messaging"):
             content=(
                 content
                 if content
-                else None
-                if remove_content
-                else discord.utils.MISSING
+                else None if remove_content else discord.utils.MISSING
             ),
             embeds=(
                 parsed_embeds
                 if parsed_embeds
-                else []
-                if remove_embeds
-                else discord.utils.MISSING
+                else [] if remove_embeds else discord.utils.MISSING
             ),
             attachments=final_attachments,
             allowed_mentions=(
