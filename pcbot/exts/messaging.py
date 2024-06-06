@@ -8,6 +8,7 @@ import asyncio
 import datetime
 import io
 import json
+from typing import Literal
 
 import discord
 from discord.ext import commands
@@ -205,6 +206,7 @@ def get_msg_info_embed(msg: discord.Message, author: bool = True):
             ],  # type: ignore)
         )
     )
+
 
 class Messaging(BaseExtensionCog, name="messaging"):
     async def message_send_func(
@@ -585,11 +587,12 @@ class Messaging(BaseExtensionCog, name="messaging"):
 
     @message.command(
         name="post",
+        aliases=["thread"],
         usage="[attachments (upload files < 8 MiB)]... <to: ForumChannel> "
         "<name|title: Text[100]> [content: Text[2000]] "
-        "[embeds: CodeBlock...] [tags: String[20]...] [reply_to: Message] "
-        "[delete_after: Number/TimeDelta] [mention_all: yes|no] "
-        "[mention_everyone: yes|no] [mention_users: yes|no] "
+        "[embeds: CodeBlock...] [tags: String[20]...] "
+        "[auto_hide_duration: 1h|24h|1d|3d|1w] [slowmode_delay: TimeDelta] "
+        "[mention_all: yes|no] [mention_everyone: yes|no] [mention_users: yes|no] "
         "[mention_these_users: User...] [mention_roles: yes|no] "
         "[mention_these_roles: Role...] [mention_replied_user: yes|no]",
         extras=dict(delete_invocation=True),
@@ -607,6 +610,10 @@ class Messaging(BaseExtensionCog, name="messaging"):
             Parens[discord.Message, int] | discord.Message | CodeBlock, ...
         ] = (),
         tags: tuple[str, ...] = (),
+        auto_hide_duration: (
+            Literal["1h", "24h", "1d", "3d", "1w"] | None
+        ) = commands.flag(aliases=["auto_archive_duration"], default=None),
+        slowmode_delay: TimeDelta = datetime.timedelta(),
         mention_all: bool = False,
         mention_everyone: bool = False,
         mention_users: bool = False,
@@ -626,7 +633,7 @@ class Messaging(BaseExtensionCog, name="messaging"):
         > If forum tags are specified, only one destination will be accepted.
 
         **`<name|title: Text[100]>`**
-        > A flag for the forum post name/title.
+        > A flag for the thread or forum post name/title.
         > It must not exceed 100 characters in length.
 
         **`[content: Text[2000]]`**
@@ -637,7 +644,14 @@ class Messaging(BaseExtensionCog, name="messaging"):
         > A flag for the embeds to add to the message, as 1-10 code blocks containing embed data as a JSON object/Python dictionary.
 
         **`[tags: String[20]...]`**
-        > The tags to apply to the post, if they exist.
+        > The tags to apply to a post, if they exist.
+
+        **`[auto_hide_duration: 1h|24h|1d|3d|1w]`**
+        > The duration after which to hide threads or posts from the channel sidebar.
+        > Omission leads to the default parent channel value being used.
+
+        **`[slowmode_delay: TimeDelta]`**
+        > The slowmode delay to use. Omission disables slowmode.
 
         **`[mention_all: yes|no]`**
         > A flag for whether all mentionable targets in the message text content (users, roles, user being replied to) should receive a mention ping.
@@ -847,6 +861,12 @@ class Messaging(BaseExtensionCog, name="messaging"):
                         ),
                     )
                 ),
+                auto_archive_duration=(
+                    {"1h": 60, "24h": 1440, "3d": 4320, "1w": 10080}[auto_hide_duration]
+                    if auto_hide_duration
+                    else discord.utils.MISSING
+                ),  # type: ignore
+                slowmode_delay=slowmode_delay.seconds if slowmode_delay else None,
                 applied_tags=[
                     tag
                     for tag in dest.available_tags
@@ -1017,6 +1037,7 @@ class Messaging(BaseExtensionCog, name="messaging"):
         name="edit",
         usage="[attachments (upload files < 8 MiB)]... <message> [content: Text[2000]] "
         "[embeds: CodeBlock/Message/( Message Integer ) ... ] [tags: String[20]...] "
+        "[auto_hide_duration: 1h|24h|1d|3d|1w] [slowmode_delay: TimeDelta] "
         "[mention_everyone: yes|no] [mention_users: yes|no] "
         "[mention_these_users: User...] [mention_roles: yes|no] "
         "[mention_these_roles: Role...] [mention_replied_user: yes|no]",
@@ -1037,6 +1058,10 @@ class Messaging(BaseExtensionCog, name="messaging"):
             Parens[discord.Message, int] | discord.Message | CodeBlock, ...
         ] = (),
         tags: tuple[str, ...] = (),
+        auto_hide_duration: (
+            Literal["1h", "24h", "1d", "3d", "1w"] | None
+        ) = commands.flag(aliases=["auto_archive_duration"], default=None),
+        slowmode_delay: TimeDelta = datetime.timedelta(),
         remove_content: bool = False,
         remove_embeds: bool = False,
         remove_all_attachments: bool = False,
@@ -1060,8 +1085,8 @@ class Messaging(BaseExtensionCog, name="messaging"):
         > One or more new attachments to add to the message.
         > They must not exceed 8 MiB in size.
 
-        **`[name|title: Text[100]]`**
-        > A flag for the message's forum post or thread name/title, if applicable.
+        **`<name|title: Text[100]>`**
+        > A flag for the thread or forum post name/title.
         > It must not exceed 100 characters in length.
 
         **`[content: Text[2000]]`**
@@ -1078,6 +1103,13 @@ class Messaging(BaseExtensionCog, name="messaging"):
 
         **`[tags: String[20]...]`**
         > The tags to apply to the message's post, if applicable and they exist.
+
+        **`[auto_hide_duration: 1h|24h|1d|3d|1w]`**
+        > The duration after which to hide threads or posts from the channel sidebar.
+        > Omission leads to the default parent channel value being used.
+
+        **`[slowmode_delay: TimeDelta]`**
+        > The slowmode delay to use. Omission disables slowmode.
 
         **`[remove_content: yes|no]`**
         > A flag for whether all mentionable targets in the message text content (users, roles, user being replied to) should receive a mention ping.
@@ -1324,6 +1356,12 @@ class Messaging(BaseExtensionCog, name="messaging"):
                     if tag.name.casefold() in tag_names
                 ]
                 or discord.utils.MISSING,
+                auto_archive_duration=(
+                    {"1h": 60, "24h": 1440, "3d": 4320, "1w": 10080}[auto_hide_duration]
+                    if auto_hide_duration
+                    else discord.utils.MISSING
+                ),  # type: ignore
+                slowmode_delay=slowmode_delay.seconds if slowmode_delay else discord.utils.MISSING,
             )
 
         await message.edit(
