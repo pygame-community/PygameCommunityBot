@@ -14,7 +14,13 @@ import discord
 from discord.ext import commands
 import snakecore
 from snakecore.commands.decorators import flagconverter_kwargs
-from snakecore.commands.converters import CodeBlock, String, Parens, TimeDelta
+from snakecore.commands.converters import (
+    CodeBlock,
+    Parens,
+    ReferencedMessage,
+    String,
+    TimeDelta,
+)
 
 from ..base import BaseExtensionCog
 
@@ -1041,13 +1047,13 @@ class Messaging(BaseExtensionCog, name="messaging"):
         "[mention_everyone: yes|no] [mention_users: yes|no] "
         "[mention_these_users: User...] [mention_roles: yes|no] "
         "[mention_these_roles: Role...] [mention_replied_user: yes|no]",
-        extras=dict(inject_reference_as_first_argument=True, delete_invocation=True),
+        extras=dict(delete_invocation=True),
     )
     @flagconverter_kwargs()
     async def message_edit(
         self,
         ctx: commands.Context[BotT],
-        message: discord.Message | None,
+        message: discord.Message | ReferencedMessage,
         attachments: commands.Greedy[discord.Attachment],
         *,
         name: String[100] | None = commands.flag(
@@ -1149,13 +1155,6 @@ class Messaging(BaseExtensionCog, name="messaging"):
             )
             and isinstance(ctx.author, discord.Member)
         )
-
-        if not message:
-            raise commands.CommandInvokeError(
-                commands.BadArgument(
-                    "'message' is a required argument that is missing."
-                )
-            )
 
         if not (content or attachments or embeds):
             raise commands.CommandInvokeError(
@@ -1361,7 +1360,9 @@ class Messaging(BaseExtensionCog, name="messaging"):
                     if auto_hide_duration
                     else discord.utils.MISSING
                 ),  # type: ignore
-                slowmode_delay=slowmode_delay.seconds if slowmode_delay else discord.utils.MISSING,
+                slowmode_delay=(
+                    slowmode_delay.seconds if slowmode_delay else discord.utils.MISSING
+                ),
             )
 
         await message.edit(
@@ -1394,14 +1395,12 @@ class Messaging(BaseExtensionCog, name="messaging"):
         name="editcontent",
         aliases=["edittext"],
         usage="<message> <content (Text[2000])>",
-        extras=dict(inject_reference_as_first_argument=True, delete_invocation=True),
+        extras=dict(delete_invocation=True),
     )
     async def message_editcontent(
         self,
         ctx: commands.Context[BotT],
-        message: (
-            discord.Message | None
-        ),  # required for injecting reference messages to work
+        message: discord.Message | ReferencedMessage,
         content: String[2000],
     ):
         """Edit an existing message with new text content.
@@ -1460,7 +1459,6 @@ class Messaging(BaseExtensionCog, name="messaging"):
         "[content_attachment: yes|no] [attachments: yes|no] [embeds: yes|no] "
         "[info: yes|no] [author_info: yes|no]",
         extras=dict(
-            inject_reference_as_first_argument=True,
             response_deletion_with_reaction=True,
         ),
     )
@@ -1468,7 +1466,7 @@ class Messaging(BaseExtensionCog, name="messaging"):
     async def message_extract(
         self,
         ctx: commands.Context[BotT],
-        *messages: discord.Message,
+        *messages: discord.Message | ReferencedMessage,
         to: MessageableGuildChannel | None = None,
         content: bool = True,
         content_attachment: bool = False,
@@ -1689,10 +1687,9 @@ class Messaging(BaseExtensionCog, name="messaging"):
     @commands.max_concurrency(1, per=commands.BucketType.default, wait=True)
     @message.command(
         name="clone",
-        usage="<messages>.. [to: Channel] [embeds: yes|no] [attachments: yes|no] "
+        usage="<messages>... [to: Channel] [embeds: yes|no] [attachments: yes|no] "
         "[as_spoiler: yes|no] [info: yes|no] [author_info: yes|no] [skip_empty: yes|no]",
         extras=dict(
-            inject_reference_as_first_argument=True,
             response_deletion_with_reaction=True,
         ),
     )
@@ -1700,7 +1697,7 @@ class Messaging(BaseExtensionCog, name="messaging"):
     async def message_clone(
         self,
         ctx: commands.Context[BotT],
-        *messages: discord.Message,
+        *messages: discord.Message | ReferencedMessage,
         to: tuple[MessageableGuildChannel, ...] = (),
         content: bool = True,
         embeds: bool = True,
@@ -2332,7 +2329,6 @@ class Messaging(BaseExtensionCog, name="messaging"):
         usage="<messages>... [delete_system_message: yes|no] [unpin_last: yes|no]",
         invoke_without_command=True,
         extras=dict(
-            inject_reference_as_first_argument=True,
             response_deletion_with_reaction=True,
         ),
     )
@@ -2340,7 +2336,7 @@ class Messaging(BaseExtensionCog, name="messaging"):
     async def message_pin(
         self,
         ctx: commands.Context[BotT],
-        *messages: discord.PartialMessage,
+        *messages: discord.PartialMessage | ReferencedMessage,
         delete_system_message: bool = False,
         unpin_last: bool = False,
         _channel: MessageableGuildChannel | None = None,
@@ -2527,14 +2523,13 @@ class Messaging(BaseExtensionCog, name="messaging"):
         usage="<messages>...",
         invoke_without_command=True,
         extras=dict(
-            inject_reference_as_first_argument=True,
             response_deletion_with_reaction=True,
         ),
     )
     async def message_unpin(
         self,
         ctx: commands.Context[BotT],
-        *messages: discord.PartialMessage,
+        *messages: discord.PartialMessage | ReferencedMessage,
         _channel: MessageableGuildChannel | None = None,
     ):
         """Unpin the specified messages.

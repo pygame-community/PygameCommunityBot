@@ -41,9 +41,9 @@ class PygameCommunityBot(snakecore.commands.Bot):
 
         self._recent_response_error_messages: dict[int, discord.Message] = {}
 
-        self._cached_response_messages: OrderedDict[
-            int, discord.Message
-        ] = OrderedDict()
+        self._cached_response_messages: OrderedDict[int, discord.Message] = (
+            OrderedDict()
+        )
 
         self._cached_response_messages_maxsize = 1000
 
@@ -56,7 +56,6 @@ class PygameCommunityBot(snakecore.commands.Bot):
         self._main_database: DatabaseDict = {}  # type: ignore
         self._databases: dict[str, DatabaseDict] = {}
 
-        self.before_invoke(self.bot_before_invoke)
         self.after_invoke(self.bot_after_invoke)
 
         if (
@@ -182,56 +181,6 @@ class PygameCommunityBot(snakecore.commands.Bot):
                 await response_error_message.delete()
             except discord.NotFound:
                 pass
-
-    async def bot_before_invoke(self, ctx: commands.Context):
-        if (
-            (command := ctx.invoked_subcommand or ctx.command) is not None
-            and (
-                (
-                    modifier_flag := command.extras.get(
-                        "inject_reference_as_first_argument"
-                    )
-                )
-                or modifier_flag is not False
-                and command.cog is not None
-                and getattr(command.cog, "inject_reference_as_first_argument", False)
-            )
-            and (reference := ctx.message.reference)
-            and reference.message_id
-            and not (
-                reference.message_id is None
-                or isinstance(reference.resolved, discord.DeletedReferencedMessage)
-            )
-        ):
-            try:
-                message = reference.resolved or await ctx.fetch_message(
-                    reference.message_id
-                )
-            except discord.NotFound:
-                pass
-            else:
-                old_args = ctx.args[:]
-
-                if ctx.args and isinstance(
-                    ctx.args[0], commands.Cog
-                ):  # command was defined inside cog
-                    if len(ctx.args) > 2 and ctx.args[2] is None:
-                        ctx.args[2] = message
-                    else:
-                        ctx.args.insert(2, message)
-                else:
-                    if len(ctx.args) > 1 and ctx.args[1] is None:
-                        ctx.args[1] = message
-                    else:
-                        ctx.args.insert(1, message)
-
-                if hasattr(command.callback, "__signature__"):
-                    try:
-                        command.callback.__signature__.bind(
-                            ctx, *ctx.args, **ctx.kwargs
-                        )
-                    except TypeError:
-                        ctx.args[:] = old_args
 
     async def bot_after_invoke(self, ctx: commands.Context):
         assert ctx.command
@@ -606,9 +555,9 @@ class PygameCommunityBot(snakecore.commands.Bot):
                     ).set_footer(text=footer_text),
                 )
 
-            self._recent_response_error_messages[
-                context.message.id
-            ] = target_message  # store updated message object
+            self._recent_response_error_messages[context.message.id] = (
+                target_message  # store updated message object
+            )
 
             snakecore.utils.hold_task(
                 asyncio.create_task(

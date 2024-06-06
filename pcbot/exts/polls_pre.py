@@ -7,15 +7,19 @@ Legacy code for a polling bot addon.
 
 from ast import literal_eval
 import asyncio
-import datetime
-import re
-from typing import Any, Optional, Union
+
+from typing import Any
 
 import discord
 from discord.ext import commands
 import snakecore
 from snakecore.commands.decorators import flagconverter_kwargs
-from snakecore.commands.converters import String, StringExpr, UnicodeEmoji, Parens
+from snakecore.commands.converters import (
+    ReferencedMessage,
+    String,
+    StringExpr,
+    UnicodeEmoji,
+)
 
 from ..base import BaseExtensionCog
 
@@ -110,10 +114,9 @@ class PollsPreCog(BaseExtensionCog, name="polls-pre"):
         description: str,
         *emojis: tuple[str | discord.PartialEmoji, str],
         multiple_votes: bool = True,
-        _destination: discord.TextChannel
-        | discord.VoiceChannel
-        | discord.Thread
-        | None = None,
+        _destination: (
+            discord.TextChannel | discord.VoiceChannel | discord.Thread | None
+        ) = None,
         _richpoll_embed_dict: dict | None = None,
     ):
         _richpoll_embed_dict = _richpoll_embed_dict or {}
@@ -376,12 +379,11 @@ class PollsPreCog(BaseExtensionCog, name="polls-pre"):
     @poll.command(
         name="close",
         usage="<message>",
-        extras=dict(inject_reference_as_first_argument=True),
     )
     async def poll_close(
         self,
         ctx: commands.Context[BotT],
-        message: discord.Message | None,
+        message: discord.Message | ReferencedMessage,
     ):
         """Close the poll in the specified message.
 
@@ -503,19 +505,18 @@ class PollsPreCog(BaseExtensionCog, name="polls-pre"):
             description,
             *option,
             multiple_votes=multiple_votes,
-            _destination=destination,
+            _destination=destination,  # type: ignore
             _richpoll_embed_dict=embed_dict,
         )
 
     @richpoll.command(
         name="close",
         usage="<message> [color: Color]",
-        extras=dict(inject_reference_as_first_argument=True),
     )
     async def richpoll_close(
         self,
         ctx: commands.Context[BotT],
-        message: discord.Message | None = None,
+        message: discord.Message | ReferencedMessage,
         *,
         color: discord.Color | None = None,
     ):

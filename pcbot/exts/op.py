@@ -9,6 +9,7 @@ from discord import app_commands
 from discord.ext import commands
 import snakecore
 from snakecore.commands import flagconverter_kwargs
+from snakecore.commands import ReferencedMessage
 
 from ..base import BaseExtensionCog
 
@@ -32,7 +33,6 @@ class OPCog(BaseExtensionCog, name="op"):
         usage="<message: Message> [delete_system_message: yes|no] [unpin_last: yes|no]",
         description="Pin the specified message.",
         extras=dict(
-            inject_reference_as_first_argument=True,
             response_deletion_with_reaction=True,
         ),
     )
@@ -48,14 +48,14 @@ class OPCog(BaseExtensionCog, name="op"):
         self,
         ctx: commands.Context[BotT],
         *,
-        message: discord.PartialMessage,
+        message: discord.PartialMessage | ReferencedMessage,
         unpin_last: bool = False,
         delete_system_message: bool = False,
     ):
         """Pin the specified message.
 
-        In threads or forum posts, people will always be able to use this command to
-        pin messages as the OP.
+        In threads, forum posts, or text channels with "OP: <@{user_id}> ..." within their description, people will always be able to use this command to
+        pin messages as the OP (original poster).
 
         __**Parameters:**__
 
@@ -167,7 +167,6 @@ class OPCog(BaseExtensionCog, name="op"):
         usage="<message: Message>",
         description="Unpin the specified message.",
         extras=dict(
-            inject_reference_as_first_argument=True,
             response_deletion_with_reaction=True,
         ),
     )
@@ -179,12 +178,12 @@ class OPCog(BaseExtensionCog, name="op"):
         self,
         ctx: commands.Context[BotT],
         *,
-        message: discord.Message,
+        message: discord.Message | ReferencedMessage,
     ):
         """Unpin the specified message.
 
-        In threads or forum posts, people will always be able to use this command to
-        pin messages as the OP.
+        In threads, forum posts, or text channels with "OP: <@{user_id}> ..." people will always be able to use this command to
+        pin messages as the OP (original poster).
 
         __**Parameters:**__
 

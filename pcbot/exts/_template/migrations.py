@@ -2,7 +2,7 @@
 This project has been licensed under the MIT license.
 Copyright (c) 2022-present pygame-community.
 """
-
+from .constants import DB_PREFIX
 from ...base import Revision, validate_revision_list as _
 
 MIGRATIONS: list[Revision] = _(
