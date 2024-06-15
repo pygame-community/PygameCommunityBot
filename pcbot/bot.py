@@ -397,7 +397,7 @@ class PygameCommunityBot(snakecore.commands.Bot):
 
         send_error_message = True
 
-        if self.extra_events.get("command_error", None):
+        if self.extra_events.get("on_command_error", None):
             send_error_message = False
 
         if not (command := context.command):
@@ -592,7 +592,7 @@ class PygameCommunityBot(snakecore.commands.Bot):
         if not (command := interaction.command):
             return
 
-        if self.extra_events.get("app_command_error", None):
+        if self.extra_events.get("on_app_command_error", None):
             send_error_message = False
 
         if command.on_error is not None:
