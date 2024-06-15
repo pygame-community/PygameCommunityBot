@@ -981,9 +981,11 @@ async def message_delete_reaction_listener(
     emoji: discord.Emoji | discord.PartialEmoji | str,
     role_whitelist: Collection[discord.Role | int] | None = None,
     timeout: float | None = None,
-    on_delete: Callable[[discord.Message], Coroutine[Any, Any, Any]]
-    | Callable[[discord.Message], Any]
-    | None = None,
+    on_delete: (
+        Callable[[discord.Message], Coroutine[Any, Any, Any]]
+        | Callable[[discord.Message], Any]
+        | None
+    ) = None,
 ):
     """Allows for a message to be deleted using a specific reaction.
     If any HTTP-related exceptions are raised by `discord.py` within this function,

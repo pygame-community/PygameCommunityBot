@@ -1056,9 +1056,8 @@ class Messaging(BaseExtensionCog, name="messaging"):
         message: discord.Message | ReferencedMessage,
         attachments: commands.Greedy[discord.Attachment],
         *,
-        name: String[100] | None = commands.flag(
-            name="name", aliases=["title"], default=None
-        ),
+        name: String[100]
+        | None = commands.flag(name="name", aliases=["title"], default=None),
         content: String | None = None,
         embeds: tuple[
             Parens[discord.Message, int] | discord.Message | CodeBlock, ...
@@ -1369,12 +1368,16 @@ class Messaging(BaseExtensionCog, name="messaging"):
             content=(
                 content
                 if content
-                else None if remove_content else discord.utils.MISSING
+                else None
+                if remove_content
+                else discord.utils.MISSING
             ),
             embeds=(
                 parsed_embeds
                 if parsed_embeds
-                else [] if remove_embeds else discord.utils.MISSING
+                else []
+                if remove_embeds
+                else discord.utils.MISSING
             ),
             attachments=final_attachments,
             allowed_mentions=(
