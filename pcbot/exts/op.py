@@ -168,7 +168,7 @@ class OPCog(BaseExtensionCog, name="op"):
         __**Parameters:**__
 
         **`<message: Message>`**
-        > The message to pin.
+        > The URL of the message to pin.
 
         **`[delete_system_message: yes|no]`**
         > A flag for whether any system messages about pinning should be automatically
@@ -200,7 +200,7 @@ class OPCog(BaseExtensionCog, name="op"):
         description="Pin the specified message.",
     )
     @app_commands.describe(
-        message="The message to pin.",
+        message="The URL of the message to pin.",
         unpin_last="Whether to unpin the least recently pinned message(s) if the "
         "maximum pin limit of 50 would be reached.",
         delete_system_message="whether any pin system messages should be automatically"
@@ -314,7 +314,7 @@ class OPCog(BaseExtensionCog, name="op"):
         __**Parameters:**__
 
         **`<message: Message>`**
-        > The message to unpin.
+        > The URL of the message to unpin.
         """
 
         if not (message := message_ or message):
@@ -330,7 +330,7 @@ class OPCog(BaseExtensionCog, name="op"):
         description="Unpin the specified message.",
     )
     @app_commands.describe(
-        message="The message to unpin.",
+        message="The URL of the message to unpin.",
     )
     async def op_unpin_app_cmd(
         self,

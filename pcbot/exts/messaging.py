@@ -492,11 +492,11 @@ class Messaging(BaseExtensionCog, name="messaging"):
         > A flag for the embeds to add to the message, as 1-10 code blocks containing embed data as a JSON object/Python dictionary.
 
         **`[to: Channel]`**
-        > A flag for the destination channel of the message to send.
+        > A flag for the destination channel of The URL of the message to send.
         > Defaults to the command invocation channel.
 
         **`[reply_to: Message]`**
-        > A flag for the message to use as a reference.
+        > A flag for The URL of the message to use as a reference.
 
         **`[delete_after: Number/TimeDelta]`**
         > A flag to set a deletion timeout for the message upon its creation.
@@ -918,11 +918,11 @@ class Messaging(BaseExtensionCog, name="messaging"):
         > It must not exceed 2000 characters in length.
 
         **`[to: Channel]`**
-        > A flag for the destination channel of the message to send.
+        > A flag for the destination channel of The URL of the message to send.
         > Defaults to the command invocation channel.
 
         **`[reply_to: Message]`**
-        > A flag for the message to use as a reference.
+        > A flag for The URL of the message to use as a reference.
 
         **`[delete_after: Number/TimeDelta]`**
         > A flag to set a deletion timeout for the message upon its creation.
@@ -1085,7 +1085,7 @@ class Messaging(BaseExtensionCog, name="messaging"):
         __**Parameters:**__
 
         **`<message: Message>...`**
-        > The message to edit.
+        > The URL of the message to edit.
 
         **`[attachments (upload files < 8 MiB)]...`**
         > One or more new attachments to add to the message.
@@ -1408,7 +1408,7 @@ class Messaging(BaseExtensionCog, name="messaging"):
         __**Parameters:**__
 
         **`<message>`**
-        > The message to edit.
+        > The URL of the message to edit.
 
         **`<content (Text[2000])>`**
         > The text content to edit the message with.
@@ -1481,7 +1481,7 @@ class Messaging(BaseExtensionCog, name="messaging"):
         __**Parameters:**__
 
         **`<messages>...`**
-        > The messages to extract parts from.
+        > The URL of the messages to extract parts from.
 
         **`[to: Channel]`**
         > A flag for the channel to send the extracted parts to.
@@ -1713,7 +1713,7 @@ class Messaging(BaseExtensionCog, name="messaging"):
         __**Parameters:**__
 
         **`<messages>...`**
-        > The messages to clone.
+        > The URL of the messages to clone.
 
         **`[to: Channel]`**
         > A flag for the channel to send the cloned messages to.
@@ -2346,7 +2346,7 @@ class Messaging(BaseExtensionCog, name="messaging"):
         __**Parameters:**__
 
         **`<messages>...`**
-        > The messages to pin.
+        > The URL of the messages to pin.
 
         **`[delete_system_message: yes|no]`**
         > A flag for whether any system messages about pinning should be automatically deleted.
@@ -2495,7 +2495,7 @@ class Messaging(BaseExtensionCog, name="messaging"):
         __**Parameters:**__
 
         **`<messages>...`**
-        > The messages to pin.
+        > The URL of the messages to pin.
 
         **`[channel: TextChannel/Thread]`**
         > A flag for the channel the messages are contained in.
@@ -2537,7 +2537,7 @@ class Messaging(BaseExtensionCog, name="messaging"):
         __**Parameters:**__
 
         **`<messages>...`**
-        > The messages to unpin.
+        > The URL of the messages to unpin.
         """
         assert (
             ctx.guild
@@ -2659,7 +2659,7 @@ class Messaging(BaseExtensionCog, name="messaging"):
         __**Parameters:**__
 
         **`<messages>...`**
-        > The messages to unpin.
+        > The URL of the messages to unpin.
 
         **`[channel: TextChannel/Thread]`**
         > The channel in which the messages are contained in.
