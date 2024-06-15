@@ -327,20 +327,20 @@ class PygameCommunityBot(snakecore.commands.Bot):
                     self.tree.copy_global_to(
                         guild=discord.Object(self.config["dev_guild_id"])
                     )
+                    await self.tree.sync(guild=discord.Object(self.config["dev_guild_id"]))
                 elif self.config.get("clear_dev_guild_app_commands"):
                     self.tree.clear_commands(
                         guild=discord.Object(self.config["dev_guild_id"]),
                         type=self.config.get("clear_app_command_type"),
                     )
+                    await self.tree.sync(guild=discord.Object(self.config["dev_guild_id"]))
+            
+            if self.config.get("clear_global_app_commands"):
+                self.tree.clear_commands(
+                    guild=None, type=self.config.get("clear_app_command_type")
+                )
 
-                await self.tree.sync(guild=discord.Object(self.config["dev_guild_id"]))
-            else:
-                if self.config.get("clear_global_app_commands"):
-                    self.tree.clear_commands(
-                        guild=None, type=self.config.get("clear_app_command_type")
-                    )
-
-                await self.tree.sync()
+            await self.tree.sync()
 
     async def teardown_hook(self) -> None:
         if self.handle_loading_reactions.is_running():
