@@ -144,7 +144,6 @@ class BotManagementCog(BaseExtensionCog, name="bot-management"):
         invocation_embed_dict = dict(
             author=dict(
                 name=f"{ctx.author}",
-                url=f"https://discord.com/users/{ctx.author.id}",
                 icon_url= f"{ctx.author.avatar or ctx.author.default_avatar}",
             ),
             description=escaped_cmd_text

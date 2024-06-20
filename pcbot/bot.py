@@ -111,7 +111,7 @@ class PygameCommunityBot(snakecore.commands.Bot):
             await asyncio.wait_for(asyncio.shield(invoke_task), timeout=3)
             # check if command invocation is taking time
         except asyncio.TimeoutError:
-            await self._loading_reaction_queue.put(
+            self._loading_reaction_queue.put_nowait(
                 ctx.message.add_reaction(self.loading_emoji)
             )
             if not invoke_task.done():
@@ -191,7 +191,7 @@ class PygameCommunityBot(snakecore.commands.Bot):
             )
             and self.user is not None
         ):
-            await self._loading_reaction_queue.put(
+            self._loading_reaction_queue.put_nowait(
                 ctx.message.remove_reaction(self.loading_emoji, self.user)
             )
 
@@ -327,14 +327,18 @@ class PygameCommunityBot(snakecore.commands.Bot):
                     self.tree.copy_global_to(
                         guild=discord.Object(self.config["dev_guild_id"])
                     )
-                    await self.tree.sync(guild=discord.Object(self.config["dev_guild_id"]))
+                    await self.tree.sync(
+                        guild=discord.Object(self.config["dev_guild_id"])
+                    )
                 elif self.config.get("clear_dev_guild_app_commands"):
                     self.tree.clear_commands(
                         guild=discord.Object(self.config["dev_guild_id"]),
                         type=self.config.get("clear_app_command_type"),
                     )
-                    await self.tree.sync(guild=discord.Object(self.config["dev_guild_id"]))
-            
+                    await self.tree.sync(
+                        guild=discord.Object(self.config["dev_guild_id"])
+                    )
+
             if self.config.get("clear_global_app_commands"):
                 self.tree.clear_commands(
                     guild=None, type=self.config.get("clear_app_command_type")
