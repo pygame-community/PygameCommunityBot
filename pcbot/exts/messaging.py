@@ -1799,6 +1799,7 @@ class Messaging(BaseExtensionCog, name="messaging"):
             )
 
         no_mentions = discord.AllowedMentions.none()
+        first_cloned_msg = None
         for i, msg in enumerate(messages):
             attached_files = []
             if msg.attachments and attachments:
@@ -1879,10 +1880,14 @@ class Messaging(BaseExtensionCog, name="messaging"):
                 if info:
                     info_embed = get_msg_info_embed(msg, author=author_info)
                     info_embed.color = int(self.theme_color)
-                    await ctx.send(
-                        embed=info_embed,
-                        reference=first_cloned_msg,  # type: ignore
-                    )
+
+                    if first_cloned_msg:
+                        await ctx.send(
+                            embed=info_embed,
+                            reference=first_cloned_msg,
+                        )
+                    else:
+                        await ctx.send(embed=info_embed)
 
                 await asyncio.sleep(0)
 

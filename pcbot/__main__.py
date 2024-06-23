@@ -324,8 +324,6 @@ def main(
 ):
     """Launch this Discord bot application."""
 
-    print(log_level)
-
     if ctx.invoked_subcommand is not None:
         return
 
