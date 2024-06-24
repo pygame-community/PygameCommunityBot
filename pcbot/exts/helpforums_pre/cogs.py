@@ -68,7 +68,6 @@ class HelpForumsPreCog(BaseExtensionCog, name="helpforums-pre"):
         self.inactive_help_thread_alert.stop()
         self.force_help_thread_archive_after_timeout.stop()
         self.tag_inactive_help_threads_as_abandoned.stop()
-        self.delete_help_threads_without_starter_message_or_member.stop()
 
     @commands.Cog.listener()
     async def on_ready(self):
@@ -76,24 +75,9 @@ class HelpForumsPreCog(BaseExtensionCog, name="helpforums-pre"):
             self.inactive_help_thread_alert,
             self.force_help_thread_archive_after_timeout,
             self.tag_inactive_help_threads_as_abandoned,
-            self.delete_help_threads_without_starter_message_or_member,
         ):
             if not task_loop.is_running():
                 task_loop.start()
-
-    @commands.Cog.listener()
-    async def on_message_delete(self, message: discord.Message):
-        if (
-            isinstance(message.channel, discord.Thread)
-            and message.channel.parent_id in HELP_FORUM_CHANNEL_IDS.values()
-            and message.id == message.channel.id  # OP deleted starter message
-        ):
-            await self.help_thread_deletion_below_size_threshold(
-                message.channel,
-                300,
-                reason="Someone deleted the starter message of this post and it "
-                f"consists of less than {THREAD_DELETION_MESSAGE_THRESHOLD} messages.",
-            )
 
     async def bad_help_thread_data_exists(self, thread_id: int) -> bool:
         conn: AsyncConnection
@@ -791,6 +775,32 @@ class HelpForumsPreCog(BaseExtensionCog, name="helpforums-pre"):
                     )
 
     @commands.Cog.listener()
+    async def on_raw_message_delete(self, payload: discord.RawMessageDeleteEvent):
+        if payload.channel_id not in HELP_FORUM_CHANNEL_IDS.values():
+            return
+
+        try:
+            thread = self.bot.get_channel(
+                payload.channel_id
+            ) or await self.bot.fetch_channel(payload.channel_id)
+        except discord.HTTPException:
+            return
+
+        if not (
+            isinstance(thread, discord.Thread)
+            and thread.parent_id in HELP_FORUM_CHANNEL_IDS.values()
+        ):
+            return
+
+        if not thread.locked:
+            await self.help_thread_deletion_below_size_threshold(
+                thread,
+                300,
+                reason="Someone deleted the starter message of this post and it "
+                f"consists of less than {THREAD_DELETION_MESSAGE_THRESHOLD} messages.",
+            )
+
+    @commands.Cog.listener()
     async def on_raw_reaction_add(self, payload: discord.RawReactionActionEvent):
         try:
             if not snakecore.utils.is_emoji_equal(payload.emoji, "✅"):
@@ -1114,47 +1124,6 @@ class HelpForumsPreCog(BaseExtensionCog, name="helpforums-pre"):
 
                 except discord.HTTPException:
                     pass
-
-    @tasks.loop(hours=1, reconnect=True)
-    async def delete_help_threads_without_starter_message_or_member(self):
-        for forum_channel in [
-            self.bot.get_channel(fid) or (await self.bot.fetch_channel(fid))
-            for fid in HELP_FORUM_CHANNEL_IDS.values()
-        ]:
-            for help_thread in itertools.chain(
-                forum_channel.threads,  # type: ignore
-                [thr async for thr in forum_channel.archived_threads(limit=20)],  # type: ignore
-            ):
-                if any(
-                    tag.name.lower().startswith("solved")
-                    for tag in help_thread.applied_tags
-                ):  # ignore solved posts
-                    continue
-
-                _pass = True
-                try:
-                    starter_message = (
-                        help_thread.starter_message
-                        or await help_thread.fetch_message(help_thread.id)
-                    )
-                    help_thread_owner = help_thread.guild.get_member(
-                        help_thread.owner_id
-                    ) or await help_thread.guild.fetch_member(help_thread.owner_id)
-                except (
-                    discord.NotFound
-                ):  # starter message was deleted or thread owner has left the server
-                    snakecore.utils.hold_task(
-                        asyncio.create_task(
-                            self.help_thread_deletion_below_size_threshold(
-                                help_thread,
-                                300,
-                                reason="Someone deleted the starter message of this "
-                                "post and/or the OP has left the server, and "
-                                "it consists of less than "
-                                f"{THREAD_DELETION_MESSAGE_THRESHOLD} messages.",
-                            )
-                        )
-                    )
 
     @tasks.loop(hours=1, reconnect=True)
     async def force_help_thread_archive_after_timeout(self):
