@@ -1513,10 +1513,13 @@ class HelpForumsPreCog(BaseExtensionCog, name="helpforums-pre"):
             embed=discord.Embed(
                 title="Your post is about pygame(-ce). We have better channels for that!",
                 description=(
+                    "This channel is for questions that are out of scope for pygame."
                     "**Please delete your starter message and recreate your post in one of "
                     "these channels, based on your roles:**\n\n"
                     f"- <#{HELP_FORUM_CHANNEL_IDS['newbies']}>\n"
                     f"- <#{HELP_FORUM_CHANNEL_IDS['regulars']}>\n\n"
+                    "If you're missing access, go to <id:customize> to select "
+                    "pygame roles.\n\n"
                     "**Thank you for helping us maintain clean help forum channels** "
                     "<:pg_robot:837389387024957440>\n\n"
                     "This alert should disappear after you've deleted your post.\n\n"
