@@ -1379,7 +1379,11 @@ class HelpForumsPreCog(BaseExtensionCog, name="helpforums-pre"):
                     and INVALID_HELP_THREAD_REGEX_PATTERNS[caution_type][
                         "content"
                     ].search(
-                        " ".join(thread.starter_message.content.split())  # type: ignore
+                        " ".join(
+                            thread.starter_message.content.split()
+                            if thread.starter_message
+                            else ""
+                        )
                     )  # trim and normalize whitespace
                 )
                 for caution_type in INVALID_HELP_THREAD_TYPES
@@ -1406,7 +1410,11 @@ class HelpForumsPreCog(BaseExtensionCog, name="helpforums-pre"):
                     and INVALID_HELP_THREAD_REGEX_PATTERNS[caution_type][
                         "content"
                     ].search(
-                        " ".join(thread.starter_message.content.split())  # type: ignore
+                        " ".join(
+                            thread.starter_message.content.split()
+                            if thread.starter_message
+                            else ""
+                        )
                     )  # trim and normalize whitespace
                 )
             )
