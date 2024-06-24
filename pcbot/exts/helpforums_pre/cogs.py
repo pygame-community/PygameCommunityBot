@@ -776,13 +776,20 @@ class HelpForumsPreCog(BaseExtensionCog, name="helpforums-pre"):
 
     @commands.Cog.listener()
     async def on_raw_message_delete(self, payload: discord.RawMessageDeleteEvent):
-        if payload.channel_id not in HELP_FORUM_CHANNEL_IDS.values():
+        cached_message = payload.cached_message
+        if (
+            cached_message
+            and cached_message.channel.id not in HELP_FORUM_CHANNEL_IDS.values()
+        ):
             return
 
         try:
-            thread = self.bot.get_channel(
-                payload.channel_id
-            ) or await self.bot.fetch_channel(payload.channel_id)
+            if cached_message and isinstance(cached_message.channel, discord.Thread):
+                thread = cached_message.channel
+            else:
+                thread = self.bot.get_channel(
+                    payload.channel_id
+                ) or await self.bot.fetch_channel(payload.channel_id)
         except discord.HTTPException:
             return
 
