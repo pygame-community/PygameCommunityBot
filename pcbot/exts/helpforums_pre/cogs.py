@@ -293,8 +293,13 @@ class HelpForumsPreCog(BaseExtensionCog, name="helpforums-pre"):
                 if caution_types := self.get_help_forum_channel_thread_cautions(thread):
                     issues_found = True
                     caution_messages.extend(
-                        await self.caution_about_help_forum_channel_thread_name(
-                            thread, *caution_types
+                        await self.caution_about_help_forum_channel_thread(
+                            thread,
+                            *(
+                                c
+                                for c in caution_types
+                                if c != "wrong_thread_help_topic_pygame"
+                            ),
                         )
                     )
                     if "thread_title_too_short" in caution_types:
@@ -462,8 +467,13 @@ class HelpForumsPreCog(BaseExtensionCog, name="helpforums-pre"):
                         ):
                             bad_thread_name_or_starter_message = True
                             caution_messages.extend(
-                                await self.caution_about_help_forum_channel_thread_name(
-                                    after, *caution_types
+                                await self.caution_about_help_forum_channel_thread(
+                                    after,
+                                    *(
+                                        c
+                                        for c in caution_types
+                                        if c != "wrong_thread_help_topic_pygame"
+                                    ),
                                 )
                             )
                             if (
@@ -1427,7 +1437,7 @@ class HelpForumsPreCog(BaseExtensionCog, name="helpforums-pre"):
         )
 
     @staticmethod
-    async def caution_about_help_forum_channel_thread_name(
+    async def caution_about_help_forum_channel_thread(
         thread: discord.Thread, *caution_types: str
     ) -> list[discord.Message]:
         caution_messages = []
