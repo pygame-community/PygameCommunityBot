@@ -1491,7 +1491,7 @@ class HelpForumsPreCog(BaseExtensionCog, name="helpforums-pre"):
                     "<:pg_robot:837389387024957440>\n\n"
                     "This alert should disappear after you've deleted your post.\n\n"
                     "Did I get it wrong? If yes, please react with ☝️ to dismiss "
-                    f"this alert <t:{time.time() + 60}:R>."
+                    f"this alert <t:{int(time.time() + 60)}:R>."
                 ),
                 color=0x36393F,
             ),
@@ -1501,7 +1501,20 @@ class HelpForumsPreCog(BaseExtensionCog, name="helpforums-pre"):
             await self.bot.wait_for(
                 "raw_reaction_add",
                 check=lambda event: event.message_id == message.id
-                and (event.user_id == thread.owner_id)
+                and (
+                    (
+                        (event.user_id == thread.owner_id)
+                        or event.member
+                        and not event.member.bot
+                        and (
+                            thread.permissions_for(event.member).administrator
+                            or any(
+                                role.id == HELPFULIE_ROLE_ID
+                                for role in event.member.roles
+                            )
+                        )
+                    )
+                )
                 and snakecore.utils.is_emoji_equal(event.emoji, "☝️"),
                 timeout=60,
             )
