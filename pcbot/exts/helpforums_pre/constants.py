@@ -43,45 +43,63 @@ INVALID_HELP_THREAD_SCANNING_ENABLED = {
 }
 INVALID_HELP_THREAD_REGEX_PATTERNS = {
     "thread_title_too_short": {
-        "title": re.compile(
-            r"^(.){1," f"{THREAD_TITLE_MINIMUM_LENGTH-1}" r"}$", flags=re.IGNORECASE
-        ),
-        "content": re.compile(r".*", flags=re.IGNORECASE),
+        "mode": "all",
+        "fields": {
+            "title": re.compile(
+                r"^(.){1," f"{THREAD_TITLE_MINIMUM_LENGTH-1}" r"}$", flags=re.IGNORECASE
+            ),
+            "content": re.compile(r".*", flags=re.IGNORECASE),
+        },
     },
     "member_asking_for_help": {
-        "title": re.compile(
-            r"[\s]*(^help\s*|help\?*?$|(can|does|is\s+)?(pl(ease|s)|(some|any)(one|body)|you|(need|want)|(can|(want|available|around|willing|ready)(\s*to)))\s*help)(?!(s|ed|er|ing))(\s*me(\s*please)?|pl(ease|s)|with)?\s*",
-        ),
-        "content": re.compile(r".*", flags=re.IGNORECASE),
+        "mode": "all",
+        "fields": {
+            "title": re.compile(
+                r"[\s]*(^help\s*|help\?*?$|(can|does|is\s+)?(pl(ease|s)|(some|any)(one|body)|you|(need|want)|(can|(want|available|around|willing|ready)(\s*to)))\s*help)(?!(s|ed|er|ing))(\s*me(\s*please)?|pl(ease|s)|with)?\s*",
+            ),
+            "content": re.compile(r".*", flags=re.IGNORECASE),
+        },
     },
     "member_exclaiming_about_not_working_code": {
-        "title": re.compile(
-            r"[\s]*(why\s+)?((is|does|(sh|w)ould)(\s+not|n't)?)?\s*(my|the|this|it)?(?<=s|t|e|y|d)\s*(it|this|code|game|pygame(\s*(game|program|code|project|assignment)?))\s*(((is|does)(\s*not|n't)?|not)?\s*(work|runn?|start|break|load)(s|ed|ing)?)",
-        ),
-        "content": re.compile(r".*", flags=re.IGNORECASE),
+        "mode": "all",
+        "fields": {
+            "title": re.compile(
+                r"[\s]*(why\s+)?((is|does|(sh|w)ould)(\s+not|n't)?)?\s*(my|the|this|it)?(?<=s|t|e|y|d)\s*(it|this|code|game|pygame(\s*(game|program|code|project|assignment)?))\s*(((is|does)(\s*not|n't)?|not)?\s*(work|runn?|start|break|load)(s|ed|ing)?)",
+            ),
+            "content": re.compile(r".*", flags=re.IGNORECASE),
+        },
     },
     "member_asking_for_code": {
-        "title": re.compile(
-            r"[\s]*(why\s+)?((is|does|(sh|w)ould)(\s+not|n't)?)?\s*(my|the|this|it)?(?<=s|t|e|y|d)\s*(it|this|code|game|pygame(\s*(game|program|code|project|assignment)?))\s*(((is|does)(\s*not|n't)?|not)?\s*(work|runn?|start|break|load)(s|ed|ing)?)",
-            re.IGNORECASE,
-        ),
-        "content": re.compile(r".*", flags=re.IGNORECASE),
+        "mode": "all",
+        "fields": {
+            "title": re.compile(
+                r"[\s]*(why\s+)?((is|does|(sh|w)ould)(\s+not|n't)?)?\s*(my|the|this|it)?(?<=s|t|e|y|d)\s*(it|this|code|game|pygame(\s*(game|program|code|project|assignment)?))\s*(((is|does)(\s*not|n't)?|not)?\s*(work|runn?|start|break|load)(s|ed|ing)?)",
+                re.IGNORECASE,
+            ),
+            "content": re.compile(r".*", flags=re.IGNORECASE),
+        },
     },
     "member_asking_about_problem_with_code": {
-        "title": re.compile(
-            r"[\s]*((why|what('s)?\s+)(is('nt)?|does(\s+not|'nt)|am\s*i\s*(doing|having))?\s*((wrong|the\s*(problem|issue))?\s*(with(in)?|in(side)?)\s*)?(my|the|this)?)\s*(this|code|game|pygame(\s*(game|program|code)?))\s*",
-            re.IGNORECASE,
-        ),
-        "content": re.compile(r".*", flags=re.IGNORECASE),
+        "mode": "all",
+        "fields": {
+            "title": re.compile(
+                r"[\s]*((why|what('s)?\s+)(is('nt)?|does(\s+not|'nt)|am\s*i\s*(doing|having))?\s*((wrong|the\s*(problem|issue))?\s*(with(in)?|in(side)?)\s*)?(my|the|this)?)\s*(this|code|game|pygame(\s*(game|program|code)?))\s*",
+                re.IGNORECASE,
+            ),
+            "content": re.compile(r".*", flags=re.IGNORECASE),
+        },
     },
     "wrong_thread_help_topic_pygame": {
-        "title": re.compile(
-            r"p[yi]g?(am?e|im|ae?y?me?)(\(?-?ce\)?)?",
-            re.IGNORECASE,
-        ),
-        "content": re.compile(
-            r"p[yi]g?(am?e|im|ae?y?me?)(\(?-?ce\)?)?", flags=re.IGNORECASE
-        ),
+        "mode": "any",
+        "fields": {
+            "title": re.compile(
+                r"p[yi]g?(am?e|im|ae?y?me?)(\(?-?ce\)?)?",
+                re.IGNORECASE,
+            ),
+            "content": re.compile(
+                r"(p[yi]g?(am?e|im|ae?y?me?)(\(?-?ce\)?)?)", flags=re.IGNORECASE
+            ),
+        },
     },
 }
 INVALID_HELP_THREAD_EMBEDS = {

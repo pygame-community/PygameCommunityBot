@@ -1369,22 +1369,30 @@ class HelpForumsPreCog(BaseExtensionCog, name="helpforums-pre"):
             (
                 INVALID_HELP_THREAD_SCANNING_ENABLED[caution_type]
                 and (
-                    INVALID_HELP_THREAD_REGEX_PATTERNS[caution_type]["title"].search(
-                        " ".join(
-                            thread.name.replace(f"│{thread.owner_id}", "")
-                            .replace(f"│{f'{thread.owner_id}'[-6:]}", "")
-                            .split()
-                        )  # trim and normalize whitespace
-                    )  # normalize whitespace
-                    and INVALID_HELP_THREAD_REGEX_PATTERNS[caution_type][
-                        "content"
-                    ].search(
-                        " ".join(
-                            thread.starter_message.content.split()
-                            if thread.starter_message
-                            else ""
-                        )
-                    )  # trim and normalize whitespace
+                    dict(any=any, all=all)[
+                        INVALID_HELP_THREAD_REGEX_PATTERNS[caution_type]["mode"]
+                    ]
+                )(
+                    (
+                        INVALID_HELP_THREAD_REGEX_PATTERNS[caution_type]["fields"][
+                            "title"
+                        ].search(
+                            " ".join(
+                                thread.name.replace(f"│{thread.owner_id}", "")
+                                .replace(f"│{f'{thread.owner_id}'[-6:]}", "")
+                                .split()
+                            )  # trim and normalize whitespace
+                        ),  # normalize whitespace
+                        INVALID_HELP_THREAD_REGEX_PATTERNS[caution_type]["fields"][
+                            "content"
+                        ].search(
+                            " ".join(
+                                thread.starter_message.content.split()
+                                if thread.starter_message
+                                else ""
+                            )
+                        ),  # trim and normalize whitespace
+                    )
                 )
                 for caution_type in INVALID_HELP_THREAD_TYPES
             )
@@ -1400,22 +1408,30 @@ class HelpForumsPreCog(BaseExtensionCog, name="helpforums-pre"):
                 for caution_type in INVALID_HELP_THREAD_TYPES
                 if INVALID_HELP_THREAD_SCANNING_ENABLED[caution_type]
                 and (
-                    INVALID_HELP_THREAD_REGEX_PATTERNS[caution_type]["title"].search(
-                        " ".join(
-                            thread.name.replace(f"│{thread.owner_id}", "")
-                            .replace(f"│{f'{thread.owner_id}'[-6:]}", "")
-                            .split()
-                        )  # trim and normalize whitespace
+                    dict(any=any, all=all)[
+                        INVALID_HELP_THREAD_REGEX_PATTERNS[caution_type]["mode"]
+                    ]
+                )(
+                    (
+                        INVALID_HELP_THREAD_REGEX_PATTERNS[caution_type]["fields"][
+                            "title"
+                        ].search(
+                            " ".join(
+                                thread.name.replace(f"│{thread.owner_id}", "")
+                                .replace(f"│{f'{thread.owner_id}'[-6:]}", "")
+                                .split()
+                            )  # trim and normalize whitespace
+                        ),
+                        INVALID_HELP_THREAD_REGEX_PATTERNS[caution_type]["fields"][
+                            "content"
+                        ].search(
+                            " ".join(
+                                thread.starter_message.content.split()
+                                if thread.starter_message
+                                else ""
+                            )
+                        ),  # trim and normalize whitespace
                     )
-                    and INVALID_HELP_THREAD_REGEX_PATTERNS[caution_type][
-                        "content"
-                    ].search(
-                        " ".join(
-                            thread.starter_message.content.split()
-                            if thread.starter_message
-                            else ""
-                        )
-                    )  # trim and normalize whitespace
                 )
             )
         )
