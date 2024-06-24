@@ -93,11 +93,12 @@ INVALID_HELP_THREAD_REGEX_PATTERNS = {
         "mode": "any",
         "fields": {
             "title": re.compile(
-                r"p[yi]g?(am?e|im|ae?y?me?)(\(?-?ce\)?)?",
+                r"p[yi]g?(am?e|im|ae?y?me?)(\(?-?ce\)?)?|game|player|collision|tile(map)?|tilemap|sprite|render|surface|blit|rect|draw|render|display|screen|window|texture|event",
                 re.IGNORECASE,
             ),
             "content": re.compile(
-                r"(p[yi]g?(am?e|im|ae?y?me?)(\(?-?ce\)?)?)", flags=re.IGNORECASE
+                r"p[yi]g?(am?e|im|ae?y?me?)(\(?-?ce\)?)?|game|player|collision|tile(map)?|tilemap|sprite|render|surface|blit|rect|draw|render|display|screen|window|texture|event",
+                flags=re.IGNORECASE,
             ),
         },
     },
