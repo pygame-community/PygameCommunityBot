@@ -1498,11 +1498,12 @@ class HelpForumsPreCog(BaseExtensionCog, name="helpforums-pre"):
                     "<:pg_robot:837389387024957440>\n\n"
                     "This alert should disappear after you've deleted your post.\n\n"
                     "Did I get it wrong? If yes, please react with ☝️ to dismiss "
-                    f"this alert <t:{int(time.time() + 60)}:R>."
+                    f"this alert <t:{int(time.time() + 60)}:R>. *Don't lie* ;)"
                 ),
                 color=0x36393F,
             ),
         )
+        await message.add_reaction("☝️")
 
         try:
             await self.bot.wait_for(
