@@ -10,7 +10,7 @@ import itertools
 import pickle
 import time
 
-from typing import TYPE_CHECKING, Callable, TypedDict
+from typing import TYPE_CHECKING, Callable, NotRequired, TypedDict
 
 import discord
 from discord.ext import commands, tasks
@@ -24,10 +24,10 @@ from .constants import (
     HELP_FORUM_CHANNEL_IDS,
     HELPFULIE_ROLE_ID,
     FORUM_THREAD_TAG_LIMIT,
-    INVALID_HELP_THREAD_TITLE_EMBEDS,
-    INVALID_HELP_THREAD_TITLE_REGEX_PATTERNS,
-    INVALID_HELP_THREAD_TITLE_SCANNING_ENABLED,
-    INVALID_HELP_THREAD_TITLE_TYPES,
+    INVALID_HELP_THREAD_EMBEDS,
+    INVALID_HELP_THREAD_REGEX_PATTERNS,
+    INVALID_HELP_THREAD_SCANNING_ENABLED,
+    INVALID_HELP_THREAD_TYPES,
     THREAD_TITLE_TOO_SHORT_SLOWMODE_DELAY,
     THREAD_DELETION_MESSAGE_THRESHOLD,
 )
@@ -35,9 +35,6 @@ from .constants import (
 from ... import __version__
 from ...base import BaseExtensionCog
 from ...bot import PygameCommunityBot
-
-if TYPE_CHECKING:
-    from typing_extensions import NotRequired  # type: ignore
 
 BotT = PygameCommunityBot
 
@@ -293,9 +290,7 @@ class HelpForumsPreCog(BaseExtensionCog, name="helpforums-pre"):
 
                     thread_edits["applied_tags"] = new_tags
 
-                if caution_types := self.get_help_forum_channel_thread_name_cautions(
-                    thread
-                ):
+                if caution_types := self.get_help_forum_channel_thread_cautions(thread):
                     issues_found = True
                     caution_messages.extend(
                         await self.caution_about_help_forum_channel_thread_name(
@@ -319,6 +314,19 @@ class HelpForumsPreCog(BaseExtensionCog, name="helpforums-pre"):
                                 thread
                             )
                         )
+
+                if (
+                    thread.parent_id == HELP_FORUM_CHANNEL_IDS["python"]
+                    and "wrong_thread_help_topic_pygame" in caution_types
+                ):
+                    issues_found = True
+                    caution_message = await self.caution_about_python_help_forum_channel_pygame_thread(
+                        thread
+                    )
+                    if caution_message:
+                        caution_messages.append(caution_message)
+                    else:  # alert was dismissed
+                        issues_found = False
 
                 if issues_found and not await self.bad_help_thread_data_exists(
                     thread.id
@@ -352,6 +360,80 @@ class HelpForumsPreCog(BaseExtensionCog, name="helpforums-pre"):
                 pass
 
     @commands.Cog.listener()
+    async def on_message_edit(self, before: discord.Message, after: discord.Message):
+        if not (
+            after.guild
+            and any(
+                after.guild.get_channel(channel_id)
+                for channel_id in HELP_FORUM_CHANNEL_IDS.values()
+            )
+            and before.content != after.content
+        ):
+            return
+
+        try:
+            thread = after.guild.get_thread(
+                after.id
+            ) or await after.guild.fetch_channel(after.id)
+            assert isinstance(thread, discord.Thread)
+        except discord.HTTPException:
+            return
+
+        if not (thread.parent_id in HELP_FORUM_CHANNEL_IDS.values()):
+            return
+
+        caution_types = self.get_help_forum_channel_thread_cautions(thread)
+        caution_message = None
+
+        if "wrong_thread_help_topic_pygame" in caution_types:
+            caution_message = (
+                await self.caution_about_python_help_forum_channel_pygame_thread(thread)
+            )
+
+        bad_help_thread_data_exists = await self.bad_help_thread_data_exists(thread.id)
+
+        if caution_message and bad_help_thread_data_exists:
+            await self.save_bad_help_thread_data(
+                (
+                    bad_thread_data := BadHelpThreadData(
+                        {
+                            "thread_id": thread.id,
+                            "last_cautioned_ts": time.time(),
+                            "caution_message_ids": set((caution_message.id,)),
+                        }
+                    )
+                )
+            )
+
+            bad_thread_data = bad_thread_data or await self.fetch_bad_help_thread_data(
+                thread.id
+            )
+
+            await self.save_bad_help_thread_data(
+                {
+                    "thread_id": thread.id,
+                    "last_cautioned_ts": time.time(),
+                    "caution_message_ids": bad_thread_data.get(
+                        "caution_message_ids", set()
+                    )
+                    | set((caution_message.id,)),
+                }
+            )
+        elif (
+            not caution_types
+        ) and bad_help_thread_data_exists:  # delete caution messages
+
+            bad_thread_data = await self.fetch_bad_help_thread_data(thread.id)
+
+            for msg_id in bad_thread_data["caution_message_ids"]:
+                try:
+                    await thread.get_partial_message(msg_id).delete()
+                except discord.NotFound:
+                    pass
+
+            await self.delete_bad_help_thread_data(thread.id)
+
+    @commands.Cog.listener()
     async def on_thread_update(self, before: discord.Thread, after: discord.Thread):
         if after.parent_id in HELP_FORUM_CHANNEL_IDS.values():
             try:
@@ -361,7 +443,7 @@ class HelpForumsPreCog(BaseExtensionCog, name="helpforums-pre"):
                 if not (after.archived or after.locked):
                     thread_edits = {}
                     caution_messages: list[discord.Message] = []
-                    bad_thread_name = False
+                    bad_thread_name_or_starter_message = False
                     bad_thread_tags = False
 
                     updater_id = None
@@ -375,10 +457,10 @@ class HelpForumsPreCog(BaseExtensionCog, name="helpforums-pre"):
                                 break
 
                     if before.name != after.name and updater_id != self.bot.user.id:  # type: ignore
-                        if caution_types := self.get_help_forum_channel_thread_name_cautions(
+                        if caution_types := self.get_help_forum_channel_thread_cautions(
                             after
                         ):
-                            bad_thread_name = True
+                            bad_thread_name_or_starter_message = True
                             caution_messages.extend(
                                 await self.caution_about_help_forum_channel_thread_name(
                                     after, *caution_types
@@ -414,6 +496,15 @@ class HelpForumsPreCog(BaseExtensionCog, name="helpforums-pre"):
                                     )
                                 )
 
+                            if (
+                                after.parent_id == HELP_FORUM_CHANNEL_IDS["python"]
+                                and "wrong_thread_help_topic_pygame" in caution_types
+                            ):
+                                caution_message = await self.caution_about_python_help_forum_channel_pygame_thread(
+                                    after
+                                )
+                                if caution_message:  # alert was not dismissed
+                                    caution_messages.append(caution_message)
                     elif (
                         before.applied_tags != after.applied_tags
                         and updater_id != self.bot.user.id
@@ -429,20 +520,26 @@ class HelpForumsPreCog(BaseExtensionCog, name="helpforums-pre"):
                                     )
                                 )
 
-                    if bad_thread_name or bad_thread_tags:
+                    if bad_thread_name_or_starter_message or bad_thread_tags:
+                        bad_thread_data = None
                         if not await self.bad_help_thread_data_exists(after.id):
                             await self.save_bad_help_thread_data(
-                                {
-                                    "thread_id": after.id,
-                                    "last_cautioned_ts": time.time(),
-                                    "caution_message_ids": set(
-                                        msg.id for msg in caution_messages
-                                    ),
-                                }
+                                (
+                                    bad_thread_data := BadHelpThreadData(
+                                        {
+                                            "thread_id": after.id,
+                                            "last_cautioned_ts": time.time(),
+                                            "caution_message_ids": set(
+                                                msg.id for msg in caution_messages
+                                            ),
+                                        }
+                                    )
+                                )
                             )
 
-                        bad_thread_data = await self.fetch_bad_help_thread_data(
-                            after.id
+                        bad_thread_data = (
+                            bad_thread_data
+                            or await self.fetch_bad_help_thread_data(after.id)
                         )
 
                         await self.save_bad_help_thread_data(
@@ -460,7 +557,7 @@ class HelpForumsPreCog(BaseExtensionCog, name="helpforums-pre"):
                             await self.bad_help_thread_data_exists(after.id)
                             and updater_id != self.bot.user.id
                         ) and not (
-                            caution_types := self.get_help_forum_channel_thread_name_cautions(
+                            caution_types := self.get_help_forum_channel_thread_cautions(
                                 after
                             )
                             or (
@@ -774,9 +871,7 @@ class HelpForumsPreCog(BaseExtensionCog, name="helpforums-pre"):
                                 + (
                                     "the OP"
                                     if by_op
-                                    else "an admin"
-                                    if by_admin
-                                    else "a Helpfulie"
+                                    else "an admin" if by_admin else "a Helpfulie"
                                 )
                                 + " (via adding a ✅ reaction).",
                                 applied_tags=new_tags,
@@ -864,9 +959,7 @@ class HelpForumsPreCog(BaseExtensionCog, name="helpforums-pre"):
                                 + (
                                     "the OP"
                                     if by_op
-                                    else "an admin"
-                                    if by_admin
-                                    else "a Helpfulie"
+                                    else "an admin" if by_admin else "a Helpfulie"
                                 )
                                 + " (via removing a ✅ reaction).",
                             )
@@ -1285,31 +1378,51 @@ class HelpForumsPreCog(BaseExtensionCog, name="helpforums-pre"):
             )
 
     @staticmethod
-    def validate_help_forum_channel_thread_name(thread: discord.Thread) -> bool:
+    def validate_help_forum_channel_thread(thread: discord.Thread) -> bool:
         return any(
             (
-                INVALID_HELP_THREAD_TITLE_SCANNING_ENABLED[caution_type]
-                and INVALID_HELP_THREAD_TITLE_REGEX_PATTERNS[caution_type].search(
-                    " ".join(thread.name.replace(f"│{thread.owner_id}", "").split())
+                INVALID_HELP_THREAD_SCANNING_ENABLED[caution_type]
+                and (
+                    INVALID_HELP_THREAD_REGEX_PATTERNS[caution_type]["title"].search(
+                        " ".join(
+                            thread.name.replace(f"│{thread.owner_id}", "")
+                            .replace(f"│{f'{thread.owner_id}'[-6:]}", "")
+                            .split()
+                        )  # trim and normalize whitespace
+                    )  # normalize whitespace
+                    and INVALID_HELP_THREAD_REGEX_PATTERNS[caution_type][
+                        "content"
+                    ].search(
+                        " ".join(thread.starter_message.content.split())  # type: ignore
+                    )  # trim and normalize whitespace
                 )
-                is not None
-                for caution_type in INVALID_HELP_THREAD_TITLE_TYPES
+                for caution_type in INVALID_HELP_THREAD_TYPES
             )
         )
 
     @staticmethod
-    def get_help_forum_channel_thread_name_cautions(
+    def get_help_forum_channel_thread_cautions(
         thread: discord.Thread,
     ) -> tuple[str, ...]:
         return tuple(
             (
                 caution_type
-                for caution_type in INVALID_HELP_THREAD_TITLE_TYPES
-                if INVALID_HELP_THREAD_TITLE_SCANNING_ENABLED[caution_type]
-                and INVALID_HELP_THREAD_TITLE_REGEX_PATTERNS[caution_type].search(
-                    " ".join(thread.name.replace(f"│{thread.owner_id}", "").split())
-                )  # normalize whitespace
-                is not None
+                for caution_type in INVALID_HELP_THREAD_TYPES
+                if INVALID_HELP_THREAD_SCANNING_ENABLED[caution_type]
+                and (
+                    INVALID_HELP_THREAD_REGEX_PATTERNS[caution_type]["title"].search(
+                        " ".join(
+                            thread.name.replace(f"│{thread.owner_id}", "")
+                            .replace(f"│{f'{thread.owner_id}'[-6:]}", "")
+                            .split()
+                        )  # trim and normalize whitespace
+                    )
+                    and INVALID_HELP_THREAD_REGEX_PATTERNS[caution_type][
+                        "content"
+                    ].search(
+                        " ".join(thread.starter_message.content.split())  # type: ignore
+                    )  # trim and normalize whitespace
+                )
             )
         )
 
@@ -1323,7 +1436,7 @@ class HelpForumsPreCog(BaseExtensionCog, name="helpforums-pre"):
                 await thread.send(
                     content=f"help-post-alert(<@{thread.owner_id}>, **{thread.name}**)",
                     embed=discord.Embed.from_dict(
-                        INVALID_HELP_THREAD_TITLE_EMBEDS[caution_type]
+                        INVALID_HELP_THREAD_EMBEDS[caution_type]
                     ),
                 )
             )
@@ -1381,6 +1494,48 @@ class HelpForumsPreCog(BaseExtensionCog, name="helpforums-pre"):
                 color=0x36393F,
             ),
         )
+
+    async def caution_about_python_help_forum_channel_pygame_thread(
+        self, thread: discord.Thread
+    ) -> discord.Message | None:
+        message = await thread.send(
+            content=f"help-post-alert(<@{thread.owner_id}>, **{thread.name}**)",
+            embed=discord.Embed(
+                title="Your post is about pygame(-ce). We have better channels for that!",
+                description=(
+                    "Your post is about pygame(-ce). We have better channels for that!\n\n"
+                    "**Please delete your post and recreate it in one of these channels, "
+                    "based on your roles:**\n\n"
+                    f"- <#{HELP_FORUM_CHANNEL_IDS['newbies']}>\n"
+                    f"- <#{HELP_FORUM_CHANNEL_IDS['regulars']}>\n"
+                    "**Thank you for helping us maintain clean help forum channels** "
+                    "<:pg_robot:837389387024957440>\n\n"
+                    "This alert should disappear after you've deleted your post.\n\n"
+                    "Did I get it wrong? If yes, please react with ☝️ to dismiss "
+                    f"this alert <t:{time.time() + 60}:R>."
+                ),
+                color=0x36393F,
+            ),
+        )
+
+        try:
+            await self.bot.wait_for(
+                "raw_reaction_add",
+                check=lambda event: event.message_id == message.id
+                and (event.user_id == thread.owner_id)
+                and snakecore.utils.is_emoji_equal(event.emoji, "☝️"),
+                timeout=60,
+            )
+        except asyncio.TimeoutError:
+            pass
+        else:
+            try:
+                await message.delete()
+            except discord.HTTPException:
+                pass
+            return None
+
+        return message
 
     async def send_help_thread_solved_alert(self, thread: discord.Thread):
         alert_message = None
