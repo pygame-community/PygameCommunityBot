@@ -293,16 +293,16 @@ class HelpForumsPreCog(BaseExtensionCog, name="helpforums-pre"):
                                 reason="Slowmode penalty for the title of this help post being too short.",
                             )
                         )
-                if thread.parent_id == HELP_FORUM_CHANNEL_IDS["regulars"]:
-                    if not self.validate_regulars_help_forum_channel_thread_tags(
-                        thread
-                    ):
-                        issues_found = True
-                        caution_messages.append(
-                            await self.caution_about_regulars_help_forum_channel_thread_tags(
-                                thread
-                            )
-                        )
+                # if thread.parent_id == HELP_FORUM_CHANNEL_IDS["regulars"]:
+                #     if not self.validate_regulars_help_forum_channel_thread_tags(
+                #         thread
+                #     ):
+                #         issues_found = True
+                #         caution_messages.append(
+                #             await self.caution_about_regulars_help_forum_channel_thread_tags(
+                #                 thread
+                #             )
+                #         )
 
                 if (
                     thread.parent_id == HELP_FORUM_CHANNEL_IDS["python"]
@@ -499,20 +499,20 @@ class HelpForumsPreCog(BaseExtensionCog, name="helpforums-pre"):
                                 )
                                 if caution_message:  # alert was not dismissed
                                     caution_messages.append(caution_message)
-                    elif (
-                        before.applied_tags != after.applied_tags
-                        and updater_id != self.bot.user.id
-                    ):
-                        if after.parent_id == HELP_FORUM_CHANNEL_IDS["regulars"]:
-                            if not self.validate_regulars_help_forum_channel_thread_tags(
-                                after
-                            ):
-                                bad_thread_tags = True
-                                caution_messages.append(
-                                    await self.caution_about_regulars_help_forum_channel_thread_tags(
-                                        after
-                                    )
-                                )
+                    # elif (
+                    #     before.applied_tags != after.applied_tags
+                    #     and updater_id != self.bot.user.id
+                    # ):
+                    #     if after.parent_id == HELP_FORUM_CHANNEL_IDS["regulars"]:
+                    #         if not self.validate_regulars_help_forum_channel_thread_tags(
+                    #             after
+                    #         ):
+                    #             bad_thread_tags = True
+                    #             caution_messages.append(
+                    #                 await self.caution_about_regulars_help_forum_channel_thread_tags(
+                    #                     after
+                    #                 )
+                    #             )
 
                     if bad_thread_name_or_starter_message or bad_thread_tags:
                         bad_thread_data = None
@@ -1475,35 +1475,35 @@ class HelpForumsPreCog(BaseExtensionCog, name="helpforums-pre"):
 
         return valid
 
-    @staticmethod
-    async def caution_about_regulars_help_forum_channel_thread_tags(
-        thread: discord.Thread,
-    ) -> discord.Message:
-        return await thread.send(
-            content=f"help-post-alert(<@{thread.owner_id}>, **{thread.name}**)",
-            embed=discord.Embed(
-                title="Your tag selection is not quite right",
-                description=(
-                    "Please pick exactly **1 issue tag** and **1-3 aspect tags**.\n\n"
-                    "**Issue Tags** look like this: **(`issue: ...`)**.\n"
-                    "**Aspect Tags** are all non-issue tags in lowercase, e.g. **(`💥 collisions`)**\n\n"
-                    "**Example tag combination for reworking collisions:\n"
-                    "(`🪛 issue: rework/optim.`) (`💥 collisions`)**.\n\n"
-                    f"See the Post Guidelines of <#{thread.parent_id}> (click the search "
-                    "bar book icon) for more info .\n\n"
-                    "**Changing post tags:**\n"
-                    "> 1. Right-click post (desktop/web) or click & hold (mobile)\n"
-                    "> 2. Click **'Edit Tags'** to see a tag selection menu, and make changes.\n"
-                    "> 3. Ensure your changes are saved.\n\n"
-                    f"For Python-only questions, use <#{HELP_FORUM_CHANNEL_IDS['python']}>, "
-                    "not this channel.\n\n"
-                    "**Thank you for helping us maintain clean help forum channels** "
-                    "<:pg_robot:837389387024957440>\n\n"
-                    "This alert should disappear after you've made appropriate changes."
-                ),
-                color=0x36393F,
-            ),
-        )
+    # @staticmethod
+    # async def caution_about_regulars_help_forum_channel_thread_tags(
+    #     thread: discord.Thread,
+    # ) -> discord.Message:
+    #     return await thread.send(
+    #         content=f"help-post-alert(<@{thread.owner_id}>, **{thread.name}**)",
+    #         embed=discord.Embed(
+    #             title="Your tag selection is not quite right",
+    #             description=(
+    #                 "Please pick exactly **1 issue tag** and **1-3 aspect tags**.\n\n"
+    #                 "**Issue Tags** look like this: **(`issue: ...`)**.\n"
+    #                 "**Aspect Tags** are all non-issue tags in lowercase, e.g. **(`💥 collisions`)**\n\n"
+    #                 "**Example tag combination for reworking collisions:\n"
+    #                 "(`🪛 issue: rework/optim.`) (`💥 collisions`)**.\n\n"
+    #                 f"See the Post Guidelines of <#{thread.parent_id}> (click the search "
+    #                 "bar book icon) for more info .\n\n"
+    #                 "**Changing post tags:**\n"
+    #                 "> 1. Right-click post (desktop/web) or click & hold (mobile)\n"
+    #                 "> 2. Click **'Edit Tags'** to see a tag selection menu, and make changes.\n"
+    #                 "> 3. Ensure your changes are saved.\n\n"
+    #                 f"For Python-only questions, use <#{HELP_FORUM_CHANNEL_IDS['python']}>, "
+    #                 "not this channel.\n\n"
+    #                 "**Thank you for helping us maintain clean help forum channels** "
+    #                 "<:pg_robot:837389387024957440>\n\n"
+    #                 "This alert should disappear after you've made appropriate changes."
+    #             ),
+    #             color=0x36393F,
+    #         ),
+    #     )
 
     async def caution_about_python_help_forum_channel_pygame_thread(
         self, thread: discord.Thread
