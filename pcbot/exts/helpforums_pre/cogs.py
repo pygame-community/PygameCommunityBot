@@ -796,6 +796,7 @@ class HelpForumsPreCog(BaseExtensionCog, name="helpforums-pre"):
         if not (
             isinstance(thread, discord.Thread)
             and thread.parent_id in HELP_FORUM_CHANNEL_IDS.values()
+            and thread.id == payload.message_id
         ):
             return
 
