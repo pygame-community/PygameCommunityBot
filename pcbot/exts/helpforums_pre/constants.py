@@ -27,7 +27,7 @@ HELP_FORUM_CHANNEL_IDS = {
 INVALID_HELP_THREAD_TYPES = {
     "thread_title_too_short",
     "member_asking_for_help",
-    "member_exclaiming_about_not_working_code",
+    #"member_exclaiming_about_not_working_code",
     "member_asking_for_code",
     "member_asking_about_problem_with_code",
     "wrong_thread_help_topic_pygame",
@@ -36,7 +36,7 @@ INVALID_HELP_THREAD_TYPES = {
 INVALID_HELP_THREAD_SCANNING_ENABLED = {
     "thread_title_too_short": True,
     "member_asking_for_help": True,
-    "member_exclaiming_about_not_working_code": True,
+    # "member_exclaiming_about_not_working_code": True,
     "member_asking_for_code": True,
     "member_asking_about_problem_with_code": True,
     "wrong_thread_help_topic_pygame": True,
