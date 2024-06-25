@@ -60,20 +60,20 @@ INVALID_HELP_THREAD_REGEX_PATTERNS = {
             "content": re.compile(r".*", flags=re.IGNORECASE),
         },
     },
-    "member_exclaiming_about_not_working_code": {
-        "mode": "all",
-        "fields": {
-            "title": re.compile(
-                r"[\s]*(why\s+)?((is|does|(sh|w)ould)(\s+not|n't)?)?\s*(my|the|this|it)?(?<=s|t|e|y|d)\s*(it|this|code|game|pygame(\s*(game|program|code|project|assignment)?))\s*(((is|does)(\s*not|n't)?|not)?\s*(work|runn?|start|break|load)(s|ed|ing)?)",
-            ),
-            "content": re.compile(r".*", flags=re.IGNORECASE),
-        },
-    },
+    # "member_exclaiming_about_not_working_code": {
+    #     "mode": "all",
+    #     "fields": {
+    #         "title": re.compile(
+    #             r"[\s]*(why\s+)?((is|does|(sh|w)ould)(\s+not|n't)?)?\s*(my|the|this|it)?(?<=s|t|e|y|d)\s*(it|this|code|game|pygame(\s*(game|program|code|project|assignment)?))\s*(((is|does)(\s*not|n't)?|not)?\s*(work|runn?|start|break|load)(s|ed|ing)?)",
+    #         ),
+    #         "content": re.compile(r".*", flags=re.IGNORECASE),
+    #     },
+    # },
     "member_asking_for_code": {
         "mode": "all",
         "fields": {
             "title": re.compile(
-                r"[\s]*(why\s+)?((is|does|(sh|w)ould)(\s+not|n't)?)?\s*(my|the|this|it)?(?<=s|t|e|y|d)\s*(it|this|code|game|pygame(\s*(game|program|code|project|assignment)?))\s*(((is|does)(\s*not|n't)?|not)?\s*(work|runn?|start|break|load)(s|ed|ing)?)",
+                r"(?<!How\s)(?<!How\sdo\s)(?<!How\sdoes\s)(?<!I\s)((can('t|not)?|will)\s+)?(?<!How\scan\s)(please|pls|(some|any)(one|body)|(available|around|willing|ready|want)(\s*to))(\s*help(\s*me)?)?\s*(write|make|create|code|program|fix|correct|implement)(?!ing|ed)(\s*(a|my|the|this))?\s*(this|code|game|pygame(\s*(game|program|code)?))?\s*(for)?\s*(me(\s*please)?|please)?\s*",
                 re.IGNORECASE,
             ),
             "content": re.compile(r".*", flags=re.IGNORECASE),
@@ -152,8 +152,8 @@ INVALID_HELP_THREAD_EMBEDS = {
         "color": 0x36393F,
     },
     "member_asking_for_code": {
-        "title": "Please don't ask if anybody can, wants to, or will fix, correct "
-        "or write your code, game, project or assignment for you.",
+        "title": "Please don't ask if anybody can write your code, game, project or "
+        "assignment for you.",
         "description": "All helpers here are volunteers, who show people how to "
         "improve or add things in their code by themselves. They don't do "
         "all the work for them. Show us what you are working on, what you've "
