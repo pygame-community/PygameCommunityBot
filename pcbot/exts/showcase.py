@@ -203,7 +203,8 @@ class Showcase(BaseExtensionCog, name="showcase"):
                     [
                         thread
                         async for thread in channel.archived_threads(
-                            limit=amount,
+                            limit=amount
+                            - len(channel.threads),  # subtract active threads
                             before=before,
                         )
                     ],
