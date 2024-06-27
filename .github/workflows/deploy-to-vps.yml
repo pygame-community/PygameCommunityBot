@@ -25,5 +25,5 @@ jobs:
             cd ~/PygameCommunityBot
             docker compose stop
             docker compose rm -f
-            docker compose up -d --build
+            sleep 60 && docker compose up -d --build
             docker image prune -af
