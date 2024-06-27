@@ -80,9 +80,7 @@ class Showcase(BaseExtensionCog, name="showcase"):
         try:
             message = thread.starter_message or await thread.fetch_message(thread.id)
         except discord.NotFound:
-            pass
-        else:
-            await message.pin()
+            return
 
         if not self.starter_message_validity_check(message):
             deletion_datetime = datetime.datetime.now(
