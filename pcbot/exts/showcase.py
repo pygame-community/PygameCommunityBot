@@ -15,6 +15,7 @@ from discord.ext import commands
 import snakecore
 from snakecore.commands import flagconverter_kwargs
 from snakecore.commands import UnicodeEmoji
+from snakecore.commands.converters import DateTime
 
 from ..base import BaseExtensionCog
 
@@ -55,8 +56,8 @@ class Showcase(BaseExtensionCog, name="showcase"):
         amount: commands.Range[int, 0],
         include_tags: tuple[str, ...] = commands.flag(aliases=["tags"], default=()),
         exclude_tags: tuple[str, ...] = (),
-        before: discord.Thread | datetime.datetime | None = None,
-        after: discord.Thread | datetime.datetime | None = None,
+        before: discord.Thread | DateTime | None = None,
+        after: discord.Thread | DateTime | None = None,
         rank_emoji: UnicodeEmoji | discord.PartialEmoji | str | None = None,
     ):
         """Rank the specified showcase forum channel's posts by the number of reactions they have.
@@ -149,7 +150,7 @@ class Showcase(BaseExtensionCog, name="showcase"):
             )
 
         before_ts = (
-            before
+            before.replace(tzinfo=datetime.timezone.utc)
             if isinstance(before, datetime.datetime)
             else (
                 discord.utils.snowflake_time(before.id)
@@ -159,7 +160,7 @@ class Showcase(BaseExtensionCog, name="showcase"):
         )
 
         after_ts = (
-            after
+            after.replace(tzinfo=datetime.timezone.utc)
             if isinstance(after, datetime.datetime)
             else (
                 discord.utils.snowflake_time(after.id)
