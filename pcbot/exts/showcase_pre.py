@@ -6,6 +6,7 @@ Copyright (c) 2022-present pygame-community.
 import asyncio
 import datetime
 import re
+import time
 
 
 import discord
@@ -103,6 +104,58 @@ class ShowcasePreCog(BaseExtensionCog, name="showcase-pre"):
                 ),
                 warn_msg.id,
             )
+
+    async def on_thread_delete(self, thread: discord.Thread):
+        if thread.parent_id != self.showcase_channel_id:
+            return
+
+        if not any(tag.name.lower() == "invalid" for tag in thread.applied_tags):
+            alert_msg = await thread.send(
+                embed=discord.Embed.from_dict(
+                    dict(
+                        title="Post scheduled for deletion",
+                        description=(
+                            "This post is scheduled for deletion after the OP "
+                            "deleted their starter message.\n\nIt will be deleted "
+                            f"**<t:{int(time.time()+300)}:R>**."  # 5 min. delay
+                        ),
+                        color=0x551111,
+                        footer=dict(text="React with ❌ to cancel the deletion."),
+                    )
+                )
+            )
+            await alert_msg.add_reaction("❌")
+
+            try:
+                await self.bot.wait_for(
+                    "raw_reaction_add",
+                    check=lambda event: event.message_id == alert_msg.id
+                    and (
+                        event.user_id == thread.owner_id
+                        or (
+                            event.member
+                            and not event.member.bot
+                            and (
+                                (
+                                    perms := thread.permissions_for(event.member)
+                                ).administrator
+                                or perms.manage_messages
+                            )
+                        )
+                    )
+                    and snakecore.utils.is_emoji_equal(event.emoji, "❌"),
+                    timeout=300,
+                )
+            except asyncio.TimeoutError:
+                try:
+                    await thread.delete()
+                except discord.NotFound:
+                    pass
+            else:
+                try:
+                    await alert_msg.delete()
+                except discord.NotFound:
+                    pass
 
     @commands.Cog.listener()
     async def on_message_edit(self, old: discord.Message, new: discord.Message):
