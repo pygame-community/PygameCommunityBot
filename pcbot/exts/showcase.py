@@ -18,7 +18,7 @@ from ..base import BaseExtensionCog
 BotT = snakecore.commands.Bot | snakecore.commands.AutoShardedBot
 
 
-class ShowcasePreCog(BaseExtensionCog, name="showcase-pre"):
+class Showcase(BaseExtensionCog, name="showcase"):
     def __init__(
         self, bot: BotT, showcase_channel_id: int, theme_color: int | discord.Color = 0
     ) -> None:
@@ -138,7 +138,11 @@ class ShowcasePreCog(BaseExtensionCog, name="showcase-pre"):
                                 "- Text-only posts must contain at least 32 "
                                 "characters (including links, but not links alone).\n\n"
                                 " If no changes are made, your post will be"
-                                f" deleted {snakecore.utils.create_markdown_timestamp(deletion_datetime, 'R')}."
+                                f" deleted "
+                                + snakecore.utils.create_markdown_timestamp(
+                                    deletion_datetime, "R"
+                                )
+                                + "."
                             )
                         )
                         self.entry_post_deletion_dict[thread.id] = (
@@ -158,11 +162,16 @@ class ShowcasePreCog(BaseExtensionCog, name="showcase-pre"):
                     datetime.timezone.utc
                 ) + datetime.timedelta(minutes=5)
                 warn_msg = await new.reply(
-                    "Your post must contain an attachment or text and safe links to be valid.\n\n"
-                    "- Attachment-only entries must be in reference to a previous post of yours.\n"
-                    "- Text-only posts must contain at least 32 characters (including links, but not links alone).\n\n"
+                    "Your post must contain an attachment or text and safe links "
+                    "to be valid.\n\n"
+                    "- Attachment-only entries must be in reference to a previous "
+                    "post of yours.\n"
+                    "- Text-only posts must contain at least 32 characters "
+                    "(including links, but not links alone).\n\n"
                     " If no changes are made, your post will be"
-                    f" deleted {snakecore.utils.create_markdown_timestamp(deletion_datetime, 'R')}."
+                    f" deleted "
+                    + snakecore.utils.create_markdown_timestamp(deletion_datetime, "R")
+                    + "."
                 )
 
                 self.entry_post_deletion_dict[thread.id] = (
@@ -288,4 +297,4 @@ class ShowcasePreCog(BaseExtensionCog, name="showcase-pre"):
 async def setup(
     bot: BotT, showcase_channel_id: int, theme_color: int | discord.Color = 0
 ):
-    await bot.add_cog(ShowcasePreCog(bot, showcase_channel_id, theme_color))
+    await bot.add_cog(Showcase(bot, showcase_channel_id, theme_color))
