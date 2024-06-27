@@ -41,7 +41,7 @@ class Showcase(BaseExtensionCog, name="showcase"):
 
     @showcase.command(
         name="rank",
-        usage="<forum> <quantity> [tags: Text...] [include_tags: Text...] "
+        usage="<forum> <amount: Number> [tags: Text...] [include_tags: Text...] "
         "[exclude_tags: Text...] [before: Thread/DateTime] "
         "[after: Thread/DateTime] [rank_emoji: Emoji]",
         extras=dict(response_deletion_with_reaction=True),
@@ -52,7 +52,7 @@ class Showcase(BaseExtensionCog, name="showcase"):
         ctx: commands.Context[BotT],
         forum: discord.ForumChannel,
         *,
-        quantity: commands.Range[int, 0],
+        amount: commands.Range[int, 0],
         include_tags: tuple[str, ...] = commands.flag(aliases=["tags"], default=()),
         exclude_tags: tuple[str, ...] = (),
         before: discord.Thread | datetime.datetime | None = None,
@@ -66,7 +66,7 @@ class Showcase(BaseExtensionCog, name="showcase"):
         **`<forum>`**
         > The forum channel to rank.
 
-        **`<quantity>`**
+        **`<amount>`**
         > The amount of posts to rank.
 
         **`[include_tags: Text...]`**
@@ -203,7 +203,7 @@ class Showcase(BaseExtensionCog, name="showcase"):
                     [
                         thread
                         async for thread in channel.archived_threads(
-                            limit=quantity,
+                            limit=amount,
                             before=before,
                         )
                     ],
@@ -218,7 +218,7 @@ class Showcase(BaseExtensionCog, name="showcase"):
                 )
                 and (triple := (await thread_triple(thread)))
                 and any(tag.name.lower() in tags for tag in triple[0].applied_tags)
-            ][:quantity],
+            ][:amount],
             key=lambda tup: tup[2],
             reverse=True,
         )
@@ -253,7 +253,7 @@ class Showcase(BaseExtensionCog, name="showcase"):
                                 )
                             )
                         ),
-                        value=f"# {thread.jump_url}",
+                        value=f"{thread.jump_url}",
                         inline=False,
                     )
                 )
@@ -310,8 +310,8 @@ class Showcase(BaseExtensionCog, name="showcase"):
                 pass
 
     @staticmethod
-    def starter_message_validity_check(
-        message: discord.Message, min_chars=32, max_chars=float("inf")
+    def thread_validity_check(
+        thread: discord.Thread, min_chars=32, max_chars=float("inf")
     ):
         """Checks if a thread's starter message has the right format.
 
@@ -320,20 +320,28 @@ class Showcase(BaseExtensionCog, name="showcase"):
         bool:
             True/False
         """
+
+        message = thread.starter_message
+
+        if not message:
+            return True
+
         search_obj = re.search(
             snakecore.utils.regex_patterns.URL, message.content or ""
         )
         link_in_msg = bool(search_obj)
         first_link_str = search_obj.group() if link_in_msg else ""
 
+        char_length = len(message.content) + len(thread.name)
+
         if (
             message.content
-            and (link_in_msg and len(message.content) > len(first_link_str))
-            and min_chars <= len(message.content) < max_chars
+            and (link_in_msg and char_length > len(first_link_str))
+            and min_chars <= char_length < max_chars
         ):
             return True
 
-        elif (message.content or message.reference) and message.attachments:
+        elif message.content and message.attachments:
             return True
 
         return False
@@ -348,14 +356,15 @@ class Showcase(BaseExtensionCog, name="showcase"):
         except discord.NotFound:
             return
 
-        if not self.starter_message_validity_check(message):
+        if not self.thread_validity_check(thread):
             deletion_datetime = datetime.datetime.now(
                 datetime.timezone.utc
             ) + datetime.timedelta(minutes=5)
             warn_msg = await message.reply(
                 "Your post must contain an attachment or text and safe links to be valid.\n\n"
                 "- Attachment-only entries must be in reference to a previous post of yours.\n"
-                "- Text-only posts must contain at least 32 characters (including links, but not links alone).\n\n"
+                "- Text-only posts must contain at least 32 characters (including their title "
+                "and including links, but not links alone).\n\n"
                 " If no changes are made, your post will be"
                 f" deleted {snakecore.utils.create_markdown_timestamp(deletion_datetime, 'R')}."
             )
@@ -379,7 +388,7 @@ class Showcase(BaseExtensionCog, name="showcase"):
 
         thread = new.channel
 
-        if not self.starter_message_validity_check(new):
+        if not self.thread_validity_check(thread):
             if thread.id in self.entry_post_deletion_dict:
                 deletion_data_tuple = self.entry_post_deletion_dict[thread.id]
                 deletion_task = deletion_data_tuple[0]
@@ -400,7 +409,8 @@ class Showcase(BaseExtensionCog, name="showcase"):
                                 "- Attachment-only entries must be in reference to a "
                                 "previous post of yours.\n"
                                 "- Text-only posts must contain at least 32 "
-                                "characters (including links, but not links alone).\n\n"
+                                "characters (including their title "
+                                "and including links, but not links alone).\n\n"
                                 " If no changes are made, your post will be"
                                 f" deleted "
                                 + snakecore.utils.create_markdown_timestamp(
@@ -431,8 +441,8 @@ class Showcase(BaseExtensionCog, name="showcase"):
                     "- Attachment-only entries must be in reference to a previous "
                     "post of yours.\n"
                     "- Text-only posts must contain at least 32 characters "
-                    "(including links, but not links alone).\n\n"
-                    " If no changes are made, your post will be"
+                    "(including their title and including links, but not links "
+                    "alone).\n\nIf no changes are made, your post will be"
                     f" deleted "
                     + snakecore.utils.create_markdown_timestamp(deletion_datetime, "R")
                     + "."
@@ -445,7 +455,7 @@ class Showcase(BaseExtensionCog, name="showcase"):
             return
 
         elif (
-            self.starter_message_validity_check(new)
+            self.thread_validity_check(thread)
             and thread.id in self.entry_post_deletion_dict
         ):  # an invalid entry was corrected
             deletion_data_tuple = self.entry_post_deletion_dict[thread.id]
