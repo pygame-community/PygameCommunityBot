@@ -5,6 +5,7 @@ Copyright (c) 2022-present pygame-community.
 
 import asyncio
 import datetime
+import itertools
 import re
 import time
 
@@ -12,6 +13,8 @@ import time
 import discord
 from discord.ext import commands
 import snakecore
+from snakecore.commands import flagconverter_kwargs
+from snakecore.commands import UnicodeEmoji
 
 from ..base import BaseExtensionCog
 
@@ -25,6 +28,231 @@ class Showcase(BaseExtensionCog, name="showcase"):
         super().__init__(bot, theme_color=theme_color)
         self.showcase_channel_id = showcase_channel_id
         self.entry_post_deletion_dict: dict[int, tuple[asyncio.Task[None], int]] = {}
+
+    @commands.guild_only()
+    @commands.max_concurrency(1, per=commands.BucketType.guild, wait=True)
+    @commands.group(
+        invoke_without_command=True,
+    )
+    async def showcase(self, ctx: commands.Context[BotT]):
+        pass
+
+    @showcase.command(name="rank", extras=dict(response_deletion_with_reaction=True))
+    @flagconverter_kwargs()
+    async def showcase_rank(
+        self,
+        ctx: commands.Context[BotT],
+        forum: discord.ForumChannel,
+        *,
+        quantity: commands.Range[int, 0],
+        include_tags: tuple[str, ...] = commands.flag(aliases=["tags"], default=()),
+        exclude_tags: tuple[str, ...] = (),
+        before: discord.Thread | datetime.datetime | None = None,
+        after: discord.Thread | datetime.datetime | None = None,
+        rank_emoji: UnicodeEmoji | discord.PartialEmoji | str | None = None,
+    ):
+        assert (
+            ctx.guild
+            and ctx.bot.user
+            and (bot_member := ctx.guild.get_member(ctx.bot.user.id))
+            and isinstance(
+                ctx.channel,
+                (discord.TextChannel, discord.VoiceChannel, discord.Thread),
+            )
+            and isinstance(ctx.author, discord.Member)
+        )
+
+        channel = forum
+
+        if isinstance(rank_emoji, str):
+            rank_emoji = discord.PartialEmoji(name=rank_emoji)
+
+        if include_tags and exclude_tags:
+            raise commands.CommandInvokeError(
+                commands.CommandError(
+                    "You cannot specify both `include_tags:` and `exclude_tags:` at the same time."
+                )
+            )
+
+        tags = [tag.name.lower() for tag in channel.available_tags]
+
+        if include_tags:
+            include_tags = tuple(tag.lower() for tag in include_tags)
+            tags = [tag for tag in tags if tag in include_tags]
+
+        if exclude_tags:
+            exclude_tags = tuple(tag.lower() for tag in exclude_tags)
+            tags = [tag for tag in tags if tag not in exclude_tags]
+
+        if not snakecore.utils.have_permissions_in_channels(
+            ctx.author,
+            channel,
+            "view_channel",
+        ):
+            raise commands.CommandInvokeError(
+                commands.CommandError(
+                    "You do not have enough permissions to run this command on the "
+                    f"specified destination (<#{channel.id}>."
+                )
+            )
+
+        if isinstance(before, discord.Thread) and before.parent_id != channel.id:
+            raise commands.CommandInvokeError(
+                commands.CommandError(
+                    "`before` has to be an ID of a thread from the specified channel",
+                )
+            )
+
+        if isinstance(after, discord.Thread) and after.parent_id != channel.id:
+            raise commands.CommandInvokeError(
+                commands.CommandError(
+                    "`after` has to be an ID of a thread from the specified channel",
+                )
+            )
+
+        before_ts = (
+            before
+            if isinstance(before, datetime.datetime)
+            else (
+                discord.utils.snowflake_time(before.id)
+                if isinstance(before, discord.Thread)
+                else None
+            )
+        )
+
+        after_ts = (
+            after
+            if isinstance(after, datetime.datetime)
+            else (
+                discord.utils.snowflake_time(after.id)
+                if isinstance(after, discord.Thread)
+                else None
+            )
+        )
+
+        def count_thread_reactions(
+            thread: discord.Thread, starter_message: discord.Message
+        ):
+            return (
+                sum(
+                    reaction.count
+                    for reaction in starter_message.reactions
+                    if snakecore.utils.is_emoji_equal(rank_emoji, reaction.emoji)
+                )
+                if rank_emoji
+                else sum(reaction.count for reaction in starter_message.reactions)
+            )
+
+        async def thread_triple(thread: discord.Thread):
+            try:
+                starter_message = thread.starter_message or await thread.fetch_message(
+                    thread.id
+                )
+            except discord.NotFound:
+                return None
+
+            return (
+                thread,
+                starter_message,
+                count_thread_reactions(thread, starter_message),
+            )
+
+        thread_triples = sorted(
+            [
+                triple
+                for thread in itertools.chain(
+                    sorted(channel.threads, key=lambda t: t.id, reverse=True),
+                    [
+                        thread
+                        async for thread in channel.archived_threads(
+                            limit=quantity,
+                            before=before,
+                        )
+                    ],
+                )
+                if (
+                    before_ts is None
+                    or discord.utils.snowflake_time(thread.id) < before_ts
+                )
+                and (
+                    after_ts is None
+                    or discord.utils.snowflake_time(thread.id) > after_ts
+                )
+                and (triple := (await thread_triple(thread)))
+                and any(tag.name.lower() in tags for tag in triple[0].applied_tags)
+            ][:quantity],
+            key=lambda tup: tup[2],
+            reverse=True,
+        )
+
+        if not thread_triples:
+            raise commands.CommandInvokeError(
+                commands.CommandError("No threads found in the specified channel.")
+            )
+
+        embed_dict = {
+            "title": f"Showcase Rankings for {channel.mention} Posts by Emoji\n"
+            f"({len(thread_triples)} selected, from "
+            f"<t:{int(discord.utils.snowflake_time(thread_triples[0][0].id).timestamp())}> "
+            f"to <t:{int(discord.utils.snowflake_time(thread_triples[-1][0].id).timestamp())}>)",
+            "color": self.theme_color.value,
+            "fields": [],
+        }
+
+        for i, triple in enumerate(thread_triples):
+            thread, starter_message, thread_reactions_count = triple
+            if thread_reactions_count:
+                embed_dict["fields"].append(
+                    dict(
+                        name=(
+                            f"{i + 1}. "
+                            + (
+                                f"{rank_emoji}: {thread_reactions_count}"
+                                if rank_emoji
+                                else ", ".join(
+                                    f"{reaction.emoji}: {reaction.count}"
+                                    for reaction in starter_message.reactions
+                                )
+                            )
+                        ),
+                        value=f"# {thread.jump_url}",
+                        inline=False,
+                    )
+                )
+
+        response_embed_dict_lists = [
+            snakecore.utils.embeds.split_embed_dict(embed_dict)
+        ]
+
+        for i in range(len(response_embed_dict_lists)):
+            response_embed_dicts_list = response_embed_dict_lists[i]
+            total_char_count = 0
+            for j in range(len(response_embed_dicts_list)):
+                response_embed_dict = response_embed_dicts_list[j]
+                if (
+                    total_char_count
+                    + snakecore.utils.embeds.check_embed_dict_char_count(
+                        response_embed_dict
+                    )
+                ) > snakecore.utils.embeds.EMBED_TOTAL_CHAR_LIMIT:
+                    response_embed_dict_lists.insert(  #  slice up the response embed dict list to fit the character limit per message
+                        i + 1, response_embed_dicts_list[j : j + 1]
+                    )
+                    response_embed_dict_lists[i] = response_embed_dicts_list[:j]
+                else:
+                    total_char_count += (
+                        snakecore.utils.embeds.check_embed_dict_char_count(
+                            response_embed_dict
+                        )
+                    )
+
+        for response_embed_dicts_list in response_embed_dict_lists:
+            await ctx.send(
+                embeds=[
+                    discord.Embed.from_dict(embed_dict)
+                    for embed_dict in response_embed_dicts_list
+                ]
+            )
 
     @staticmethod
     async def delete_bad_thread(thread: discord.Thread, delay: float = 0.0):
