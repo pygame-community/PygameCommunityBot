@@ -1544,7 +1544,10 @@ class HelpForumsPreCog(BaseExtensionCog, name="helpforums-pre"):
                         or event.member
                         and not event.member.bot
                         and (
-                            thread.permissions_for(event.member).administrator
+                            (
+                                perms := thread.permissions_for(event.member)
+                            ).administrator
+                            or perms.manage_messages
                             or any(
                                 role.id == HELPFULIE_ROLE_ID
                                 for role in event.member.roles
