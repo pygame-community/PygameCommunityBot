@@ -22,7 +22,7 @@ from ..base import BaseExtensionCog
 BotT = snakecore.commands.Bot | snakecore.commands.AutoShardedBot
 
 
-class Showcase(BaseExtensionCog, name="showcase"):
+class Showcasing(BaseExtensionCog, name="showcasing"):
     """A cog for managing showcase forum channels."""
 
     def __init__(
@@ -573,4 +573,4 @@ class Showcase(BaseExtensionCog, name="showcase"):
 async def setup(
     bot: BotT, showcase_channel_id: int, theme_color: int | discord.Color = 0
 ):
-    await bot.add_cog(Showcase(bot, showcase_channel_id, theme_color))
+    await bot.add_cog(Showcasing(bot, showcase_channel_id, theme_color))
