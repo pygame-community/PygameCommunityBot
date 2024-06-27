@@ -1,0 +1,10 @@
+services:
+  pygamecommunitybot:
+    image: pygamecommunitybot:latest
+    restart: unless-stopped
+    build:
+      context: .
+      dockerfile: Dockerfile
+    tty: true
+    volumes:
+      - /mnt/blockstorage:/mnt/blockstorage

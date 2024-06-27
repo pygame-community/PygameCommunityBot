@@ -1,0 +1,29 @@
+name: Deploy to VPS
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  deploy:
+    name: Deploy to VPS
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v2
+      - name: Deploy to VPS
+        uses: easingthemes/ssh-deploy@main
+        env:
+          SSH_PRIVATE_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          REMOTE_HOST: ${{ secrets.VPS_HOST }}
+          REMOTE_USER: ${{ secrets.VPS_USER }}
+          TARGET: ~/PygameCommunityBot
+          SCRIPT_AFTER: |
+            cp ~/config.py ~/PygameCommunityBot/config.py
+            cp ~/.env ~/PygameCommunityBot/.env
+            cd ~/PygameCommunityBot
+            docker compose stop
+            docker compose rm -f
+            docker compose up -d --build
+            docker image prune -af

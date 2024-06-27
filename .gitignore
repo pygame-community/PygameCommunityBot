@@ -160,3 +160,6 @@ desktop.ini
 # Discord bot configuration files
 config.py
 localconfig.py
+
+# Docker
+docker-compose-dev.yml
