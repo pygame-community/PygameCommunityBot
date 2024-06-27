@@ -22,6 +22,8 @@ BotT = snakecore.commands.Bot | snakecore.commands.AutoShardedBot
 
 
 class Showcase(BaseExtensionCog, name="showcase"):
+    """A cog for managing showcase forum channels."""
+
     def __init__(
         self, bot: BotT, showcase_channel_id: int, theme_color: int | discord.Color = 0
     ) -> None:
@@ -37,7 +39,13 @@ class Showcase(BaseExtensionCog, name="showcase"):
     async def showcase(self, ctx: commands.Context[BotT]):
         pass
 
-    @showcase.command(name="rank", extras=dict(response_deletion_with_reaction=True))
+    @showcase.command(
+        name="rank",
+        usage="<forum> <quantity> [tags: Text...] [include_tags: Text...] "
+        "[exclude_tags: Text...] [before: Thread/DateTime] "
+        "[after: Thread/DateTime] [rank_emoji: Emoji]",
+        extras=dict(response_deletion_with_reaction=True),
+    )
     @flagconverter_kwargs()
     async def showcase_rank(
         self,
@@ -51,6 +59,36 @@ class Showcase(BaseExtensionCog, name="showcase"):
         after: discord.Thread | datetime.datetime | None = None,
         rank_emoji: UnicodeEmoji | discord.PartialEmoji | str | None = None,
     ):
+        """Rank the specified showcase forum channel's posts by the number of reactions they have.
+
+        __**Parameters:**__
+
+        **`<forum>`**
+        > The forum channel to rank.
+
+        **`<quantity>`**
+        > The amount of posts to rank.
+
+        **`[include_tags: Text...]`**
+        **`[tags: Text...]`**
+        > A flag for specifying the inclusionary tags to filter posts by.
+        > Cannot be used with `exclude_tags`.
+
+        **`[exclude_tags: Text...]`**
+        > A flag for specifying the exlcusary tags to filter posts by.
+        > Cannot be used with `include_tags`.
+
+        **`[before: Thread/DateTime]`**
+        > A flag for specifying the thread to start the ranking from.
+
+        **`[after: Thread/DateTime]`**
+        > A flag for specifying the thread to end the ranking at.
+
+        **`[rank_emoji: Emoji]`**
+        > A flag for specifying the reaction emoji to use for ranking. In omitted,
+        > all used reaction emojis will be counted and summed up to calculate the rank.
+        """
+
         assert (
             ctx.guild
             and ctx.bot.user
