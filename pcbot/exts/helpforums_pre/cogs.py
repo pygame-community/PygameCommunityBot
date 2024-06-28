@@ -368,7 +368,7 @@ class HelpForumsPreCog(BaseExtensionCog, name="helpforums-pre"):
         except discord.HTTPException:
             return
 
-        if not (thread.parent_id in HELP_FORUM_CHANNEL_IDS.values()):
+        if not (thread.parent_id == HELP_FORUM_CHANNEL_IDS["python"]):
             return
 
         caution_types = self.get_help_forum_channel_thread_cautions(thread)
