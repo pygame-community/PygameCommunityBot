@@ -196,31 +196,42 @@ class Showcasing(BaseExtensionCog, name="showcasing"):
                 count_thread_reactions(thread, starter_message),
             )
 
-        thread_triples = sorted(
-            [
-                triple
-                for thread in itertools.chain(
-                    sorted(channel.threads, key=lambda t: t.id, reverse=True),
-                    [
-                        thread
-                        async for thread in channel.archived_threads(
-                            limit=amount
-                            - len(channel.threads),  # subtract active threads
-                            before=before,
-                        )
-                    ],
-                )
-                if (
-                    before_ts is None
-                    or discord.utils.snowflake_time(thread.id) < before_ts
-                )
-                and (
-                    after_ts is None
-                    or discord.utils.snowflake_time(thread.id) > after_ts
-                )
-                and (triple := (await thread_triple(thread)))
-                and any(tag.name.lower() in tags for tag in triple[0].applied_tags)
-            ][:amount],
+        max_archived_threads = max(
+            amount - len(channel.threads), 0
+        )  # subtract active threads
+
+        thread_triples = sorted(  # sort triples by reaction count
+            (
+                sorted_thread_triples := [
+                    # retrieve threads as
+                    # (thread, message, reaction_count) tuples within time range
+                    # in descending order
+                    triple
+                    for thread in itertools.chain(
+                        sorted(channel.threads, key=lambda t: t.id, reverse=True),
+                        (
+                            [
+                                thread
+                                async for thread in channel.archived_threads(
+                                    limit=max_archived_threads,
+                                )
+                            ]
+                            if max_archived_threads
+                            else (())
+                        ),
+                    )
+                    if (
+                        before_ts is None
+                        or discord.utils.snowflake_time(thread.id) < before_ts
+                    )
+                    and (
+                        after_ts is None
+                        or discord.utils.snowflake_time(thread.id) > after_ts
+                    )
+                    and (triple := (await thread_triple(thread)))
+                    and any(tag.name.lower() in tags for tag in triple[0].applied_tags)
+                ][:amount]
+            ),
             key=lambda tup: tup[2],
             reverse=True,
         )
@@ -233,8 +244,24 @@ class Showcasing(BaseExtensionCog, name="showcasing"):
         embed_dict = {
             "title": f"Showcase Rankings for {channel.mention} Posts by Emoji\n"
             f"({len(thread_triples)} selected, from "
-            f"<t:{int(discord.utils.snowflake_time(thread_triples[0][0].id).timestamp())}> "
-            f"to <t:{int(discord.utils.snowflake_time(thread_triples[-1][0].id).timestamp())}>)",
+            "<t:"
+            + str(
+                int(
+                    discord.utils.snowflake_time(
+                        sorted_thread_triples[-1][0].id
+                    ).timestamp()
+                )
+            )
+            + "> "
+            f"to <t:"
+            + str(
+                int(
+                    discord.utils.snowflake_time(
+                        sorted_thread_triples[0][0].id
+                    ).timestamp()
+                )
+            )
+            + ">)",
             "color": self.theme_color.value,
             "fields": [],
         }
@@ -260,10 +287,12 @@ class Showcasing(BaseExtensionCog, name="showcasing"):
                     )
                 )
 
+        # divide embed dict into lists of multiple embed dicts if necessary
         response_embed_dict_lists = [
             snakecore.utils.embeds.split_embed_dict(embed_dict)
         ]
 
+        # group those lists based on the total character count of the embeds
         for i in range(len(response_embed_dict_lists)):
             response_embed_dicts_list = response_embed_dict_lists[i]
             total_char_count = 0
@@ -275,8 +304,11 @@ class Showcasing(BaseExtensionCog, name="showcasing"):
                         response_embed_dict
                     )
                 ) > snakecore.utils.embeds.EMBED_TOTAL_CHAR_LIMIT:
-                    response_embed_dict_lists.insert(  #  slice up the response embed dict list to fit the character limit per message
-                        i + 1, response_embed_dicts_list[j : j + 1]
+                    response_embed_dict_lists.insert(
+                        # slice up the response embed dict list to fit the character
+                        # limit per message
+                        i + 1,
+                        response_embed_dicts_list[j : j + 1],
                     )
                     response_embed_dict_lists[i] = response_embed_dicts_list[:j]
                 else:
