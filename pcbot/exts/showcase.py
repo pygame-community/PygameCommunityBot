@@ -233,8 +233,8 @@ class Showcasing(BaseExtensionCog, name="showcasing"):
         embed_dict = {
             "title": f"Showcase Rankings for {channel.mention} Posts by Emoji\n"
             f"({len(thread_triples)} selected, from "
-            f"<t:{int(discord.utils.snowflake_time(thread_triples[0][0].id).timestamp())}> "
-            f"to <t:{int(discord.utils.snowflake_time(thread_triples[-1][0].id).timestamp())}>)",
+            f"<t:{int(min(discord.utils.snowflake_time(thread_triple[0].id) for thread_triple in thread_triples).timestamp())}> "
+            f"to <t:{int(max(discord.utils.snowflake_time(thread_triple[0].id) for thread_triple in thread_triples).timestamp())}>)",
             "color": self.theme_color.value,
             "fields": [],
         }
