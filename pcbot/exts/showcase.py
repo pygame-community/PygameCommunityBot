@@ -169,17 +169,25 @@ class Showcasing(BaseExtensionCog, name="showcasing"):
             )
         )
 
-        def count_thread_reactions(
+        async def count_unique_thread_reactions(
             thread: discord.Thread, starter_message: discord.Message
         ):
-            return (
-                sum(
+            if rank_emoji:
+                return sum(
                     reaction.count
                     for reaction in starter_message.reactions
                     if snakecore.utils.is_emoji_equal(rank_emoji, reaction.emoji)
                 )
-                if rank_emoji
-                else sum(reaction.count for reaction in starter_message.reactions)
+
+            user_ids_by_reaction: dict[tuple[str, int], list[int]] = {}
+
+            for i, reaction in enumerate(starter_message.reactions):
+                user_ids_by_reaction[str(reaction.emoji), i] = [
+                    user.id async for user in reaction.users()
+                ]
+
+            return len(
+                set(itertools.chain.from_iterable(user_ids_by_reaction.values()))
             )
 
         async def thread_triple(thread: discord.Thread):
@@ -193,7 +201,7 @@ class Showcasing(BaseExtensionCog, name="showcasing"):
             return (
                 thread,
                 starter_message,
-                count_thread_reactions(thread, starter_message),
+                await count_unique_thread_reactions(thread, starter_message),
             )
 
         max_archived_threads = max(
@@ -261,7 +269,7 @@ class Showcasing(BaseExtensionCog, name="showcasing"):
                     ).timestamp()
                 )
             )
-            + ">)",
+            + ">, based on unique reactions)",
             "color": self.theme_color.value,
             "fields": [],
         }
@@ -276,7 +284,8 @@ class Showcasing(BaseExtensionCog, name="showcasing"):
                             + (
                                 f"{rank_emoji}: {thread_reactions_count}"
                                 if rank_emoji
-                                else ", ".join(
+                                else f"{thread_reactions_count}: Unique | " 
+                                + ", ".join(
                                     f"{reaction.emoji}: {reaction.count}"
                                     for reaction in starter_message.reactions
                                 )
