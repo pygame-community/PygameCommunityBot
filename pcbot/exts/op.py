@@ -4,6 +4,7 @@ Copyright (c) 2022-present pygame-community.
 """
 
 import asyncio
+import re
 import discord
 from discord import app_commands
 from discord.ext import commands
@@ -29,7 +30,8 @@ invocation_error = lambda ctx, *args: (
 
 
 class OPCog(BaseExtensionCog, name="op"):
-    """Commands related to being an OP (original poster) in a forum post or thread."""
+    """Commands related to being an OP (original poster) or channel host
+    in a text channel forum post, thread."""
 
     @commands.guild_only()
     @commands.group(invoke_without_command=True)
@@ -62,28 +64,57 @@ class OPCog(BaseExtensionCog, name="op"):
 
         channel = ctx.channel
 
-        if not isinstance(channel, discord.Thread):
+        if not isinstance(channel, (discord.Thread, discord.TextChannel)):
             raise (
                 invocation_error(
                     ctx,
-                    "This command does not work outside of threads and posts.",  # type: ignore
+                    "This command does not work outside of text-channels, "
+                    "threads and posts.",
                 )
             )
 
-        elif not (
-            (channel.owner_id == ctx.author.id)
-            or snakecore.utils.have_permissions_in_channels(
-                ctx.author,
-                channel,
-                "view_channel",
-                "manage_messages",
+        elif (
+            isinstance(channel, discord.Thread)
+            and not (
+                (channel.owner_id == ctx.author.id)
+                or snakecore.utils.have_permissions_in_channels(
+                    ctx.author,
+                    channel,
+                    "view_channel",
+                    "manage_messages",
+                )
+            )
+        ) or (
+            isinstance(channel, discord.TextChannel)
+            and not (
+                snakecore.utils.have_permissions_in_channels(
+                    ctx.author,
+                    channel,
+                    "view_channel",
+                    "manage_messages",
+                )
+                or ctx.author.mention
+                in (
+                    match_.group(1)
+                    if (
+                        match_ := re.match(
+                            r"^OPs?: ?((?:<@&?\d+>(?:,?)?\s*){1,})$",
+                            channel.topic or "",
+                        )
+                    )
+                    else ""
+                )
+                or any(
+                    role.mention in (match_.group(1) if match_ else "")
+                    for role in ctx.author.roles
+                )
             )
         ):
             raise (
                 invocation_error(
                     ctx,
                     "You do not have enough permissions to run this command in this "
-                    f"channel (<#{channel.id}>).",  # type: ignore
+                    f"channel (<#{channel.id}>).",
                 )
             )
 
@@ -238,21 +269,50 @@ class OPCog(BaseExtensionCog, name="op"):
 
         channel = ctx.channel
 
-        if not isinstance(channel, discord.Thread):
+        if not isinstance(channel, (discord.Thread, discord.TextChannel)):
             raise (
                 invocation_error(
                     ctx,
-                    "This command does not work outside of threads and posts.",
+                    "This command does not work outside of text-channels, "
+                    "threads and posts.",
                 )
             )
 
-        elif not (
-            (channel.owner_id == ctx.author.id)
-            or snakecore.utils.have_permissions_in_channels(
-                ctx.author,
-                channel,
-                "view_channel",
-                "manage_messages",
+        elif (
+            isinstance(channel, discord.Thread)
+            and not (
+                (channel.owner_id == ctx.author.id)
+                or snakecore.utils.have_permissions_in_channels(
+                    ctx.author,
+                    channel,
+                    "view_channel",
+                    "manage_messages",
+                )
+            )
+        ) or (
+            isinstance(channel, discord.TextChannel)
+            and not (
+                snakecore.utils.have_permissions_in_channels(
+                    ctx.author,
+                    channel,
+                    "view_channel",
+                    "manage_messages",
+                )
+                or ctx.author.mention
+                in (
+                    match_.group(1)
+                    if (
+                        match_ := re.match(
+                            r"^OPs?: ?((?:<@&?\d+>(?:,?)?\s*){1,})$",
+                            channel.topic or "",
+                        )
+                    )
+                    else ""
+                )
+                or any(
+                    role.mention in (match_.group(1) if match_ else "")
+                    for role in ctx.author.roles
+                )
             )
         ):
             raise (
