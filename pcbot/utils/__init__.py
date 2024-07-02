@@ -499,7 +499,9 @@ async def initialize_pgcbots_db_schema(db: DatabaseDict, config: dict[str, Any])
             + (
                 "initial "
                 if is_initial_migration
-                else "automatic " if config.get("auto_migrate") else ""
+                else "automatic "
+                if config.get("auto_migrate")
+                else ""
             )
             + "bot database migration..."
         )

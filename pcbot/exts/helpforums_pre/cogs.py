@@ -411,7 +411,6 @@ class HelpForumsPreCog(BaseExtensionCog, name="helpforums-pre"):
         elif (
             not caution_types
         ) and bad_help_thread_data_exists:  # delete caution messages
-
             bad_thread_data = await self.fetch_bad_help_thread_data(thread.id)
 
             for msg_id in bad_thread_data["caution_message_ids"]:
@@ -899,7 +898,9 @@ class HelpForumsPreCog(BaseExtensionCog, name="helpforums-pre"):
                                 + (
                                     "the OP"
                                     if by_op
-                                    else "an admin" if by_admin else "a Helpfulie"
+                                    else "an admin"
+                                    if by_admin
+                                    else "a Helpfulie"
                                 )
                                 + " (via adding a ✅ reaction).",
                                 applied_tags=new_tags,
@@ -987,7 +988,9 @@ class HelpForumsPreCog(BaseExtensionCog, name="helpforums-pre"):
                                 + (
                                     "the OP"
                                     if by_op
-                                    else "an admin" if by_admin else "a Helpfulie"
+                                    else "an admin"
+                                    if by_admin
+                                    else "a Helpfulie"
                                 )
                                 + " (via removing a ✅ reaction).",
                             )

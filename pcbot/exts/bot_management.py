@@ -139,12 +139,12 @@ class BotManagementCog(BaseExtensionCog, name="bot-management"):
         escaped_cmd_text = discord.utils.escape_markdown(ctx.message.content)
 
         with io.StringIO(ctx.message.content) as log_buffer:
-            log_txt_file = discord.File(log_buffer, filename="command.txt") # type: ignore
-        
+            log_txt_file = discord.File(log_buffer, filename="command.txt")  # type: ignore
+
         invocation_embed_dict = dict(
             author=dict(
                 name=f"{ctx.author}",
-                icon_url= f"{ctx.author.avatar or ctx.author.default_avatar}",
+                icon_url=f"{ctx.author.avatar or ctx.author.default_avatar}",
             ),
             description=escaped_cmd_text
             if len(escaped_cmd_text) <= 4095

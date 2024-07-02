@@ -284,7 +284,7 @@ class Showcasing(BaseExtensionCog, name="showcasing"):
                             + (
                                 f"{rank_emoji}: {thread_reactions_count}"
                                 if rank_emoji
-                                else f"{thread_reactions_count}: Unique | " 
+                                else f"{thread_reactions_count}: Unique | "
                                 + ", ".join(
                                     f"{reaction.emoji}: {reaction.count}"
                                     for reaction in starter_message.reactions
