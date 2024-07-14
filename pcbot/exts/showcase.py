@@ -4,11 +4,12 @@ Copyright (c) 2022-present pygame-community.
 """
 
 import asyncio
+from collections.abc import Collection
 import datetime
 import itertools
 import re
 import time
-
+from typing import NotRequired, TypedDict
 
 import discord
 from discord.ext import commands
@@ -22,15 +23,29 @@ from ..base import BaseExtensionCog
 BotT = snakecore.commands.Bot | snakecore.commands.AutoShardedBot
 
 
+class ShowcaseChannelConfig(TypedDict):
+    """A typed dict for specifying showcase channel configurations."""
+
+    channel_id: int
+    default_auto_archive_duration: NotRequired[int]
+    default_thread_slowmode_delay: NotRequired[int]
+
+
 class Showcasing(BaseExtensionCog, name="showcasing"):
-    """A cog for managing showcase forum channels."""
+    """A cog for managing showcase forum/threaded channels."""
 
     def __init__(
-        self, bot: BotT, showcase_channel_id: int, theme_color: int | discord.Color = 0
+        self,
+        bot: BotT,
+        showcase_channels_config: Collection[ShowcaseChannelConfig],
+        theme_color: int | discord.Color = 0,
     ) -> None:
         super().__init__(bot, theme_color=theme_color)
-        self.showcase_channel_id = showcase_channel_id
-        self.entry_post_deletion_dict: dict[int, tuple[asyncio.Task[None], int]] = {}
+        self.showcase_channels_config: dict[int, ShowcaseChannelConfig] = {
+            showcase_channel_config["channel_id"]: showcase_channel_config
+            for showcase_channel_config in showcase_channels_config
+        }
+        self.entry_message_deletion_dict: dict[int, tuple[asyncio.Task[None], int]] = {}
 
     @commands.guild_only()
     @commands.max_concurrency(1, per=commands.BucketType.guild, wait=True)
@@ -336,8 +351,10 @@ class Showcasing(BaseExtensionCog, name="showcasing"):
             )
 
     @staticmethod
-    async def delete_bad_thread(thread: discord.Thread, delay: float = 0.0):
-        """A function to pardon a bad thread with a grace period. If this coroutine is not cancelled during the
+    async def delete_bad_message_with_thread(
+        message: discord.Message, delay: float = 0.0
+    ):
+        """A function to pardon a bad message and its post/thread (if present) with a grace period. If this coroutine is not cancelled during the
         grace period specified in `delay` in seconds, it will delete `thread`, if possible.
         """
         try:
@@ -347,14 +364,17 @@ class Showcasing(BaseExtensionCog, name="showcasing"):
 
         else:
             try:
-                await thread.delete()
+                if isinstance(message.channel, discord.Thread):
+                    await message.channel.delete()
+
+                await message.delete()
             except discord.NotFound:
-                # don't error here if post was already deleted
+                # don't error here if thread and/or message were already deleted
                 pass
 
     @staticmethod
-    def thread_validity_check(
-        thread: discord.Thread, min_chars=32, max_chars=float("inf")
+    def showcase_message_validity_check(
+        message: discord.Message, min_chars=32, max_chars=float("inf")
     ):
         """Checks if a thread's starter message has the right format.
 
@@ -364,18 +384,15 @@ class Showcasing(BaseExtensionCog, name="showcasing"):
             True/False
         """
 
-        message = thread.starter_message
-
-        if not message:
-            return True
-
         search_obj = re.search(
             snakecore.utils.regex_patterns.URL, message.content or ""
         )
         link_in_msg = bool(search_obj)
         first_link_str = search_obj.group() if link_in_msg else ""
 
-        char_length = len(message.content) + len(thread.name)
+        char_length = len(message.content) + len(
+            message.channel.name if isinstance(message.channel, discord.Thread) else ""
+        )
 
         if (
             message.content
@@ -391,7 +408,10 @@ class Showcasing(BaseExtensionCog, name="showcasing"):
 
     @commands.Cog.listener()
     async def on_thread_create(self, thread: discord.Thread):
-        if thread.parent_id != self.showcase_channel_id:
+        if not (
+            isinstance(thread.parent, discord.ForumChannel)
+            and thread.parent_id in self.showcase_channels_config
+        ):
             return
 
         try:
@@ -399,28 +419,153 @@ class Showcasing(BaseExtensionCog, name="showcasing"):
         except discord.NotFound:
             return
 
-        if not self.thread_validity_check(thread):
+        if not self.showcase_message_validity_check(message):
             deletion_datetime = datetime.datetime.now(
                 datetime.timezone.utc
             ) + datetime.timedelta(minutes=5)
             warn_msg = await message.reply(
-                "Your post must contain an attachment or text and safe links to be valid.\n\n"
+                "Your message must contain an attachment or text and safe links to be valid.\n\n"
                 "- Attachment-only entries must be in reference to a previous post of yours.\n"
                 "- Text-only posts must contain at least 32 characters (including their title "
                 "and including links, but not links alone).\n\n"
-                " If no changes are made, your post will be"
-                f" deleted {snakecore.utils.create_markdown_timestamp(deletion_datetime, 'R')}."
+                " If no changes are made, your message (and its thread/post) will be "
+                f"deleted {snakecore.utils.create_markdown_timestamp(deletion_datetime, 'R')}."
             )
-            self.entry_post_deletion_dict[thread.id] = (
-                asyncio.create_task(self.delete_bad_thread(thread, delay=300)),
+            self.entry_message_deletion_dict[message.id] = (
+                asyncio.create_task(
+                    self.delete_bad_message_with_thread(message, delay=300)
+                ),
+                warn_msg.id,
+            )
+
+    async def prompt_author_for_feedback_thread(self, message: discord.Message):
+        assert (
+            message.guild
+            and self.bot.user
+            and (bot_member := message.guild.get_member(self.bot.user.id))
+        )
+        bot_perms = message.channel.permissions_for(bot_member)
+
+        if not bot_perms.create_public_threads:
+            return
+
+        deletion_datetime = datetime.datetime.now(
+            datetime.timezone.utc
+        ) + datetime.timedelta(minutes=1)
+
+        alert_msg = await message.reply(
+            content=f"Need a feedback thread?\n\n-# This message will be deleted "
+            + snakecore.utils.create_markdown_timestamp(deletion_datetime, "R")
+            + ".",
+        )
+
+        await alert_msg.add_reaction("✅")
+        await alert_msg.add_reaction("❌")
+
+        try:
+            event = await self.bot.wait_for(
+                "raw_reaction_add",
+                check=lambda event: event.message_id == alert_msg.id
+                and (
+                    event.user_id == message.author.id
+                    or (
+                        event.member
+                        and (not event.member.bot)
+                        and (
+                            (
+                                perms := message.channel.permissions_for(event.member)
+                            ).administrator
+                            or perms.manage_messages
+                        )
+                    )
+                )
+                and (
+                    snakecore.utils.is_emoji_equal(event.emoji, "✅")
+                    or snakecore.utils.is_emoji_equal(event.emoji, "❌")
+                ),
+                timeout=60,
+            )
+        except asyncio.TimeoutError:
+            try:
+                await alert_msg.delete()
+            except discord.NotFound:
+                pass
+        else:
+            if snakecore.utils.is_emoji_equal(event.emoji, "✅"):
+                await message.create_thread(
+                    name=(
+                        "Quick Showcase Feedback Thread for "
+                        + f"@{message.author.name} | {str(message.author.id)[-6:]}"
+                    )[:100],
+                    auto_archive_duration=(
+                        self.showcase_channels_config[message.channel.id].get(
+                            "default_auto_archive_duration", 60
+                        )
+                        if bot_perms.manage_threads
+                        else discord.utils.MISSING
+                    ),  # type: ignore
+                    slowmode_delay=(
+                        self.showcase_channels_config[message.channel.id].get(
+                            "default_thread_slowmode_delay",
+                        )
+                        if bot_perms.manage_threads
+                        else None
+                    ),  # type: ignore
+                    reason="A quick showcase message author requested a feedback "
+                    "thread.",
+                )
+
+            try:
+                await alert_msg.delete()
+            except discord.NotFound:
+                pass
+
+    @commands.Cog.listener()
+    async def on_message(self, message: discord.Message):
+        if not (
+            (not message.author.bot)
+            and (
+                isinstance(message.channel, discord.TextChannel)
+                and message.channel.id
+                in self.showcase_channels_config  # is message in a showcase text channel
+            )
+        ):
+            return
+
+        if self.showcase_message_validity_check(message):
+            await self.prompt_author_for_feedback_thread(message)
+        else:
+            deletion_datetime = datetime.datetime.now(
+                datetime.timezone.utc
+            ) + datetime.timedelta(minutes=5)
+            warn_msg = await message.reply(
+                "Your message must contain an attachment or text and safe links to be valid.\n\n"
+                "- Attachment-only entries must be in reference to a previous post of yours.\n"
+                "- Text-only posts must contain at least 32 characters (including their title "
+                "and including links, but not links alone).\n\n"
+                " If no changes are made, your message (and its thread/post) will be "
+                f"deleted {snakecore.utils.create_markdown_timestamp(deletion_datetime, 'R')}."
+            )
+            self.entry_message_deletion_dict[message.id] = (
+                asyncio.create_task(
+                    self.delete_bad_message_with_thread(message, delay=300)
+                ),
                 warn_msg.id,
             )
 
     @commands.Cog.listener()
     async def on_message_edit(self, old: discord.Message, new: discord.Message):
         if not (
-            isinstance(new.channel, discord.Thread)
-            and new.channel.parent_id == self.showcase_channel_id
+            (not new.author.bot)
+            and (
+                new.channel.id
+                in self.showcase_channels_config  # is message in a showcase text channel
+                or (
+                    isinstance(new.channel, discord.Thread)
+                    and new.channel.parent_id in self.showcase_channels_config
+                    and new.id == new.channel.id
+                )  # is starter message of a post in a showcase forum
+            )
             and (
                 new.content != old.content
                 or new.embeds != old.embeds
@@ -429,18 +574,20 @@ class Showcasing(BaseExtensionCog, name="showcasing"):
         ):
             return
 
-        thread = new.channel
-
-        if not self.thread_validity_check(thread):
-            if thread.id in self.entry_post_deletion_dict:
-                deletion_data_tuple = self.entry_post_deletion_dict[thread.id]
+        if not self.showcase_message_validity_check(new):
+            if new.id in self.entry_message_deletion_dict:
+                deletion_data_tuple = self.entry_message_deletion_dict[new.id]
                 deletion_task = deletion_data_tuple[0]
                 if deletion_task.done():
-                    del self.entry_post_deletion_dict[thread.id]
+                    del self.entry_message_deletion_dict[new.id]
                 else:
                     try:
                         deletion_task.cancel()  # try to cancel deletion after noticing edit by sender
-                        warn_msg = await thread.fetch_message(deletion_data_tuple[1])
+
+                        # fetch warning message from inside a post or refrencing the target message in a text showcase channel
+                        warn_msg = await new.channel.fetch_message(
+                            deletion_data_tuple[1]
+                        )
                         deletion_datetime = datetime.datetime.now(
                             datetime.timezone.utc
                         ) + datetime.timedelta(minutes=5)
@@ -454,25 +601,25 @@ class Showcasing(BaseExtensionCog, name="showcasing"):
                                 "- Text-only posts must contain at least 32 "
                                 "characters (including their title "
                                 "and including links, but not links alone).\n\n"
-                                " If no changes are made, your post will be"
-                                f" deleted "
+                                " If no changes are made, your post will be "
+                                f"deleted "
                                 + snakecore.utils.create_markdown_timestamp(
                                     deletion_datetime, "R"
                                 )
                                 + "."
                             )
                         )
-                        self.entry_post_deletion_dict[thread.id] = (
+                        self.entry_message_deletion_dict[new.id] = (
                             asyncio.create_task(
-                                self.delete_bad_thread(thread, delay=300)
+                                self.delete_bad_message_with_thread(new, delay=300)
                             ),
                             warn_msg.id,
                         )
                     except (
                         discord.NotFound
                     ):  # cancelling didn't work, warning and post were already deleted
-                        if thread.id in self.entry_post_deletion_dict:
-                            del self.entry_post_deletion_dict[thread.id]
+                        if new.id in self.entry_message_deletion_dict:
+                            del self.entry_message_deletion_dict[new.id]
 
             else:  # an edit led to an invalid post from a valid one
                 deletion_datetime = datetime.datetime.now(
@@ -491,66 +638,97 @@ class Showcasing(BaseExtensionCog, name="showcasing"):
                     + "."
                 )
 
-                self.entry_post_deletion_dict[thread.id] = (
-                    asyncio.create_task(self.delete_bad_thread(thread, delay=300)),
+                self.entry_message_deletion_dict[new.id] = (
+                    asyncio.create_task(
+                        self.delete_bad_message_with_thread(new, delay=300)
+                    ),
                     warn_msg.id,
                 )
-            return
 
         elif (
-            self.thread_validity_check(thread)
-            and thread.id in self.entry_post_deletion_dict
-        ):  # an invalid entry was corrected
-            deletion_data_tuple = self.entry_post_deletion_dict[thread.id]
+            self.showcase_message_validity_check(new)
+        ) and new.id in self.entry_message_deletion_dict:  # an invalid entry was corrected
+            deletion_data_tuple = self.entry_message_deletion_dict[new.id]
             deletion_task = deletion_data_tuple[0]
             if not deletion_task.done():  # too late to do anything
                 try:
                     deletion_task.cancel()  # try to cancel deletion after noticing valid edit by sender
                     await discord.PartialMessage(
-                        channel=thread, id=deletion_data_tuple[1]
+                        channel=new.channel, id=deletion_data_tuple[1]
                     ).delete()
                 except (
                     discord.NotFound
                 ):  # cancelling didn't work, warning was already deleted
                     pass
 
-            if thread.id in self.entry_post_deletion_dict:
-                del self.entry_post_deletion_dict[thread.id]
+            if new.id in self.entry_message_deletion_dict:
+                del self.entry_message_deletion_dict[new.id]
+
+            if isinstance(new.channel, discord.TextChannel):
+                try:
+                    # check if a feedback thread was previously created for this message
+                    _ = new.channel.get_thread(
+                        new.id
+                    ) or await new.channel.guild.fetch_channel(new.id)
+                except discord.NotFound:
+                    pass
+                else:
+                    return
+
+                await self.prompt_author_for_feedback_thread(new)
 
     @commands.Cog.listener()
     async def on_message_delete(self, message: discord.Message):
         if not (
-            isinstance(message.channel, discord.Thread)
-            and message.channel.parent_id == self.showcase_channel_id
-            and message.channel.id == message.id  # is starter message
+            (not message.author.bot)
+            and (
+                message.channel.id
+                in self.showcase_channels_config  # is message in a showcase text channel
+                or (
+                    isinstance(message.channel, discord.Thread)
+                    and message.channel.parent_id in self.showcase_channels_config
+                    and message.id == message.channel.id
+                )  # is starter message of a post in a showcase forum
+            )
         ):
             return
 
-        thread = message.channel
-
         if (
-            thread.id in self.entry_post_deletion_dict
+            message.id in self.entry_message_deletion_dict
         ):  # for case where user deletes their bad entry by themselves
-            deletion_data_tuple = self.entry_post_deletion_dict[thread.id]
+            deletion_data_tuple = self.entry_message_deletion_dict[message.id]
             deletion_task = deletion_data_tuple[0]
             if not deletion_task.done():
                 deletion_task.cancel()
                 try:
                     await discord.PartialMessage(
-                        channel=thread, id=deletion_data_tuple[1]
+                        channel=message.channel, id=deletion_data_tuple[1]
                     ).delete()
                 except discord.NotFound:
-                    # warning and post were already deleted
+                    # warning message and post were already deleted
                     pass
 
-            del self.entry_post_deletion_dict[thread.id]
+            del self.entry_message_deletion_dict[message.id]
 
-        alert_msg = await thread.send(
+        alert_destination = message.channel
+
+        if isinstance(message.channel, discord.TextChannel):
+            try:
+                alert_destination = message.channel.get_thread(
+                    message.id
+                ) or await message.channel.guild.fetch_channel(message.id)
+            except discord.NotFound:
+                return
+
+        if not isinstance(alert_destination, discord.Thread):
+            return
+
+        alert_msg = await alert_destination.send(
             embed=discord.Embed.from_dict(
                 dict(
-                    title="Post scheduled for deletion",
+                    title="Post/Thread scheduled for deletion",
                     description=(
-                        "This post is scheduled for deletion:\n\n"
+                        "This post/thread is scheduled for deletion:\n\n"
                         "The OP has deleted their starter message."
                         + "\n\nIt will be deleted "
                         f"**<t:{int(time.time()+300)}:R>**."
@@ -568,13 +746,13 @@ class Showcasing(BaseExtensionCog, name="showcasing"):
                 "raw_reaction_add",
                 check=lambda event: event.message_id == alert_msg.id
                 and (
-                    event.user_id == thread.owner_id
+                    event.user_id == message.author.id
                     or (
                         event.member
-                        and not event.member.bot
+                        and (not event.member.bot)
                         and (
                             (
-                                perms := thread.permissions_for(event.member)
+                                perms := message.channel.permissions_for(event.member)
                             ).administrator
                             or perms.manage_messages
                         )
@@ -585,7 +763,7 @@ class Showcasing(BaseExtensionCog, name="showcasing"):
             )
         except asyncio.TimeoutError:
             try:
-                await thread.delete()
+                await alert_destination.delete()
             except discord.NotFound:
                 pass
         else:
@@ -597,21 +775,23 @@ class Showcasing(BaseExtensionCog, name="showcasing"):
     @commands.Cog.listener()
     async def on_raw_thread_delete(self, payload: discord.RawThreadDeleteEvent):
         if (
-            payload.parent_id != self.showcase_channel_id
-            or payload.thread_id not in self.entry_post_deletion_dict
+            payload.parent_id not in self.showcase_channels_config
+            or payload.thread_id not in self.entry_message_deletion_dict
         ):
             return
 
-        deletion_data_tuple = self.entry_post_deletion_dict[payload.thread_id]
+        deletion_data_tuple = self.entry_message_deletion_dict[payload.thread_id]
         deletion_task = deletion_data_tuple[0]
         if not deletion_task.done():
             deletion_task.cancel()
 
-        del self.entry_post_deletion_dict[payload.thread_id]
+        del self.entry_message_deletion_dict[payload.thread_id]
 
 
 @snakecore.commands.decorators.with_config_kwargs
 async def setup(
-    bot: BotT, showcase_channel_id: int, theme_color: int | discord.Color = 0
+    bot: BotT,
+    showcase_channels_config: Collection[ShowcaseChannelConfig],
+    theme_color: int | discord.Color = 0,
 ):
-    await bot.add_cog(Showcasing(bot, showcase_channel_id, theme_color))
+    await bot.add_cog(Showcasing(bot, showcase_channels_config, theme_color))
