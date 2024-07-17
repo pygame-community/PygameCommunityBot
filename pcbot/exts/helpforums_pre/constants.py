@@ -107,7 +107,10 @@ INVALID_HELP_THREAD_EMBEDS = {
     "thread_title_too_short": {
         "title": "Whoops, your post title must be at least "
         f"{THREAD_TITLE_MINIMUM_LENGTH} characters long (excluding numbers)",
-        "description": "Your post title must be at least "
+        "description": "### Did you read our 👉 "
+        "[Post & Question Guide](https://discord.com/channels/772505616680878080/1093999727667855380/1094000466712604681)? 👈\n\n"
+        "Your post title must be at least "
+        " "
         f"**{THREAD_TITLE_MINIMUM_LENGTH}** characters long, so I'm "
         "forced to put a slowmode delay of "
         f"{THREAD_TITLE_TOO_SHORT_SLOWMODE_DELAY//60} minute{'s'*(THREAD_TITLE_TOO_SHORT_SLOWMODE_DELAY > 60)} "
@@ -124,7 +127,9 @@ INVALID_HELP_THREAD_EMBEDS = {
     "member_asking_for_help": {
         "title": "Please don't ask for help in your post title (no need to). "
         "We'd love to help you either way!",
-        "description": "We already know you need help. "
+        "description": "### Did you read our 👉 "
+        "[Post & Question Guide](https://discord.com/channels/772505616680878080/1093999727667855380/1094000466712604681)? 👈\n\n"
+        "We already know you need help. "
         "Please write a post title and text that describes your actual "
         "issue in more detail.\n"
         "Also send code snippets (no code screenshots), screenshots and "
@@ -139,7 +144,9 @@ INVALID_HELP_THREAD_EMBEDS = {
     },
     "member_exclaiming_about_not_working_code": {
         "title": "Something doesn't work? Please tell us what.",
-        "description": "Edit your help post title and text "
+        "description": "### Did you read our 👉 "
+        "[Post & Question Guide](https://discord.com/channels/772505616680878080/1093999727667855380/1094000466712604681)? 👈\n\n"
+        "Edit your help post title and text "
         "to describe the problem that led to that diagnosis. What made your code "
         "stop working? What are you trying to do?\n"
         "Also send code snippets (no code screenshots), screenshots and "
@@ -154,7 +161,9 @@ INVALID_HELP_THREAD_EMBEDS = {
     "member_asking_for_code": {
         "title": "Please don't ask if anybody can write your code, game, project or "
         "assignment for you.",
-        "description": "All helpers here are volunteers, who show people how to "
+        "description": "### Did you read our 👉 "
+        "[Post & Question Guide](https://discord.com/channels/772505616680878080/1093999727667855380/1094000466712604681)? 👈\n\n"
+        "All helpers here are volunteers, who show people how to "
         "improve or add things in their code by themselves. They don't do "
         "all the work for them. Show us what you are working on, what you've "
         "tried, as well as where you got stuck. "
@@ -170,7 +179,9 @@ INVALID_HELP_THREAD_EMBEDS = {
     "member_asking_about_problem_with_code": {
         "title": "There's a problem with your code, game, project or assignment? "
         "Please tell us what are you struggling with.",
-        "description": "Use your help post title and your starter message "
+        "description": "### Did you read our 👉 "
+        "[Post & Question Guide](https://discord.com/channels/772505616680878080/1093999727667855380/1094000466712604681)? 👈\n\n"
+        "Use your help post title and your starter message "
         "to describe how the problems with it came up. What made your code stop "
         "working? What are you trying to do? "
         "Remember to send along code snippets (no code screenshots), screenshots "
