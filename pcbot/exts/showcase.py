@@ -441,6 +441,7 @@ class Showcasing(BaseExtensionCog, name="showcasing"):
     async def prompt_author_for_feedback_thread(self, message: discord.Message):
         assert (
             message.guild
+            and isinstance(message.channel, discord.TextChannel)
             and self.bot.user
             and (bot_member := message.guild.get_member(self.bot.user.id))
         )
@@ -494,7 +495,7 @@ class Showcasing(BaseExtensionCog, name="showcasing"):
             if snakecore.utils.is_emoji_equal(event.emoji, "✅"):
                 await message.create_thread(
                     name=(
-                        "Quick Showcase Feedback Thread for "
+                        f"Feedback for "
                         + f"@{message.author.name} | {str(message.author.id)[-6:]}"
                     )[:100],
                     auto_archive_duration=(
@@ -511,8 +512,8 @@ class Showcasing(BaseExtensionCog, name="showcasing"):
                         if bot_perms.manage_threads
                         else None
                     ),  # type: ignore
-                    reason="A quick showcase message author requested a feedback "
-                    "thread.",
+                    reason=f"A '#{message.channel.name}' message "
+                    "author requested a feedback thread.",
                 )
 
             try:
