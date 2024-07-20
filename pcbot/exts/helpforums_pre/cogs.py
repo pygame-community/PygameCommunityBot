@@ -778,7 +778,8 @@ class HelpForumsPreCog(BaseExtensionCog, name="helpforums-pre"):
         cached_message = payload.cached_message
         if (
             cached_message
-            and cached_message.channel.id not in HELP_FORUM_CHANNEL_IDS.values()
+            and isinstance(cached_message.channel, discord.Thread)
+            and cached_message.channel.parent_id not in HELP_FORUM_CHANNEL_IDS.values()
         ):
             return
 
@@ -898,9 +899,7 @@ class HelpForumsPreCog(BaseExtensionCog, name="helpforums-pre"):
                                 + (
                                     "the OP"
                                     if by_op
-                                    else "an admin"
-                                    if by_admin
-                                    else "a Helpfulie"
+                                    else "an admin" if by_admin else "a Helpfulie"
                                 )
                                 + " (via adding a ✅ reaction).",
                                 applied_tags=new_tags,
@@ -988,9 +987,7 @@ class HelpForumsPreCog(BaseExtensionCog, name="helpforums-pre"):
                                 + (
                                     "the OP"
                                     if by_op
-                                    else "an admin"
-                                    if by_admin
-                                    else "a Helpfulie"
+                                    else "an admin" if by_admin else "a Helpfulie"
                                 )
                                 + " (via removing a ✅ reaction).",
                             )
