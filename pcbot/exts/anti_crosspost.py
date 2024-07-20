@@ -90,7 +90,9 @@ class AntiCrosspostCog(BaseExtensionCog, name="anti-crosspost"):
         ):
             break_outer = False
             for j in range(len(messages)):
-                if crosspost_cmp(message, messages[j]):
+                if message.channel.id != messages[j].channel.id and crosspost_cmp(
+                    message, messages[j]
+                ):
                     messages.append(message)
 
                     self.crossposting_cache[message.author.id]["alert_message_ids"].add(
