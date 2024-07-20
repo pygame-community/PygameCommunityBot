@@ -131,58 +131,56 @@ class AntiCrosspostCog(BaseExtensionCog, name="anti-crosspost"):
         ):
             return
 
-        stale_alert_message_ids: list[int] = []
-
         if message.author.id not in self.crossposting_cache:
             return
-        else:
-            for i, messages in enumerate(
-                self.crossposting_cache[message.author.id]["message_groups"]
-            ):
-                for j in reversed(range(len(messages))):
-                    if message.id == messages[j].id:
-                        del messages[j]  # remove the message from the crosspost group
-                        for message_id in self.crossposting_cache[message.author.id][
-                            "alert_message_ids"
-                        ]:
 
-                            try:
-                                alert_message = discord.utils.find(
-                                    lambda m: m.id == message_id,
-                                    self.bot.cached_messages,
-                                )
-                                if not alert_message:
-                                    alert_message = await message.channel.fetch_message(
-                                        message_id
-                                    )
-                            except discord.NotFound:
-                                continue
-
-                            if (
-                                alert_message.reference
-                                and alert_message.reference.message_id == message.id
-                            ):
-                                # mark the alert message as stale if it references the deleted message
-                                stale_alert_message_ids.append(message_id)
-                        break
-
-                if len(messages) == 1:
-                    # mark all alert messages for this group as stale
-                    # as there is only one message left
-                    stale_alert_message_ids.extend(
+        stale_alert_message_ids: list[int] = []
+        for messages in self.crossposting_cache[message.author.id]["message_groups"]:
+            for j in reversed(range(len(messages))):
+                if message.id == messages[j].id:
+                    del messages[j]  # remove the message from the crosspost group
+                    for alert_message_id in tuple(
                         self.crossposting_cache[message.author.id]["alert_message_ids"]
-                    )
-                    self.crossposting_cache[message.author.id][
-                        "alert_message_ids"
-                    ].clear()
+                    ):
 
-            for alert_message_id in stale_alert_message_ids:
-                try:
-                    await discord.PartialMessage(
-                        channel=message.channel, id=alert_message_id
-                    ).delete()
-                except (discord.NotFound, discord.Forbidden):
-                    pass
+                        try:
+                            alert_message = discord.utils.find(
+                                lambda m: m.id == alert_message_id,
+                                self.bot.cached_messages,
+                            )
+                            if not alert_message:
+                                alert_message = await message.channel.fetch_message(
+                                    alert_message_id
+                                )
+                        except discord.NotFound:
+                            continue
+
+                        if (
+                            alert_message.reference
+                            and alert_message.reference.message_id == message.id
+                        ):
+                            self.crossposting_cache[message.author.id][
+                                "alert_message_ids"
+                            ].remove(alert_message_id)
+                            # mark the alert message as stale if it references the deleted message
+                            stale_alert_message_ids.append(alert_message_id)
+                    break
+
+            if len(messages) == 1:
+                # mark all alert messages for this crosspost group as stale
+                # as there is only one message left
+                stale_alert_message_ids.extend(
+                    self.crossposting_cache[message.author.id]["alert_message_ids"]
+                )
+                self.crossposting_cache[message.author.id]["alert_message_ids"].clear()
+
+        for alert_message_id in stale_alert_message_ids:
+            try:
+                await discord.PartialMessage(
+                    channel=message.channel, id=alert_message_id
+                ).delete()
+            except (discord.NotFound, discord.Forbidden):
+                pass
 
 
 @snakecore.commands.decorators.with_config_kwargs
