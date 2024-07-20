@@ -58,10 +58,18 @@ class AntiCrosspostCog(BaseExtensionCog, name="anti-crosspost"):
         if message.author.bot or not (
             (
                 message.channel.id in self.channel_ids
-                or isinstance(message.channel, (discord.abc.GuildChannel))
-                and message.channel.category_id in self.channel_ids
-                or isinstance(message.channel, discord.Thread)
-                and message.channel.parent_id in self.channel_ids
+                or (
+                    isinstance(message.channel, (discord.abc.GuildChannel))
+                    and message.channel.category_id in self.channel_ids
+                )
+                or (
+                    isinstance(message.channel, discord.Thread)
+                    and (
+                        message.channel.parent_id in self.channel_ids
+                        or message.channel.parent
+                        and message.channel.parent.category_id in self.channel_ids
+                    )
+                )
             )
             and message.type == discord.MessageType.default
         ):
@@ -80,10 +88,9 @@ class AntiCrosspostCog(BaseExtensionCog, name="anti-crosspost"):
         if (
             len(self.crossposting_cache[message.author.id]["message_groups"])
             > self.max_tracked_message_groups_per_user
+            and len(self.crossposting_cache[message.author.id]["message_groups"][0]) < 2
         ):
             self.crossposting_cache[message.author.id]["message_groups"].pop(0)
-
-        # To fix the code below from sending an
 
         for i, messages in enumerate(
             self.crossposting_cache[message.author.id]["message_groups"]
