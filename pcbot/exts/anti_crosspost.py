@@ -27,17 +27,25 @@ def crosspost_cmp(message: discord.Message, other: discord.Message) -> bool:
         bool: True if the messages are similar enough to be considered
         duplicates, otherwise False.
     """
-    if not message.content or not other.content:
-        return False
 
-    hamming_score = sum(x != y for x, y in zip(message.content, other.content)) / max(
-        len(message.content), len(other.content)
-    )
+    similarity_score = 0.0
+    matching_attachments = False
+    if message.content and other.content:
+        hamming_score = sum(
+            x != y for x, y in zip(message.content, other.content)
+        ) / max(len(message.content), len(other.content))
+        similarity_score = min(max(0, 1 - hamming_score), 1)
 
-    return hamming_score < 0.20 or any(
-        att1.filename == att2.filename and att1.size == att2.size
-        for att1, att2 in zip(message.attachments, other.attachments)
-    )
+    elif message.attachments and other.attachments:
+        matching_attachments = all(
+            att1.filename == att2.filename and att1.size == att2.size
+            for att1, att2 in zip(
+                sorted(message.attachments, key=lambda x: (x.filename, x.size)),
+                sorted(other.attachments, key=lambda x: (x.filename, x.size)),
+            )
+        )
+
+    return similarity_score > 0.80 or matching_attachments
 
 
 class UserCrosspostCache(TypedDict):
