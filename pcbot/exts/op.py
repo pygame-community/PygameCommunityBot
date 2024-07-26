@@ -151,7 +151,6 @@ class OPCog(BaseExtensionCog, name="op"):
                     ),
                     timeout=2,
                 )
-                print("HERE")
             except asyncio.TimeoutError:
                 pass
             else:

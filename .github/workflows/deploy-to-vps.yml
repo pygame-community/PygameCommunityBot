@@ -19,11 +19,10 @@ jobs:
           SSH_PRIVATE_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
           REMOTE_HOST: ${{ secrets.VPS_HOST }}
           REMOTE_USER: ${{ secrets.VPS_USER }}
-          SOURCE: "."
-          TARGET: ~/PygameCommunityBot/
           SCRIPT_AFTER: |
             cp ~/config.py ~/PygameCommunityBot/config.py
             cp ~/.env ~/PygameCommunityBot/.env
+            cd ~/PygameCommunityBot
             docker compose stop
             docker compose rm -f
             sleep 60 && docker compose up -d --build

@@ -3,13 +3,15 @@ This project has been licensed under the MIT license.
 Copyright (c) 2022-present pygame-community.
 """
 
+import abc
 import asyncio
 from collections.abc import Collection
 import datetime
+import enum
 import itertools
 import re
 import time
-from typing import NotRequired, TypedDict
+from typing import Any, Callable, Literal, NotRequired, Protocol, TypedDict
 
 import discord
 from discord.ext import commands
@@ -18,17 +20,11 @@ from snakecore.commands import flagconverter_kwargs
 from snakecore.commands import UnicodeEmoji
 from snakecore.commands.converters import DateTime
 
-from ..base import BaseExtensionCog
+from .utils import ShowcaseChannelConfig, validate_message
+
+from ...base import BaseExtensionCog
 
 BotT = snakecore.commands.Bot | snakecore.commands.AutoShardedBot
-
-
-class ShowcaseChannelConfig(TypedDict):
-    """A typed dict for specifying showcase channel configurations."""
-
-    channel_id: int
-    default_auto_archive_duration: NotRequired[int]
-    default_thread_slowmode_delay: NotRequired[int]
 
 
 class Showcasing(BaseExtensionCog, name="showcasing"):
@@ -372,39 +368,21 @@ class Showcasing(BaseExtensionCog, name="showcasing"):
                 # don't error here if thread and/or message were already deleted
                 pass
 
-    @staticmethod
     def showcase_message_validity_check(
-        message: discord.Message, min_chars=32, max_chars=float("inf")
-    ):
-        """Checks if a thread's starter message has the right format.
+        self,
+        message: discord.Message,
+    ) -> tuple[bool, str | None]:
+        """Checks if a showcase message has the right format.
 
         Returns
         -------
-        bool:
-            True/False
+        tuple[bool, str | None]:
+            A tuple containing a boolean indicating whether the message is valid or not, and a string describing the reason why it is invalid if it is not valid.
         """
-
-        search_obj = re.search(
-            snakecore.utils.regex_patterns.URL, message.content or ""
+        return validate_message(
+            message,
+            self.showcase_channels_config[message.channel.id]["showcase_message_rules"],
         )
-        link_in_msg = bool(search_obj)
-        first_link_str = search_obj.group() if link_in_msg else ""
-
-        char_length = len(message.content) + len(
-            message.channel.name if isinstance(message.channel, discord.Thread) else ""
-        )
-
-        if (
-            message.content
-            and (link_in_msg and char_length > len(first_link_str))
-            and min_chars <= char_length < max_chars
-        ):
-            return True
-
-        elif message.content and message.attachments:
-            return True
-
-        return False
 
     @commands.Cog.listener()
     async def on_thread_create(self, thread: discord.Thread):
@@ -419,15 +397,15 @@ class Showcasing(BaseExtensionCog, name="showcasing"):
         except discord.NotFound:
             return
 
-        if not self.showcase_message_validity_check(message):
+        is_valid, reason = self.showcase_message_validity_check(message)
+
+        if not is_valid:
             deletion_datetime = datetime.datetime.now(
                 datetime.timezone.utc
             ) + datetime.timedelta(minutes=5)
             warn_msg = await message.reply(
-                "Your message must contain an attachment or text and safe links to be valid.\n\n"
-                "- Attachment-only entries must be in reference to a previous post of yours.\n"
-                "- Text-only posts must contain at least 32 characters (including their title "
-                "and including links, but not links alone).\n\n"
+                "### Invalid showcase message\n\n"
+                f"{reason}\n\n"
                 " If no changes are made, your message (and its thread/post) will be "
                 f"deleted {snakecore.utils.create_markdown_timestamp(deletion_datetime, 'R')}."
             )
@@ -493,28 +471,31 @@ class Showcasing(BaseExtensionCog, name="showcasing"):
                 pass
         else:
             if snakecore.utils.is_emoji_equal(event.emoji, "✅"):
-                await message.create_thread(
-                    name=(
-                        f"Feedback for "
-                        + f"@{message.author.name} | {str(message.author.id)[-6:]}"
-                    )[:100],
-                    auto_archive_duration=(
-                        self.showcase_channels_config[message.channel.id].get(
-                            "default_auto_archive_duration", 60
-                        )
-                        if bot_perms.manage_threads
-                        else discord.utils.MISSING
-                    ),  # type: ignore
-                    slowmode_delay=(
-                        self.showcase_channels_config[message.channel.id].get(
-                            "default_thread_slowmode_delay",
-                        )
-                        if bot_perms.manage_threads
-                        else None
-                    ),  # type: ignore
-                    reason=f"A '#{message.channel.name}' message "
-                    "author requested a feedback thread.",
-                )
+                try:
+                    await message.create_thread(
+                        name=(
+                            f"Feedback for "
+                            + f"@{message.author.name} | {str(message.author.id)[-6:]}"
+                        )[:100],
+                        auto_archive_duration=(
+                            self.showcase_channels_config[message.channel.id].get(
+                                "default_auto_archive_duration", 60
+                            )
+                            if bot_perms.manage_threads
+                            else discord.utils.MISSING
+                        ),  # type: ignore
+                        slowmode_delay=(
+                            self.showcase_channels_config[message.channel.id].get(
+                                "default_thread_slowmode_delay",
+                            )
+                            if bot_perms.manage_threads
+                            else None
+                        ),  # type: ignore
+                        reason=f"A '#{message.channel.name}' message "
+                        "author requested a feedback thread.",
+                    )
+                except discord.HTTPException:
+                    pass
 
             try:
                 await alert_msg.delete()
@@ -533,17 +514,17 @@ class Showcasing(BaseExtensionCog, name="showcasing"):
         ):
             return
 
-        if self.showcase_message_validity_check(message):
+        is_valid, reason = self.showcase_message_validity_check(message)
+
+        if is_valid:
             await self.prompt_author_for_feedback_thread(message)
         else:
             deletion_datetime = datetime.datetime.now(
                 datetime.timezone.utc
             ) + datetime.timedelta(minutes=5)
             warn_msg = await message.reply(
-                "Your message must contain an attachment or text and safe links to be valid.\n\n"
-                "- Attachment-only entries must be in reference to a previous post of yours.\n"
-                "- Text-only posts must contain at least 32 characters (including their title "
-                "and including links, but not links alone).\n\n"
+                "### Invalid showcase message\n\n"
+                f"{reason}\n\n"
                 " If no changes are made, your message (and its thread/post) will be "
                 f"deleted {snakecore.utils.create_markdown_timestamp(deletion_datetime, 'R')}."
             )
@@ -575,7 +556,9 @@ class Showcasing(BaseExtensionCog, name="showcasing"):
         ):
             return
 
-        if not self.showcase_message_validity_check(new):
+        is_valid, reason = self.showcase_message_validity_check(new)
+
+        if not is_valid:
             if new.id in self.entry_message_deletion_dict:
                 deletion_data_tuple = self.entry_message_deletion_dict[new.id]
                 deletion_task = deletion_data_tuple[0]
@@ -594,14 +577,9 @@ class Showcasing(BaseExtensionCog, name="showcasing"):
                         ) + datetime.timedelta(minutes=5)
                         await warn_msg.edit(
                             content=(
-                                "I noticed your edit. However:\n\n"
-                                "Your post must contain an attachment or text and safe "
-                                "links to be valid.\n\n"
-                                "- Attachment-only entries must be in reference to a "
-                                "previous post of yours.\n"
-                                "- Text-only posts must contain at least 32 "
-                                "characters (including their title "
-                                "and including links, but not links alone).\n\n"
+                                "### Invalid showcase message\n\n"
+                                "Your edited showcase message is invalid.\n\n"
+                                f"{reason}\n\n"
                                 " If no changes are made, your post will be "
                                 f"deleted "
                                 + snakecore.utils.create_markdown_timestamp(
@@ -647,7 +625,7 @@ class Showcasing(BaseExtensionCog, name="showcasing"):
                 )
 
         elif (
-            self.showcase_message_validity_check(new)
+            is_valid
         ) and new.id in self.entry_message_deletion_dict:  # an invalid entry was corrected
             deletion_data_tuple = self.entry_message_deletion_dict[new.id]
             deletion_task = deletion_data_tuple[0]
@@ -787,12 +765,3 @@ class Showcasing(BaseExtensionCog, name="showcasing"):
             deletion_task.cancel()
 
         del self.entry_message_deletion_dict[payload.thread_id]
-
-
-@snakecore.commands.decorators.with_config_kwargs
-async def setup(
-    bot: BotT,
-    showcase_channels_config: Collection[ShowcaseChannelConfig],
-    theme_color: int | discord.Color = 0,
-):
-    await bot.add_cog(Showcasing(bot, showcase_channels_config, theme_color))
