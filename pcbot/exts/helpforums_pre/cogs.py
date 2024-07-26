@@ -899,7 +899,9 @@ class HelpForumsPreCog(BaseExtensionCog, name="helpforums-pre"):
                                 + (
                                     "the OP"
                                     if by_op
-                                    else "an admin" if by_admin else "a Helpfulie"
+                                    else "an admin"
+                                    if by_admin
+                                    else "a Helpfulie"
                                 )
                                 + " (via adding a ✅ reaction).",
                                 applied_tags=new_tags,
@@ -987,7 +989,9 @@ class HelpForumsPreCog(BaseExtensionCog, name="helpforums-pre"):
                                 + (
                                     "the OP"
                                     if by_op
-                                    else "an admin" if by_admin else "a Helpfulie"
+                                    else "an admin"
+                                    if by_admin
+                                    else "a Helpfulie"
                                 )
                                 + " (via removing a ✅ reaction).",
                             )
