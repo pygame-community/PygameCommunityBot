@@ -12,17 +12,18 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v2
+
       - name: Deploy to VPS
         uses: easingthemes/ssh-deploy@main
-        env:
+        with:
           SSH_PRIVATE_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
           REMOTE_HOST: ${{ secrets.VPS_HOST }}
           REMOTE_USER: ${{ secrets.VPS_USER }}
-          TARGET: ~/PygameCommunityBot
+          SOURCE: "."
+          TARGET: ~/PygameCommunityBot/
           SCRIPT_AFTER: |
             cp ~/config.py ~/PygameCommunityBot/config.py
             cp ~/.env ~/PygameCommunityBot/.env
-            cd ~/PygameCommunityBot
             docker compose stop
             docker compose rm -f
             sleep 60 && docker compose up -d --build
