@@ -75,7 +75,7 @@ class AntiCrosspostCog(BaseExtensionCog, name="anti-crosspost"):
             bot (BotT): The bot instance.
             channel_ids (Collection[int]): Collection of channel IDs to monitor.
             crosspost_timedelta_threshold (int): Minimum time difference between messages to not be considered crossposts.
-            message_length_threshold (int): Minimum length of a message to be considered.
+            message_length_threshold (int): Minimum length of a text-only message to be considered.
             max_tracked_users (int): Maximum number of users to track.
             max_tracked_message_groups_per_user (int): Maximum number of message
                 groups to track per user.
@@ -103,8 +103,9 @@ class AntiCrosspostCog(BaseExtensionCog, name="anti-crosspost"):
             or not self._is_valid_channel(message.channel)  # type: ignore
             or message.type != discord.MessageType.default
             or (
-                len(message.content) < self.message_length_threshold
+                message.content
                 and not message.attachments
+                and len(message.content) < self.message_length_threshold
             )
         ):
             return
@@ -259,7 +260,7 @@ async def setup(
         max_tracked_users (int): Maximum number of users to track.
         max_tracked_message_groups_per_user (int): Maximum number of message groups to track per user.
         crosspost_timedelta_threshold (int): Minimum time difference between messages to not be considered crossposts.
-        message_length_threshold (int): Minimum length of a message to be considered.
+        message_length_threshold (int): Minimum length of a text-only message to be considered.
         theme_color (int | discord.Color): Theme color for the bot's responses.
     """
     await bot.add_cog(
