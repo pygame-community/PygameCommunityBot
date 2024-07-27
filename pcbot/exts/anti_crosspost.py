@@ -81,9 +81,7 @@ async def crosspost_cmp(message: discord.Message, other: discord.Message) -> boo
 
     if not have_content and (message.content or other.content):
         return False
-    elif not have_attachments and (
-        message.attachments or other.attachments
-    ):
+    elif not have_attachments and (message.attachments or other.attachments):
         return False
     elif have_content and have_attachments:
         return similarity_score > 0.80 and matching_attachments
@@ -91,7 +89,7 @@ async def crosspost_cmp(message: discord.Message, other: discord.Message) -> boo
         return similarity_score > 0.80
     elif have_attachments:
         return matching_attachments
-    
+
     return False
 
 
@@ -244,11 +242,13 @@ class AntiCrosspostCog(BaseExtensionCog, name="anti-crosspost"):
                             user_cache["message_to_alert"].pop(message.id)
                         )
                     break
-            # Mark all alert messages for this crosspost group as stale if the group
+
+            # Mark last alert message for this crosspost group as stale if the group
             # has only one message
-            if len(messages) == 1:
-                stale_alert_message_ids.extend(user_cache["message_to_alert"].values())
-                user_cache["message_to_alert"].clear()
+            if len(messages) == 1 and messages[0].id in user_cache["message_to_alert"]:
+                stale_alert_message_ids.append(
+                    user_cache["message_to_alert"].pop(messages[0].id)
+                )
 
         # Delete stale alert messages
         for alert_message_id in stale_alert_message_ids:
