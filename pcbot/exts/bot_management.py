@@ -516,7 +516,7 @@ class BotManagementCog(BaseExtensionCog, name="bot-management"):
         try:
             script = compile(code.code, "<string>", "eval")  # compile script
             script_start = time.perf_counter()
-            eval_output = eval(script)  # pylint: disable = eval-used
+            eval_output = repr(eval(script))  # pylint: disable = eval-used
             total = time.perf_counter() - script_start
         except Exception as ex:
             raise commands.CommandInvokeError(
@@ -531,9 +531,13 @@ class BotManagementCog(BaseExtensionCog, name="bot-management"):
             embed=discord.Embed(
                 title=f"Return output (code executed in "
                 f"{snakecore.utils.format_time_by_units(total)}):",
-                description=snakecore.utils.code_block(repr(eval_output)),
+                description=snakecore.utils.code_block(eval_output, max_characters=4096),
                 color=int(self.theme_color),
             ),
+            file=discord.File(
+                io.StringIO(repr(eval_output)),  # type: ignore
+                filename=f"eval_output_{datetime.datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}.txt",
+            ) if len(eval_output) > 4096 else None,
         )
 
     @is_bot_manager()

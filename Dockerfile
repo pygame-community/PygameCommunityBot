@@ -6,6 +6,7 @@ ENV PYTHONUNBUFFERED=1 \
     PIP_DISABLE_PIP_VERSION_CHECK=on \
     PIP_DEFAULT_TIMEOUT=100 \
     VENV_PATH="/opt/.venv"
+
 ENV PATH="$VENV_PATH/bin:$PATH"
 
 FROM python-base AS builder-base
