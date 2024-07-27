@@ -403,12 +403,18 @@ class Showcasing(BaseExtensionCog, name="showcasing"):
             deletion_datetime = datetime.datetime.now(
                 datetime.timezone.utc
             ) + datetime.timedelta(minutes=5)
-            warn_msg = await message.reply(
-                "### Invalid showcase message\n\n"
-                f"{reason}\n\n"
-                " If no changes are made, your message (and its thread/post) will be "
-                f"deleted {snakecore.utils.create_markdown_timestamp(deletion_datetime, 'R')}."
-            )
+
+            try:
+                warn_msg = await message.reply(
+                    "### Invalid showcase message\n\n"
+                    f"{reason}\n\n"
+                    " If no changes are made, your message (and its thread/post) will be "
+                    f"deleted {snakecore.utils.create_markdown_timestamp(deletion_datetime, 'R')}."
+                )
+            except discord.HTTPException as e:
+                if e.status == 400:
+                    return
+
             self.entry_message_deletion_dict[message.id] = (
                 asyncio.create_task(
                     self.delete_bad_message_with_thread(message, delay=300)
@@ -432,11 +438,15 @@ class Showcasing(BaseExtensionCog, name="showcasing"):
             datetime.timezone.utc
         ) + datetime.timedelta(minutes=1)
 
-        alert_msg = await message.reply(
-            content=f"Need a feedback thread?\n\n-# This message will be deleted "
-            + snakecore.utils.create_markdown_timestamp(deletion_datetime, "R")
-            + ".",
-        )
+        try:
+            alert_msg = await message.reply(
+                content=f"Need a feedback thread?\n\n-# This message will be deleted "
+                + snakecore.utils.create_markdown_timestamp(deletion_datetime, "R")
+                + ".",
+            )
+        except discord.HTTPException as e:
+            if e.status == 400:
+                return
 
         await alert_msg.add_reaction("✅")
         await alert_msg.add_reaction("❌")
@@ -522,12 +532,18 @@ class Showcasing(BaseExtensionCog, name="showcasing"):
             deletion_datetime = datetime.datetime.now(
                 datetime.timezone.utc
             ) + datetime.timedelta(minutes=5)
-            warn_msg = await message.reply(
-                "### Invalid showcase message\n\n"
-                f"{reason}\n\n"
-                " If no changes are made, your message (and its thread/post) will be "
-                f"deleted {snakecore.utils.create_markdown_timestamp(deletion_datetime, 'R')}."
-            )
+
+            try:
+                warn_msg = await message.reply(
+                    "### Invalid showcase message\n\n"
+                    f"{reason}\n\n"
+                    " If no changes are made, your message (and its thread/post) will be "
+                    f"deleted {snakecore.utils.create_markdown_timestamp(deletion_datetime, 'R')}."
+                )
+            except discord.HTTPException as e:
+                if e.status == 400:
+                    return
+
             self.entry_message_deletion_dict[message.id] = (
                 asyncio.create_task(
                     self.delete_bad_message_with_thread(message, delay=300)
