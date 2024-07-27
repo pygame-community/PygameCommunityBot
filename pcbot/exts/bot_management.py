@@ -531,13 +531,17 @@ class BotManagementCog(BaseExtensionCog, name="bot-management"):
             embed=discord.Embed(
                 title=f"Return output (code executed in "
                 f"{snakecore.utils.format_time_by_units(total)}):",
-                description=snakecore.utils.code_block(eval_output, max_characters=4096),
+                description=snakecore.utils.code_block(
+                    eval_output, max_characters=4096
+                ),
                 color=int(self.theme_color),
             ),
             file=discord.File(
                 io.StringIO(repr(eval_output)),  # type: ignore
                 filename=f"eval_output_{datetime.datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}.txt",
-            ) if len(eval_output) > 4096 else None,
+            )
+            if len(eval_output) > 4096
+            else None,
         )
 
     @is_bot_manager()
