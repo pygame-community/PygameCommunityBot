@@ -21,6 +21,8 @@ RUN apt-get update \
 
 COPY ./pyproject.toml ./requirements.txt ./
 
+FROM builder-base AS pipinstall
+
 RUN mkdir $VENV_PATH \
     && python -m venv $VENV_PATH \
     && . $VENV_PATH/bin/activate \
@@ -29,7 +31,7 @@ RUN mkdir $VENV_PATH \
 
 FROM python-base AS runtime
 
-COPY --from=builder-base $VENV_PATH $VENV_PATH
+COPY --from=pipinstall $VENV_PATH $VENV_PATH
 
 COPY ./docker-entrypoint.sh /docker-entrypoint.sh
 RUN chmod +x /docker-entrypoint.sh
