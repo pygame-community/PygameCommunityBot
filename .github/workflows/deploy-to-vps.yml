@@ -20,9 +20,8 @@ jobs:
           REMOTE_HOST: ${{ secrets.VPS_HOST }}
           REMOTE_USER: ${{ secrets.VPS_USER }}
           SCRIPT_AFTER: |
-            cp ~/config.py ~/PygameCommunityBot/config.py
-            cp ~/.env ~/PygameCommunityBot/.env
-            cd ~/PygameCommunityBot
+            cp ~/config.py config.py
+            cp ~/.env .env
             docker compose stop
             docker compose rm -f
             sleep 60
