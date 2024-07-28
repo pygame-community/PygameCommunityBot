@@ -20,6 +20,22 @@ logger = logging.getLogger(__name__)
 fetched_attachments: dict[int, bytes] = {}
 
 
+def hamming_distance_padded(str1, str2):
+    # Pad the shorter string with spaces to match the lengths
+    max_len = max(len(str1), len(str2))
+    str1 = str1.ljust(max_len)
+    str2 = str2.ljust(max_len)
+
+    return sum(c1 != c2 for c1, c2 in zip(str1, str2))
+
+
+def hamming_similarity_score(str1, str2):
+    distance = hamming_distance_padded(str1, str2)
+    max_len = max(len(str1), len(str2))
+    similarity_ratio = (max_len - distance) / max_len
+    return similarity_ratio
+
+
 async def fetch_attachment(attachment: discord.Attachment, cache: bool = True) -> bytes:
     if cache and attachment.id in fetched_attachments:
         logger.debug(f"Fetched attachment from cache: {attachment.id}")
@@ -55,10 +71,7 @@ async def crosspost_cmp(message: discord.Message, other: discord.Message) -> boo
     )
 
     if have_content:
-        hamming_score = sum(
-            x != y for x, y in zip(message.content, other.content)
-        ) / max(len(message.content), len(other.content))
-        similarity_score = min(max(0, 1 - hamming_score), 1)
+        similarity_score = hamming_similarity_score(message.content, other.content)
         logger.debug(f"Computed similarity score for content: {similarity_score}")
     else:
         similarity_score = 0
@@ -115,7 +128,8 @@ class AntiCrosspostCog(BaseExtensionCog, name="anti-crosspost"):
         bot: BotT,
         channel_ids: Collection[int],
         crosspost_timedelta_threshold: int,
-        message_length_threshold: int,
+        same_channel_message_length_threshold: int,
+        cross_channel_message_length_threshold: int,
         max_tracked_users: int,
         max_tracked_message_groups_per_user: int,
         theme_color: int | discord.Color = 0,
@@ -127,7 +141,10 @@ class AntiCrosspostCog(BaseExtensionCog, name="anti-crosspost"):
             bot (BotT): The bot instance.
             channel_ids (Collection[int]): Collection of channel IDs to monitor.
             crosspost_timedelta_threshold (int): Minimum time difference between messages to not be considered crossposts.
-            message_length_threshold (int): Minimum length of a text-only message to be considered.
+            same_channel_message_length_threshold (int): Minimum length of a text-only message to be considered
+                if the messages are in the same channel.
+            cross_channel_message_length_threshold (int): Minimum length of a text-only message to be considered
+                if the messages are in different channels.
             max_tracked_users (int): Maximum number of users to track.
             max_tracked_message_groups_per_user (int): Maximum number of message
                 groups to track per user.
@@ -140,7 +157,12 @@ class AntiCrosspostCog(BaseExtensionCog, name="anti-crosspost"):
         self.crosspost_timedelta_threshold = crosspost_timedelta_threshold
         self.max_tracked_users = max_tracked_users
         self.max_tracked_message_groups_per_user = max_tracked_message_groups_per_user
-        self.message_length_threshold = message_length_threshold
+        self.same_channel_message_length_threshold = (
+            same_channel_message_length_threshold
+        )
+        self.cross_channel_message_length_threshold = (
+            cross_channel_message_length_threshold
+        )
 
     @commands.Cog.listener()
     async def on_message(self, message: discord.Message):
@@ -157,12 +179,20 @@ class AntiCrosspostCog(BaseExtensionCog, name="anti-crosspost"):
             or (
                 message.content
                 and not message.attachments
-                and len(message.content) < self.message_length_threshold
+                and (
+                    len(message.content)
+                    < min(
+                        self.same_channel_message_length_threshold,
+                        self.cross_channel_message_length_threshold,
+                    )
+                )
             )
         ):
             return
 
-        logger.debug(f"Received message from {message.author.name}: {message.jump_url}")
+        logger.debug(
+            f"Received noteworthy message from {message.author.name}: {message.jump_url}"
+        )
 
         # Attempt to enforce the cache size limit
         for user_id in list(self.crossposting_cache.keys()):
@@ -188,7 +218,23 @@ class AntiCrosspostCog(BaseExtensionCog, name="anti-crosspost"):
             # Check for crossposts or duplicates in existing message groups
             for messages in user_cache["message_groups"]:
                 for existing_message in messages:
-                    if (
+                    if message.content and (
+                        (
+                            message.channel.id == existing_message.channel.id
+                            and len(message.content)
+                            < self.same_channel_message_length_threshold
+                        )
+                        or (
+                            message.channel.id != existing_message.channel.id
+                            and len(message.content)
+                            < self.cross_channel_message_length_threshold
+                        )
+                    ):
+                        # enforce same-channel and cross-channel message length thresholds
+                        # required in order for them to be considered crossposts
+                        continue
+
+                    elif (
                         await crosspost_cmp(message, existing_message)
                         and message.created_at.timestamp()
                         - existing_message.created_at.timestamp()
@@ -320,7 +366,8 @@ async def setup(
     max_tracked_users: int = 10,
     max_tracked_message_groups_per_user: int = 10,
     crosspost_timedelta_threshold: int = 86400,
-    message_length_threshold: int = 64,
+    same_channel_message_length_threshold: int = 64,
+    cross_channel_message_length_threshold: int = 16,
     theme_color: int | discord.Color = 0,
 ):
     """
@@ -332,7 +379,10 @@ async def setup(
         max_tracked_users (int): Maximum number of users to track.
         max_tracked_message_groups_per_user (int): Maximum number of message groups to track per user.
         crosspost_timedelta_threshold (int): Minimum time difference between messages to not be considered crossposts.
-        message_length_threshold (int): Minimum length of a text-only message to be considered.
+        same_channel_message_length_threshold (int): Minimum length of a text-only message to be considered
+            if the messages are in the same channel.
+        cross_channel_message_length_threshold (int): Minimum length of a text-only message to be considered
+            if the messages are in different channels.
         theme_color (int | discord.Color): Theme color for the bot's responses.
     """
     await bot.add_cog(
@@ -340,7 +390,8 @@ async def setup(
             bot,
             channel_ids,
             crosspost_timedelta_threshold,
-            message_length_threshold,
+            same_channel_message_length_threshold,
+            cross_channel_message_length_threshold,
             max_tracked_users,
             max_tracked_message_groups_per_user,
             theme_color,
