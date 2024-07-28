@@ -5,7 +5,6 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-      no_cache: true
     tty: true
     volumes:
       - /mnt/blockstorage:/mnt/blockstorage
