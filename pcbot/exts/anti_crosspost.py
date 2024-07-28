@@ -17,7 +17,7 @@ BotT = snakecore.commands.Bot | snakecore.commands.AutoShardedBot
 
 logger = logging.getLogger(__name__)
 
-fetched_attachments: dict[int, bytes] = {}
+fetched_attachments: OrderedDict[int, bytes] = OrderedDict()
 
 
 def hamming_distance_padded(str1, str2):
@@ -44,6 +44,10 @@ async def fetch_attachment(attachment: discord.Attachment, cache: bool = True) -
     if cache:
         fetched_attachments[attachment.id] = data
     logger.debug(f"Fetched attachment from source: {attachment.id}")
+
+    if len(fetched_attachments) > 100:
+        fetched_attachments.popitem(last=False)
+
     return data
 
 
