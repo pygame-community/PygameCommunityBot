@@ -381,7 +381,13 @@ class Showcasing(BaseExtensionCog, name="showcasing"):
         """
         return validate_message(
             message,
-            self.showcase_channels_config[message.channel.id]["showcase_message_rules"],
+            self.showcase_channels_config[
+                (
+                    message.channel.parent_id
+                    if isinstance(message.channel, discord.Thread)
+                    else message.channel.id
+                )
+            ]["showcase_message_rules"],
         )
 
     @commands.Cog.listener()
