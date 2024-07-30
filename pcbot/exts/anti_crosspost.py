@@ -178,7 +178,7 @@ class AntiCrosspostCog(BaseExtensionCog, name="anti-crosspost"):
         """
         if (
             message.author.bot
-            or not self._is_valid_channel(message.channel)  # type: ignore
+            or not await self._is_watched_channel(message.channel)  # type: ignore
             or message.type != discord.MessageType.default
             or (
                 message.content
@@ -258,7 +258,9 @@ class AntiCrosspostCog(BaseExtensionCog, name="anti-crosspost"):
                             user_cache["message_to_alert"][
                                 message.id
                             ] = alert_message.id
-                            logger.debug(f"Sent alert message for crosspost URL {message.jump_url}")
+                            logger.debug(
+                                f"Sent alert message for crosspost URL {message.jump_url}"
+                            )
                         except discord.HTTPException as e:
                             logger.debug(f"Failed to send alert message: {e}")
                         break
@@ -294,7 +296,7 @@ class AntiCrosspostCog(BaseExtensionCog, name="anti-crosspost"):
         Args:
             message (discord.Message): The message object.
         """
-        if not self._is_valid_channel(message.channel):  # type: ignore
+        if not await self._is_watched_channel(message.channel):  # type: ignore
             return
 
         if message.author.id not in self.crossposting_cache:
@@ -335,15 +337,15 @@ class AntiCrosspostCog(BaseExtensionCog, name="anti-crosspost"):
                     f"Failed to delete alert message ID {alert_message_id}: {e}"
                 )
 
-    def _is_valid_channel(self, channel: discord.abc.GuildChannel) -> bool:
+    async def _is_watched_channel(self, channel: discord.abc.GuildChannel) -> bool:
         """
-        Check if a channel is valid based on the configured channel IDs.
+        Check if a channel is watched for crossposts based on the configured channel IDs.
 
         Args:
             channel (discord.abc.GuildChannel): The channel to check.
 
         Returns:
-            bool: True if the channel is valid, otherwise False.
+            bool: True if the channel is watched, otherwise False.
         """
         if isinstance(channel, discord.abc.GuildChannel):
             # Check if the channel ID or category ID is in the monitored channel IDs
@@ -357,8 +359,18 @@ class AntiCrosspostCog(BaseExtensionCog, name="anti-crosspost"):
             if isinstance(channel, discord.Thread):
                 if channel.parent_id in self.channel_ids:
                     return True
-                if channel.parent and channel.parent.category_id in self.channel_ids:
-                    return True
+
+                try:
+                    parent = (
+                        channel.parent
+                        or channel.guild.get_channel(channel.parent_id)
+                        or await channel.guild.fetch_channel(channel.parent_id)
+                    )
+                except discord.NotFound:
+                    pass
+                else:
+                    if parent and parent.category_id in self.channel_ids:
+                        return True
 
         return False
 
