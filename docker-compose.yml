@@ -1,3 +1,5 @@
+# This is a sample configuration file for a production environment. Use production override files for customization.
+
 services:
   pygamecommunitybot:
     image: pygamecommunitybot:latest
@@ -5,6 +7,8 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-    tty: true
     volumes:
-      - /mnt/blockstorage:/mnt/blockstorage
+      # Mount environment and config files directory
+      # to the service as a volume
+      - ${ENV_VOLUME}:/app/env/
+    tty: true

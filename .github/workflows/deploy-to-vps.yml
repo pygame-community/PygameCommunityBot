@@ -17,14 +17,25 @@ jobs:
         uses: easingthemes/ssh-deploy@main
         with:
           SSH_PRIVATE_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          ARGS: "-rlgoDzvc --delete -i"
           REMOTE_HOST: ${{ secrets.VPS_HOST }}
           REMOTE_USER: ${{ secrets.VPS_USER }}
+          TARGET: ${{ secrets.VPS_TARGET }}
           SCRIPT_AFTER: |
-            cp ~/config.py config.py
-            cp ~/.env .env
-            docker compose stop
-            docker compose rm -f
+            # Check if a directory for environment and config files is specified and copy its contents to the current directory if yes             
+            if [ -n "${{ secrets.VPS_ENV_DIRECTORY }}" ] && [ -d "${{ secrets.VPS_ENV_DIRECTORY }}" ]; then cp -ar "${{ secrets.VPS_ENV_DIRECTORY }}"/. .; fi
+            
+            # Detect all usable Compose files ([docker-]compose.yml and [docker-]compose.override.yml) and prefix their filename with "-f "
+
+            COMPOSE=$( [ -f "docker-compose.yml" ] && echo -n "-f docker-compose.yml " || true; \
+            [ -f "docker-compose.override.yml" ] && echo -n "-f docker-compose.override.yml " || true; \
+            [ -f "compose.yml" ] && echo -n "-f compose.yml " || true; \
+            [ -f "compose.override.yml" ] && echo -n "-f compose.override.yml " || true )
+            
+            # Stop, remove, and build the Docker Compose stack
+            docker compose $COMPOSE stop
+            docker compose $COMPOSE rm
             sleep 60
-            docker compose build --no-cache
-            docker compose up -d
+            docker compose $COMPOSE build --no-cache
+            docker compose $COMPOSE up -d
             docker image prune -af

@@ -1,11 +1,14 @@
 services:
-  PygameCommunityBot-Dev:
-    image: PygameCommunityBot-Dev:latest
+  pygamecommunitybot-dev:
+    image: pygamecommunitybot-dev:latest
     restart: unless-stopped
     build:
       context: .
       dockerfile: Dockerfile
     tty: true
     # Add helpful development volumes here
-    # volumes:
-      # - ...:...
+    volumes:
+      # Mount environment and config files directory
+      # to the service as a volume
+      - ${ENV_VOLUME}:/app/env/
+
