@@ -302,7 +302,8 @@ class Showcasing(BaseExtensionCog, name="showcasing"):
                                 )
                             )
                         ),
-                        value=f"{thread.jump_url}",
+                        value=f"{thread.jump_url} by {starter_message.author.mention} "
+                        + f"(`@{starter_message.author.name}`)",
                         inline=False,
                     )
                 )
