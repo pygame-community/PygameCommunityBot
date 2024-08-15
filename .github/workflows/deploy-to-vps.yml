@@ -17,6 +17,7 @@ jobs:
         uses: easingthemes/ssh-deploy@main
         env:
           VPS_ENV_DIRECTORY: ${{ secrets.VPS_ENV_DIRECTORY }}
+          VPS_TARGET: ${{ secrets.VPS_TARGET }}
         with:
           SSH_PRIVATE_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
           ARGS: "-rlgoDzvc --delete"
@@ -24,6 +25,9 @@ jobs:
           REMOTE_USER: ${{ secrets.VPS_USER }}
           TARGET: ${{ secrets.VPS_TARGET }}
           SCRIPT_AFTER: |
+            # Explicitly navigate to the target directory (workaround for SSH deploy bug(?))
+            cd ${{ env.VPS_TARGET }}
+
             # Get environment and config files
             cp -ar ${{ env.VPS_ENV_DIRECTORY }}/. .
 
