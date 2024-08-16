@@ -1085,7 +1085,7 @@ class HelpForumsPreCog(BaseExtensionCog, name="helpforums-pre"):
                                                 "go to 'Edit Tags', select the `✅ Solved` tag and save your changes.**\n\n"
                                                 "**Mark all messages you find helpful here with a ✅ reaction please** "
                                                 "<:pg_robot:837389387024957440>\n\n"
-                                                "*If your issue has't been solved, you may "
+                                                "*If your issue hasn't been solved, you may "
                                                 "either wait for help or close this post.*",
                                                 color=0x888888,
                                             ),
