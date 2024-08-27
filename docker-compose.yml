@@ -7,6 +7,7 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
+    stop_signal: SIGINT
     volumes:
       # Mount environment and config files directory
       # to the service as a volume

@@ -40,7 +40,6 @@ jobs:
 
             # Stop, remove, and build the Docker Compose stack
             docker compose $COMPOSE down -v --remove-orphans
-            sleep 60
             docker compose $COMPOSE build --no-cache
             docker compose $COMPOSE up -d
             docker image prune -af

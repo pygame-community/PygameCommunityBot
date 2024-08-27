@@ -38,5 +38,4 @@ COPY ./pcbot /app/pcbot
 
 WORKDIR /app
 
-ENTRYPOINT /docker-entrypoint.sh $0 $@
-CMD [ "python3", "-m", "pcbot.__main__", "--config", "env/config.py", "--localconfig", "env/localconfig.py"]
+ENTRYPOINT ["/docker-entrypoint.sh", "python3", "-m", "pcbot.__main__", "--config", "env/config.py", "--localconfig", "env/localconfig.py"]
