@@ -261,11 +261,14 @@ class AntiCrosspostCog(BaseExtensionCog, name="anti-crosspost"):
                             f"Found crosspost for user {message.author.name}, message URL {message.jump_url}!!!!!!!!!!"
                         )
                         alert_channel = cast(MessageableGuildChannel, message.channel)
-                        if self.exclude_alert_channel_ids and not await self._check_channel(
-                            alert_channel, deny=self.exclude_alert_channel_ids
+                        if (
+                            self.exclude_alert_channel_ids
+                            and not await self._check_channel(
+                                alert_channel, deny=self.exclude_alert_channel_ids
+                            )
                         ):
                             # Attempt to find the next best channel to alert in
-                            print( [ msg.content for msg in messages[:-1] ])
+                            print([msg.content for msg in messages[:-1]])
                             for message in reversed(messages[:-1]):
                                 alert_channel = cast(
                                     MessageableGuildChannel, message.channel
@@ -279,7 +282,7 @@ class AntiCrosspostCog(BaseExtensionCog, name="anti-crosspost"):
                                     f"No allowed alerting channel for user {message.author.name} found"
                                 )
                                 break  # Don't issue an alert if not possible
-                        
+
                         if message.id in user_cache["message_to_alert_map"]:
                             logger.debug(
                                 f"Message {message.id} is already being alerted for user {message.author.name}"
