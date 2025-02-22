@@ -142,7 +142,7 @@ def rule_specifier_single_validate_message(
     specifier: RuleSpecifier,
     message: discord.Message,
     depth_viz: str = "",
-) -> tuple[bool, str | None]:
+) -> tuple[bool, str | None, str | None]:
     """Validate a message according to a single rule specifier."""
 
     rule = RULE_MAPPING[specifier["name"]]
@@ -154,19 +154,24 @@ def rule_specifier_single_validate_message(
 
     if "description" in specifier:
         # insert description of rule specifier if present
-        return (result[0], specifier["description"] if not result[0] else None)
+        return (
+            (result[0], None, None)
+            if result[0]
+            else (result[0], specifier["description"], None)
+        )
 
-    return result
+    return (result[0], None, None)
 
 
 def rule_specifier_pair_validate_message(
     specifier: RuleSpecifierPair,
     message: discord.Message,
-) -> tuple[bool, str | None]:
+) -> tuple[bool, str | None, str | None]:
     """Validate a message according to a rule specifier pair."""
 
     success = True
-    failure_description = specifier.get("description")
+    general_failure_description = specifier.get("description")
+    exact_failure_description = None
 
     validator1 = dispatch_rule_specifier_message_validator(specifier["clause1"])
     validator2 = dispatch_rule_specifier_message_validator(specifier["clause2"])
@@ -181,22 +186,27 @@ def rule_specifier_pair_validate_message(
         result2 = validator2(specifier["clause2"], message)  # type: ignore
         success = bool(result2[0])
 
-    if not result1[0] and failure_description is None:
-        failure_description = result1[1]
-    elif result2 and not result2[0] and failure_description is None:
-        failure_description = result2[1]
+    if not result1[0] and exact_failure_description is None:
+        exact_failure_description = result1[1]
+    elif result2 and not result2[0] and exact_failure_description is None:
+        exact_failure_description = result2[1]
 
-    return (success, failure_description if not success else None)
+    return (
+        (success, None, None)
+        if success
+        else (success, general_failure_description, exact_failure_description)
+    )
 
 
 def rule_specifier_list_validate_message(
     specifier: RuleSpecifierList,
     message: discord.Message,
-) -> tuple[bool, str | None]:
+) -> tuple[bool, str | None, str | None]:
     """Validate a message according to a rule specifier list."""
 
     success = True
-    failure_description = specifier.get("description")
+    general_failure_description = specifier.get("description")
+    exact_failure_description = None
 
     if specifier["mode"] == "all":
         for i, clause in enumerate(specifier["clauses"]):
@@ -204,8 +214,8 @@ def rule_specifier_list_validate_message(
             result = validator(clause, message)  # type: ignore
             if not result[0]:
                 success = False
-                if failure_description is None:
-                    failure_description = result[1]
+                if exact_failure_description is None:
+                    exact_failure_description = result[1]
                 break
 
     elif specifier["mode"] == "any":
@@ -214,16 +224,20 @@ def rule_specifier_list_validate_message(
             result = validator(clause, message)  # type: ignore
             success = success or result[0]
 
-        if not success and failure_description is None:
-            failure_description = result[1]
+        if not success and exact_failure_description is None:
+            exact_failure_description = result[1]  # type: ignore
 
-    return (success, failure_description if not success else None)
+    return (
+        (success, None, None)
+        if success
+        else (success, general_failure_description, exact_failure_description)
+    )
 
 
 def validate_message(
     message: discord.Message,
     specifier: RuleSpecifier | RuleSpecifierPair | RuleSpecifierList,
-) -> tuple[bool, str | None]:
+) -> tuple[bool, str | None, str | None]:
     """Validate a message according to a rule specifier."""
 
     validator = dispatch_rule_specifier_message_validator(specifier)

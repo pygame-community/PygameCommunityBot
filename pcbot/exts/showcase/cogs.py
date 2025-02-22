@@ -372,7 +372,7 @@ class Showcasing(BaseExtensionCog, name="showcasing"):
     def showcase_message_validity_check(
         self,
         message: discord.Message,
-    ) -> tuple[bool, str | None]:
+    ) -> tuple[bool, str | None, str | None]:
         """Checks if a showcase message has the right format.
 
         Returns
@@ -404,7 +404,9 @@ class Showcasing(BaseExtensionCog, name="showcasing"):
         except discord.NotFound:
             return
 
-        is_valid, reason = self.showcase_message_validity_check(message)
+        is_valid, general_reason, exact_reason = self.showcase_message_validity_check(
+            message
+        )
 
         if not is_valid:
             deletion_datetime = datetime.datetime.now(
@@ -414,7 +416,10 @@ class Showcasing(BaseExtensionCog, name="showcasing"):
             try:
                 warn_msg = await message.reply(
                     "### Invalid showcase message\n\n"
-                    f"{reason}\n\n"
+                    f"__**Failed to meet rule(s):**__\n"
+                    f"{exact_reason}\n\n"
+                    f"__**General rule(s)**__:"
+                    f"{general_reason}\n\n"
                     " If no changes are made, your message (and its thread/post) will be "
                     f"deleted {snakecore.utils.create_markdown_timestamp(deletion_datetime, 'R')}."
                 )
@@ -531,7 +536,9 @@ class Showcasing(BaseExtensionCog, name="showcasing"):
         ):
             return
 
-        is_valid, reason = self.showcase_message_validity_check(message)
+        is_valid, general_reason, exact_reason = self.showcase_message_validity_check(
+            message
+        )
 
         if is_valid:
             await self.prompt_author_for_feedback_thread(message)
@@ -543,7 +550,10 @@ class Showcasing(BaseExtensionCog, name="showcasing"):
             try:
                 warn_msg = await message.reply(
                     "### Invalid showcase message\n\n"
-                    f"{reason}\n\n"
+                    f"__**Failed to meet rule(s):**__\n"
+                    f"{exact_reason}\n\n"
+                    f"__**General rule(s)**__:"
+                    f"{general_reason}\n\n"
                     " If no changes are made, your message (and its thread/post) will be "
                     f"deleted {snakecore.utils.create_markdown_timestamp(deletion_datetime, 'R')}."
                 )
@@ -579,7 +589,9 @@ class Showcasing(BaseExtensionCog, name="showcasing"):
         ):
             return
 
-        is_valid, reason = self.showcase_message_validity_check(new)
+        is_valid, general_reason, exact_reason = self.showcase_message_validity_check(
+            new
+        )
 
         if not is_valid:
             if new.id in self.entry_message_deletion_dict:
@@ -602,7 +614,10 @@ class Showcasing(BaseExtensionCog, name="showcasing"):
                             content=(
                                 "### Invalid showcase message\n\n"
                                 "Your edited showcase message is invalid.\n\n"
-                                f"{reason}\n\n"
+                                f"__**Failed to meet rule(s):**__\n"
+                                f"{exact_reason}\n\n"
+                                f"__**General rule(s)**__:"
+                                f"{general_reason}\n\n"
                                 " If no changes are made, your post will be "
                                 f"deleted "
                                 + snakecore.utils.create_markdown_timestamp(

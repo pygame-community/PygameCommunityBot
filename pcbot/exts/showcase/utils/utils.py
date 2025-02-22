@@ -59,7 +59,7 @@ class DiscordMessageRule(ABC):
     @abstractmethod
     def validate(
         enforce_type: EnforceType, message: discord.Message, arg: Any = None
-    ) -> tuple[Literal[False], str] | tuple[Literal[True], None]:
+    ) -> tuple[Literal[False], str, str | None] | tuple[Literal[True], None, None]:
         ...
 
     @staticmethod
@@ -72,5 +72,5 @@ class AsyncDiscordMessageRule(DiscordMessageRule, name="AsyncDiscordMessageRule"
     @abstractmethod
     async def validate(
         enforce_type: EnforceType, message: discord.Message, arg: Any = None
-    ) -> tuple[Literal[False], str] | tuple[Literal[True], None]:
+    ) -> tuple[Literal[False], str, str | None] | tuple[Literal[True], None, None]:
         ...

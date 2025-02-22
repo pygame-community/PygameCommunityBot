@@ -761,14 +761,11 @@ class HelpForumsPreCog(BaseExtensionCog, name="helpforums-pre"):
                 forum_channel.threads,
                 [thr async for thr in forum_channel.archived_threads(limit=20)],
             ):
-                if (
-                    help_thread.owner_id == payload.user.id
-                    and not (
-                        help_thread.locked
-                        or any(
-                            tag.name.lower() in ("solved", "invalid")
-                            for tag in help_thread.applied_tags
-                        )
+                if help_thread.owner_id == payload.user.id and not (
+                    help_thread.locked
+                    or any(
+                        tag.name.lower() in ("solved", "invalid")
+                        for tag in help_thread.applied_tags
                     )
                 ):
                     snakecore.utils.hold_task(
