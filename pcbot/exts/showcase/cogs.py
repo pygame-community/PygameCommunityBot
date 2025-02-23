@@ -8,6 +8,7 @@ import asyncio
 from collections.abc import Collection
 import datetime
 import enum
+import io
 import itertools
 import re
 import time
@@ -349,11 +350,12 @@ class Showcasing(BaseExtensionCog, name="showcasing"):
 
     @staticmethod
     async def delete_bad_message_with_thread(
-        message: discord.Message, delay: float = 0.0
+        message: discord.Message, delay: float = 0.0, repost_to_dm: bool = True
     ):
         """A function to pardon a bad message and its post/thread (if present) with a grace period. If this coroutine is not cancelled during the
-        grace period specified in `delay` in seconds, it will delete `thread`, if possible.
+        grace period specified in `delay` in seconds, it will delete `message`, if possible, and send the message contents via DM to the affected user.
         """
+        deletion_successful = False
         try:
             await asyncio.sleep(delay)  # allow cancelling during delay
         except asyncio.CancelledError:
@@ -363,11 +365,34 @@ class Showcasing(BaseExtensionCog, name="showcasing"):
             try:
                 if isinstance(message.channel, discord.Thread):
                     await message.channel.delete()
-
                 await message.delete()
             except discord.NotFound:
                 # don't error here if thread and/or message were already deleted
                 pass
+            else:
+                deletion_successful = True
+
+            if deletion_successful:
+                await message.author.send(
+                    content="Your showcase message/post was deleted for not meeting the message formatting rules."
+                    "\nHere is the message content and attachments in case you need to retrieve them:\n"
+                    + (
+                        f"**Post title:** `{message.channel.name}`"
+                        if isinstance(message.channel, discord.Thread)
+                        else ""
+                    ),
+                    files=[
+                        discord.File(
+                            io.StringIO(message.content),  # type: ignore
+                            filename="showcase_message_content.txt",
+                        ),
+                        *[
+                            await att.to_file(use_cached=True)
+                            for att in message.attachments
+                            if att.size < 2**20 * 25
+                        ],
+                    ],
+                )
 
     def showcase_message_validity_check(
         self,
