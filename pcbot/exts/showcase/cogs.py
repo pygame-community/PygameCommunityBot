@@ -356,6 +356,7 @@ class Showcasing(BaseExtensionCog, name="showcasing"):
         grace period specified in `delay` in seconds, it will delete `message`, if possible, and send the message contents via DM to the affected user.
         """
         deletion_successful = False
+        is_thread_message = isinstance(message.channel, discord.Thread)
         try:
             await asyncio.sleep(delay)  # allow cancelling during delay
         except asyncio.CancelledError:
@@ -363,8 +364,8 @@ class Showcasing(BaseExtensionCog, name="showcasing"):
 
         else:
             try:
-                if isinstance(message.channel, discord.Thread):
-                    await message.channel.delete()
+                if is_thread_message:
+                    await message.channel.delete()  # type: ignore
                 await message.delete()
             except discord.NotFound:
                 # don't error here if thread and/or message were already deleted
@@ -373,12 +374,23 @@ class Showcasing(BaseExtensionCog, name="showcasing"):
                 deletion_successful = True
 
             if deletion_successful:
+                target_channel_url = (
+                    (
+                        message.channel.parent.jump_url  # type: ignore
+                        if message.channel.parent  # type: ignore
+                        else f"https://discord.com/channels/{message.guild}/{message.channel.parent_id}"  # type: ignore
+                    )
+                    if is_thread_message
+                    else message.channel.jump_url
+                )
+
                 await message.author.send(
-                    content="Your showcase message/post was deleted for not meeting the message formatting rules."
+                    content=f"### Pygame Community"
+                    f"Your showcase message/post in {target_channel_url} was deleted for not meeting the message formatting rules."
                     "\nHere is the message content and attachments in case you need to retrieve them:\n"
                     + (
-                        f"**Post title:** `{message.channel.name}`"
-                        if isinstance(message.channel, discord.Thread)
+                        f"**Post title:** `{message.channel.name}`"  # type: ignore
+                        if is_thread_message
                         else ""
                     ),
                     files=[
@@ -388,8 +400,8 @@ class Showcasing(BaseExtensionCog, name="showcasing"):
                         ),
                         *[
                             await att.to_file(use_cached=True)
-                            for att in message.attachments
-                            if att.size < 2**20 * 25
+                            for i, att in enumerate(message.attachments)
+                            if att.size < 2**20 * 25 and i < 9
                         ],
                     ],
                 )
