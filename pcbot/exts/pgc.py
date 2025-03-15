@@ -91,9 +91,16 @@ BOT_WELCOME_MSG = {
 }
 
 
-class PGCActivityCog(BaseExtensionCog, name="pgc-activity"):
-    def __init__(self, bot: BotT, theme_color: int | discord.Color = 0) -> None:
+class PGCCog(BaseExtensionCog, name="pgc"):
+    def __init__(
+        self,
+        bot: BotT,
+        theme_color: int | discord.Color = 0,
+        honeypot_channel_id: int | None = None,
+    ) -> None:
         super().__init__(bot, theme_color)
+        self.honeypot_channel_id = honeypot_channel_id
+        self.honeypot_victims = set()
 
     @commands.Cog.listener()
     async def on_ready(self):
@@ -135,6 +142,17 @@ class PGCActivityCog(BaseExtensionCog, name="pgc-activity"):
             ).send_messages
         ):
             return
+
+        if message.channel.id == self.honeypot_channel_id:
+            await message.guild.ban(
+                message.author, reason="Fell into snake pit", delete_message_days=1
+            )
+
+            if message.author.id not in self.honeypot_victims:
+                self.honeypot_victims.add(message.author.id)
+                await message.guild.unban(message.author, reason="Second chance")
+            else:
+                self.honeypot_victims.remove(message.author.id)
 
         if message.type == discord.MessageType.premium_guild_tier_1:
             await message.channel.send(
@@ -191,5 +209,5 @@ class PGCActivityCog(BaseExtensionCog, name="pgc-activity"):
 
 
 @snakecore.commands.decorators.with_config_kwargs
-async def setup(bot: BotT):
-    await bot.add_cog(PGCActivityCog(bot))
+async def setup(bot: BotT, honeypot_channel_id: int | None = None) -> None:
+    await bot.add_cog(PGCCog(bot, honeypot_channel_id=honeypot_channel_id))
