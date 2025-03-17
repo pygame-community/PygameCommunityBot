@@ -135,6 +135,7 @@ class PGCCog(BaseExtensionCog, name="pgc"):
             return
 
         if message.channel.id == self.honeypot_channel_id:
+            await message.delete()
             await message.guild.ban(
                 message.author, reason="Fell into snake pit", delete_message_days=1
             )
