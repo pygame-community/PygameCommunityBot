@@ -127,15 +127,6 @@ class PGCCog(BaseExtensionCog, name="pgc"):
         if not (
             message.guild
             and message.guild.id == PGC_GUILD_ID
-            and (
-                message.type
-                in (
-                    discord.MessageType.premium_guild_subscription,
-                    discord.MessageType.premium_guild_tier_1,
-                    discord.MessageType.premium_guild_tier_2,
-                    discord.MessageType.premium_guild_tier_3,
-                )
-            )
             and message.channel.permissions_for(
                 message.guild.get_member(self.bot.user.id)  # type: ignore
                 or await message.guild.fetch_member(self.bot.user.id)  # type: ignore

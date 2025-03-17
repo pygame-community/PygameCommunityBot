@@ -146,9 +146,11 @@ class BotManagementCog(BaseExtensionCog, name="bot-management"):
                 name=f"{ctx.author}",
                 icon_url=f"{ctx.author.avatar or ctx.author.default_avatar}",
             ),
-            description=escaped_cmd_text
-            if len(escaped_cmd_text) <= 4095
-            else escaped_cmd_text[:2044] + "...",
+            description=(
+                escaped_cmd_text
+                if len(escaped_cmd_text) <= 4095
+                else escaped_cmd_text[:2044] + "..."
+            ),
             fields=[
                 dict(
                     name="\u200b",
@@ -232,9 +234,11 @@ class BotManagementCog(BaseExtensionCog, name="bot-management"):
                                 if is_unknown_error
                                 else "Failed ❌"
                             ),
-                            color=constants.UNKNOWN_COMMAND_ERROR_COLOR
-                            if is_unknown_error
-                            else constants.KNOWN_COMMAND_ERROR_COLOR,
+                            color=(
+                                constants.UNKNOWN_COMMAND_ERROR_COLOR
+                                if is_unknown_error
+                                else constants.KNOWN_COMMAND_ERROR_COLOR
+                            ),
                         )
                     ),
                     attachments=invocation_log_message.attachments
@@ -536,12 +540,14 @@ class BotManagementCog(BaseExtensionCog, name="bot-management"):
                 ),
                 color=int(self.theme_color),
             ),
-            file=discord.File(
-                io.StringIO(repr(eval_output)),  # type: ignore
-                filename=f"eval_output_{datetime.datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}.txt",
-            )
-            if len(eval_output) > 4096
-            else None,
+            file=(
+                discord.File(
+                    io.StringIO(repr(eval_output)),  # type: ignore
+                    filename=f"eval_output_{datetime.datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}.txt",
+                )
+                if len(eval_output) > 4096
+                else None
+            ),
         )
 
     @is_bot_manager()
