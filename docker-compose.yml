@@ -8,8 +8,12 @@ services:
       context: .
       dockerfile: Dockerfile
     stop_signal: SIGINT
+    environment:
+      - TOKEN=${TOKEN:-} # A string representation of a discord bot token
+      - CONFIG_PY=${CONFIG_PY:-} # A string representation of a config.py file
+      - LOCALCONFIG_PY=${LOCALCONFIG_PY:-} # A string representation of a localconfig.py file
     volumes:
-      # Mount environment and config files directory
-      # to the service as a volume
-      - ${ENV_VOLUME}:/app/env/
+      - pcbot-env-volume:/app/env/
+      - pcbot-logs-volume:/app/logs/
+      - pcbot-db-volume:/app/db/
     tty: true

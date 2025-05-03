@@ -41,6 +41,20 @@ else:
     asyncio.set_event_loop_policy(uvloop.EventLoopPolicy())
 
 
+# Load config and localconfig from environment variables in docker-based production environments
+if (config_source := os.environ.get("CONFIG_PY")) and config_source != "":
+    with open("./env/config.py", "w") as f:
+        f.write(config_source)
+
+else:
+    config_source = None
+
+if (localconfig_source := os.environ.get("LOCALCONFIG_PY")) and localconfig_source != "":
+    with open("./env/localconfig.py", "w") as f:
+        f.write(localconfig_source)
+else:
+    localconfig_source = None
+
 config: dict[str, Any] = constants.DEFAULT_CONFIG.copy() | {"extensions": []}
 logging_is_setup = False
 
@@ -62,12 +76,12 @@ def setup_logging(log_level, stdout: bool = True) -> None:
         stream_handler.setFormatter(stream_formatter)
         logger.addHandler(stream_handler)
 
-    if not os.path.exists("logs/"):
-        os.mkdir("logs/")
 
     log_directory = config.get("log_directory", "logs")
+    if log_directory == "logs" and not os.path.exists("./logs"):
+        os.mkdir("./logs")
     log_filename = config.get("log_filename", "pygamecommunitybot.0")
-    log_file_extension = config.get("log_file_extension", ".log")
+    log_file_extension = config.get("log_file_extension", "log")
 
     rotating_file_handler = utils.RotatingFileHandler(
         f"{log_directory}/{log_filename}",
@@ -212,7 +226,7 @@ _shared_options_map = dict(
     config_path=click.option(
         "--config",
         "config_path",
-        default="./config.py",
+        default= "./env/config.py" if config_source else "./config.py",
         show_default=True,
         type=click.Path(resolve_path=True),
         help="A path to the 'config.py' file to use for configuration, "
@@ -222,7 +236,7 @@ _shared_options_map = dict(
     localconfig_path=click.option(
         "--localconfig",
         "localconfig_path",
-        default="./localconfig.py",
+        default= "./env/localconfig.py" if localconfig_source else "./localconfig.py",
         show_default=True,
         type=click.Path(resolve_path=True),
         help="A path to the optional 'localconfig.py' file to use for locally overriding "
