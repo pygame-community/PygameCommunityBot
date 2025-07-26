@@ -151,6 +151,16 @@ class RemindersCog(BaseExtensionCog, name="user-reminders"):
     async def _process_due_reminder(self, reminder_row: Row[Any]) -> None:
         """Process a due reminder by sending messages and handling recurrence."""
         try:
+            # Ensure next_time is timezone-aware (UTC)
+            next_time = reminder_row.next_time
+
+            # Handle string datetime from database
+            if isinstance(next_time, str):
+                next_time = datetime.datetime.fromisoformat(next_time)
+
+            if hasattr(next_time, "tzinfo") and next_time.tzinfo is None:
+                next_time = next_time.replace(tzinfo=datetime.timezone.utc)
+
             user = self.bot.get_user(reminder_row.user_id)
             if not user:
                 try:
@@ -167,7 +177,7 @@ class RemindersCog(BaseExtensionCog, name="user-reminders"):
                 title="⏰ Reminder",
                 description=f"**{reminder_row.title}**",
                 color=self.theme_color,
-                timestamp=reminder_row.next_time,
+                timestamp=next_time,
             )
 
             if (
@@ -313,8 +323,18 @@ class RemindersCog(BaseExtensionCog, name="user-reminders"):
             return
 
         try:
+            # Ensure next_time is timezone-aware (UTC)
+            next_time = reminder_row.next_time
+
+            # Handle string datetime from database
+            if isinstance(next_time, str):
+                next_time = datetime.datetime.fromisoformat(next_time)
+
+            if hasattr(next_time, "tzinfo") and next_time.tzinfo is None:
+                next_time = next_time.replace(tzinfo=datetime.timezone.utc)
+
             # Parse the RRULE
-            rule = rrulestr(reminder_row.rrule, dtstart=reminder_row.next_time)
+            rule = rrulestr(reminder_row.rrule, dtstart=next_time)
 
             # Get the next occurrence after the current time
             now = datetime.datetime.now(datetime.timezone.utc)
@@ -374,39 +394,6 @@ class RemindersCog(BaseExtensionCog, name="user-reminders"):
         rule = rrule(**rule_kwargs)
         return str(rule).replace("RRULE:", "")  # Remove the RRULE: prefix
 
-    def _validate_24_hour_minimum(
-        self, start_time: datetime.datetime, recurring: str
-    ) -> tuple[bool, str | None]:
-        """Validate that recurring reminders have at least 24 hours from now."""
-        if recurring.lower() == "none":
-            return True, None
-
-        now = datetime.datetime.now(datetime.timezone.utc)
-        min_time = now + datetime.timedelta(hours=24)
-
-        if start_time <= min_time:
-            return (
-                False,
-                f"Recurring reminders must be set at least 24 hours in the future. Please choose a time after {min_time.strftime('%Y-%m-%d %H:%M UTC')}.",
-            )
-
-        return True, None
-
-    def _validate_24_hour_minimum_new(
-        self, start_time: datetime.datetime
-    ) -> tuple[bool, str | None]:
-        """Validate that recurring reminders have at least 24 hours from now."""
-        now = datetime.datetime.now(datetime.timezone.utc)
-        min_time = now + datetime.timedelta(hours=24)
-
-        if start_time <= min_time:
-            return (
-                False,
-                f"Recurring reminders must be set at least 24 hours in the future. Please choose a time after {min_time.strftime('%Y-%m-%d %H:%M UTC')}.",
-            )
-
-        return True, None
-
     def _generate_rrule_new(
         self,
         start_time: datetime.datetime,
@@ -425,11 +412,10 @@ class RemindersCog(BaseExtensionCog, name="user-reminders"):
         if not any([interval, iunit, weekdays, monthday]):
             return None
 
-        # Ensure minimum 24-hour interval for all recurring reminders
-        now = datetime.datetime.now(datetime.timezone.utc)
-        if start_time <= now + datetime.timedelta(hours=24):
-            # Adjust start time to be at least 24 hours from now
-            start_time = now + datetime.timedelta(hours=24)
+        # Ensure timezone awareness
+        if start_time.tzinfo is None:
+            # If start_time is naive, assume it's UTC
+            start_time = start_time.replace(tzinfo=datetime.timezone.utc)
 
         # Handle interval and unit
         if interval and iunit:
@@ -601,6 +587,10 @@ class RemindersCog(BaseExtensionCog, name="user-reminders"):
 
                 for reminder in page_reminders:
                     next_time = datetime.datetime.fromisoformat(reminder.next_time)
+                    # Ensure the datetime is timezone-aware (UTC)
+                    if next_time.tzinfo is None:
+                        next_time = next_time.replace(tzinfo=datetime.timezone.utc)
+
                     recurrence_info = ""
                     if reminder.rrule:
                         recurrence_info = (
@@ -794,6 +784,9 @@ class RemindersCog(BaseExtensionCog, name="user-reminders"):
 
         try:
             parsed_when = await when_converter.convert(ctx, time)
+            # Ensure the datetime is timezone-aware (UTC)
+            if parsed_when.tzinfo is None:
+                parsed_when = parsed_when.replace(tzinfo=datetime.timezone.utc)
         except Exception as e:
             raise invocation_error(ctx, f"Failed to parse time") from e
 
@@ -849,6 +842,10 @@ class RemindersCog(BaseExtensionCog, name="user-reminders"):
         """Core function for adding a new reminder."""
         assert ctx.guild and isinstance(ctx.author, discord.Member)
 
+        # Ensure the datetime is timezone-aware (UTC)
+        if time.tzinfo is None:
+            time = time.replace(tzinfo=datetime.timezone.utc)
+
         # Validate title length
         if len(title) > 100:
             raise (invocation_error(ctx, "Title must be 100 characters or fewer."))
@@ -860,11 +857,14 @@ class RemindersCog(BaseExtensionCog, name="user-reminders"):
         # Check if this is a recurring reminder
         is_recurring = any([interval, iunit, weekdays, monthday])
 
-        # Validate 24-hour minimum for recurring reminders
-        if is_recurring:
-            is_valid, error_msg = self._validate_24_hour_minimum_new(time)
-            if not is_valid:
-                raise (invocation_error(ctx, error_msg))
+        # Basic validation: reminder must be in the future
+        now = datetime.datetime.now(datetime.timezone.utc)
+        if time <= now:
+            raise invocation_error(ctx, "Reminder time must be in the future.")
+            
+        # For recurring reminders, ensure at least 3 minutes from now to prevent spam
+        if is_recurring and time <= now + datetime.timedelta(minutes=3):
+            raise invocation_error(ctx, f"Recurring reminders must be set at least 3 minutes in the future. Please choose a time after {(now + datetime.timedelta(minutes=3)).strftime('%Y-%m-%d %H:%M UTC')}.")
 
         # Generate RRULE if recurring
         rrule_str = self._generate_rrule_new(time, interval, iunit, weekdays, monthday)
@@ -1101,6 +1101,9 @@ class RemindersCog(BaseExtensionCog, name="user-reminders"):
 
             try:
                 parsed_when = await when_converter.convert(ctx, time)
+                # Ensure the datetime is timezone-aware (UTC)
+                if parsed_when.tzinfo is None:
+                    parsed_when = parsed_when.replace(tzinfo=datetime.timezone.utc)
             except Exception as e:
                 raise invocation_error(ctx, f"Failed to parse time") from e
 
@@ -1191,6 +1194,10 @@ class RemindersCog(BaseExtensionCog, name="user-reminders"):
         params: dict[str, Any] = {"rid": reminder_id}
 
         if time:
+            # Ensure the datetime is timezone-aware (UTC)
+            if time.tzinfo is None:
+                time = time.replace(tzinfo=datetime.timezone.utc)
+
             # Check if reminder has already run (recurrences > 0)
             if existing_reminder.recurrences > 0:
                 raise (
@@ -1200,16 +1207,20 @@ class RemindersCog(BaseExtensionCog, name="user-reminders"):
                     )
                 )
 
-            # Validate 24-hour minimum for recurring reminders
+            # Basic validation for recurring reminders
             if (
                 any(
                     param is not None for param in (interval, iunit, weekdays, monthday)
                 )
                 or existing_reminder.rrule
             ):
-                is_valid, error_msg = self._validate_24_hour_minimum_new(time)
-                if not is_valid:
-                    raise (invocation_error(ctx, error_msg))
+                now = datetime.datetime.now(datetime.timezone.utc)
+                if time <= now:
+                    raise invocation_error(ctx, "Reminder time must be in the future.")
+                    
+                # For recurring reminders, ensure at least 3 minutes from now to prevent spam
+                if time <= now + datetime.timedelta(minutes=3):
+                    raise invocation_error(ctx, f"Recurring reminders must be set at least 3 minutes in the future. Please choose a time after {(now + datetime.timedelta(minutes=3)).strftime('%Y-%m-%d %H:%M UTC')}.")
 
             updates.append("next_time = :next_time")
             params["next_time"] = time
@@ -1247,8 +1258,12 @@ class RemindersCog(BaseExtensionCog, name="user-reminders"):
             param is not None for param in (interval, iunit, weekdays, monthday)
         ):
             # Update recurrence without changing time
+            existing_time = existing_reminder.next_time
+            if hasattr(existing_time, "tzinfo") and existing_time.tzinfo is None:
+                existing_time = existing_time.replace(tzinfo=datetime.timezone.utc)
+
             rrule_str = self._generate_rrule_new(
-                existing_reminder.next_time, interval, iunit, weekdays, monthday
+                existing_time, interval, iunit, weekdays, monthday
             )
             updates.append("rrule = :rrule")
             params["rrule"] = rrule_str
