@@ -9,7 +9,7 @@ from .constants import DB_PREFIX
 MIGRATIONS: list[Revision] = _(
     [
         {  # revision 0
-            "date": "2069-04-20T13:26:39",
+            "date": "2023-07-02T17:34:00",
             "description": "Initial migration",
             "migrate": {
                 "sqlite": [

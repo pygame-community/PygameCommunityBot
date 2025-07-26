@@ -163,3 +163,6 @@ localconfig.py
 
 # Docker
 docker-compose-dev.yml
+
+# Storage
+/db

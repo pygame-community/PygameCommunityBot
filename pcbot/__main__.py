@@ -49,7 +49,9 @@ if (config_source := os.environ.get("CONFIG_PY")) and config_source != "":
 else:
     config_source = None
 
-if (localconfig_source := os.environ.get("LOCALCONFIG_PY")) and localconfig_source != "":
+if (
+    localconfig_source := os.environ.get("LOCALCONFIG_PY")
+) and localconfig_source != "":
     with open("./env/localconfig.py", "w") as f:
         f.write(localconfig_source)
 else:
@@ -75,7 +77,6 @@ def setup_logging(log_level, stdout: bool = True) -> None:
             )
         stream_handler.setFormatter(stream_formatter)
         logger.addHandler(stream_handler)
-
 
     log_directory = config.get("log_directory", "logs")
     if log_directory == "logs" and not os.path.exists("./logs"):
@@ -226,7 +227,7 @@ _shared_options_map = dict(
     config_path=click.option(
         "--config",
         "config_path",
-        default= "./env/config.py" if config_source else "./config.py",
+        default="./env/config.py" if config_source else "./config.py",
         show_default=True,
         type=click.Path(resolve_path=True),
         help="A path to the 'config.py' file to use for configuration, "
@@ -236,7 +237,7 @@ _shared_options_map = dict(
     localconfig_path=click.option(
         "--localconfig",
         "localconfig_path",
-        default= "./env/localconfig.py" if localconfig_source else "./localconfig.py",
+        default="./env/localconfig.py" if localconfig_source else "./localconfig.py",
         show_default=True,
         type=click.Path(resolve_path=True),
         help="A path to the optional 'localconfig.py' file to use for locally overriding "
