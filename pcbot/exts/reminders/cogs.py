@@ -125,102 +125,139 @@ class RemindersCog(BaseExtensionCog, name="user-reminders"):
     @tasks.loop(seconds=30)  # Check every 30 seconds
     async def check_reminders(self) -> None:
         """Background task to check for due reminders."""
-        try:
-            conn: AsyncConnection
-            async with self.db_engine.connect() as conn:
-                # Get all due reminders
-                result: Result = await conn.execute(
-                    text(
-                        f"SELECT * FROM '{DB_PREFIX}reminders' "
-                        "WHERE next_time <= :current_time"
-                    ),
-                    {"current_time": datetime.datetime.now(datetime.timezone.utc)},
-                )
+        conn: AsyncConnection
+        async with self.db_engine.connect() as conn:
+            # Get all due reminders
+            result: Result = await conn.execute(
+                text(
+                    f"SELECT * FROM '{DB_PREFIX}reminders' "
+                    "WHERE next_time <= :current_time"
+                ),
+                {"current_time": datetime.datetime.now(datetime.timezone.utc)},
+            )
 
-                reminders = result.fetchall()
+            reminders = result.fetchall()
 
-                for reminder in reminders:
-                    try:
-                        await self._process_due_reminder(reminder)
-                    except Exception as e:
-                        _logger.error(f"Error processing reminder {reminder.rid}: {e}")
-
-        except Exception as e:
-            _logger.error(f"Error in check_reminders task: {e}")
+            for reminder in reminders:
+                try:
+                    await self._process_due_reminder(reminder)
+                except Exception as e:
+                    _logger.warning(
+                        f"Error processing (now deleted) reminder {reminder.rid}: {e}",
+                        exc_info=True,
+                    )
+                    # Delete problematic reminder to prevent infinite retry loops
+                    await self._delete_reminder(reminder.rid)
 
     async def _process_due_reminder(self, reminder_row: Row[Any]) -> None:
         """Process a due reminder by sending messages and handling recurrence."""
-        try:
-            # Ensure next_time is timezone-aware (UTC)
-            next_time = reminder_row.next_time
+        # Ensure next_time is timezone-aware (UTC)
+        next_time = reminder_row.next_time
 
-            # Handle string datetime from database
-            if isinstance(next_time, str):
-                next_time = datetime.datetime.fromisoformat(next_time)
+        # Handle string datetime from database
+        if isinstance(next_time, str):
+            next_time = datetime.datetime.fromisoformat(next_time)
 
-            if hasattr(next_time, "tzinfo") and next_time.tzinfo is None:
-                next_time = next_time.replace(tzinfo=datetime.timezone.utc)
+        if hasattr(next_time, "tzinfo") and next_time.tzinfo is None:
+            next_time = next_time.replace(tzinfo=datetime.timezone.utc)
 
-            user = self.bot.get_user(reminder_row.user_id)
-            if not user:
-                try:
-                    user = await self.bot.fetch_user(reminder_row.user_id)
-                except discord.NotFound:
-                    _logger.warning(
-                        f"User {reminder_row.user_id} not found, deleting reminder {reminder_row.rid}"
-                    )
-                    await self._delete_reminder(reminder_row.rid)
-                    return
-
-            # Create reminder embed (first message)
-            reminder_embed = discord.Embed(
-                title="⏰ Reminder",
-                description=f"**{reminder_row.title}**",
-                color=self.theme_color,
-                timestamp=next_time,
-            )
-
-            if (
-                reminder_row.creation_message_id
-                and reminder_row.creation_messageable_id
-            ):
-                try:
-                    messageable_id = int(reminder_row.creation_messageable_id)
-                    if reminder_row.dm:
-                        # For DM reminders, the messageable could be the DM channel
-                        messageable = user.dm_channel or await user.create_dm()
-                    else:
-                        # For guild reminders, get the channel
-                        messageable = self.bot.get_channel(messageable_id)
-                        if not messageable:
-                            messageable = await self.bot.fetch_channel(messageable_id)
-
-                    creation_message_url = f"https://discord.com/channels/"
-                    guild = getattr(messageable, "guild", None)
-                    if guild:
-                        creation_message_url += f"{guild.id}/"
-                    else:
-                        creation_message_url += "@me/"
-                    creation_message_url += (
-                        f"{messageable_id}/{reminder_row.creation_message_id}"
-                    )
-
-                    reminder_embed.add_field(
-                        name="Original Message",
-                        value=f"[Jump to message]({creation_message_url})",
-                        inline=False,
-                    )
-                except (ValueError, discord.NotFound, discord.Forbidden):
-                    # If we can't access the original message, that's okay
-                    pass
-
-            # Send reminder embed
+        user = self.bot.get_user(reminder_row.user_id)
+        if not user:
             try:
+                user = await self.bot.fetch_user(reminder_row.user_id)
+            except discord.NotFound:
+                _logger.warning(
+                    f"User {reminder_row.user_id} not found, deleting reminder {reminder_row.rid}"
+                )
+                await self._delete_reminder(reminder_row.rid)
+                return
+
+        # Create reminder embed (first message)
+        reminder_embed = discord.Embed(
+            title="⏰ Reminder",
+            description=f"**{reminder_row.title}**",
+            color=self.theme_color,
+            timestamp=next_time,
+        )
+
+        if reminder_row.creation_message_id and reminder_row.creation_messageable_id:
+            try:
+                messageable_id = int(reminder_row.creation_messageable_id)
                 if reminder_row.dm:
+                    # For DM reminders, the messageable could be the DM channel
+                    messageable = user.dm_channel or await user.create_dm()
+                else:
+                    # For guild reminders, get the channel
+                    messageable = self.bot.get_channel(messageable_id)
+                    if not messageable:
+                        messageable = await self.bot.fetch_channel(messageable_id)
+
+                creation_message_url = f"https://discord.com/channels/"
+                guild = getattr(messageable, "guild", None)
+                if guild:
+                    creation_message_url += f"{guild.id}/"
+                else:
+                    creation_message_url += "@me/"
+                creation_message_url += (
+                    f"{messageable_id}/{reminder_row.creation_message_id}"
+                )
+
+                reminder_embed.add_field(
+                    name="Original Message",
+                    value=f"[Jump to message]({creation_message_url})",
+                    inline=False,
+                )
+            except (ValueError, discord.NotFound, discord.Forbidden):
+                # If we can't access the original message, that's okay
+                pass
+
+        # Send reminder embed
+        try:
+            if reminder_row.dm:
+                dm_channel = user.dm_channel or await user.create_dm()
+                await dm_channel.send(embed=reminder_embed)
+            else:
+                # Send to the original channel
+                messageable_id = int(reminder_row.creation_messageable_id)
+                channel = self.bot.get_channel(messageable_id)
+                if isinstance(
+                    channel,
+                    (
+                        discord.TextChannel,
+                        discord.DMChannel,
+                        discord.VoiceChannel,
+                        discord.StageChannel,
+                        discord.Thread,
+                    ),
+                ):
+                    await channel.send(f"[{user.mention}] **Reminder**: {reminder_row.title}\n\n-# Reminder ID: {reminder_row.rid}")  # type: ignore
+                else:
+                    # Fallback to DM if channel not found or not sendable
                     dm_channel = user.dm_channel or await user.create_dm()
                     await dm_channel.send(embed=reminder_embed)
+
+        except discord.Forbidden:
+            _logger.warning(
+                f"Cannot send reminder to user {user.id}, insufficient permissions"
+            )
+
+        # Send message content if provided (second message)
+        if reminder_row.message:
+            try:
+                # Determine where to send the message
+                if reminder_row.dm:
+                    dm_channel = user.dm_channel or await user.create_dm()
+                    await dm_channel.send(
+                        reminder_row.message,
+                        allowed_mentions=(
+                            discord.AllowedMentions(
+                                everyone=False, users=True, roles=False
+                            )
+                            if reminder_row.message_mentions
+                            else discord.AllowedMentions.none()
+                        ),
+                    )
                 else:
-                    # Send to the original channel
                     messageable_id = int(reminder_row.creation_messageable_id)
                     channel = self.bot.get_channel(messageable_id)
                     if isinstance(
@@ -233,22 +270,18 @@ class RemindersCog(BaseExtensionCog, name="user-reminders"):
                             discord.Thread,
                         ),
                     ):
-                        await channel.send(f"[{user.mention}] **Reminder**: {reminder_row.title}\n\n-# Reminder ID: {reminder_row.rid}")  # type: ignore
+                        await channel.send(  # type: ignore
+                            reminder_row.message,
+                            allowed_mentions=(
+                                discord.AllowedMentions(
+                                    everyone=False, users=True, roles=False
+                                )
+                                if reminder_row.message_mentions
+                                else discord.AllowedMentions.none()
+                            ),
+                        )
                     else:
                         # Fallback to DM if channel not found or not sendable
-                        dm_channel = user.dm_channel or await user.create_dm()
-                        await dm_channel.send(embed=reminder_embed)
-
-            except discord.Forbidden:
-                _logger.warning(
-                    f"Cannot send reminder to user {user.id}, insufficient permissions"
-                )
-
-            # Send message content if provided (second message)
-            if reminder_row.message:
-                try:
-                    # Determine where to send the message
-                    if reminder_row.dm:
                         dm_channel = user.dm_channel or await user.create_dm()
                         await dm_channel.send(
                             reminder_row.message,
@@ -260,59 +293,18 @@ class RemindersCog(BaseExtensionCog, name="user-reminders"):
                                 else discord.AllowedMentions.none()
                             ),
                         )
-                    else:
-                        messageable_id = int(reminder_row.creation_messageable_id)
-                        channel = self.bot.get_channel(messageable_id)
-                        if isinstance(
-                            channel,
-                            (
-                                discord.TextChannel,
-                                discord.DMChannel,
-                                discord.VoiceChannel,
-                                discord.StageChannel,
-                                discord.Thread,
-                            ),
-                        ):
-                            await channel.send(  # type: ignore
-                                reminder_row.message,
-                                allowed_mentions=(
-                                    discord.AllowedMentions(
-                                        everyone=False, users=True, roles=False
-                                    )
-                                    if reminder_row.message_mentions
-                                    else discord.AllowedMentions.none()
-                                ),
-                            )
-                        else:
-                            # Fallback to DM if channel not found or not sendable
-                            dm_channel = user.dm_channel or await user.create_dm()
-                            await dm_channel.send(
-                                reminder_row.message,
-                                allowed_mentions=(
-                                    discord.AllowedMentions(
-                                        everyone=False, users=True, roles=False
-                                    )
-                                    if reminder_row.message_mentions
-                                    else discord.AllowedMentions.none()
-                                ),
-                            )
 
-                except discord.Forbidden:
-                    _logger.warning(
-                        f"Cannot send reminder message to user {user.id}, insufficient permissions"
-                    )
+            except discord.Forbidden:
+                _logger.warning(
+                    f"Cannot send reminder message to user {user.id}, insufficient permissions"
+                )
 
-            # Handle recurrence or deletion
-            if reminder_row.rrule:
-                # This is a recurring reminder, schedule next occurrence
-                await self._schedule_next_occurrence(reminder_row)
-            else:
-                # One-time reminder, delete it
-                await self._delete_reminder(reminder_row.rid)
-
-        except Exception as e:
-            _logger.error(f"Error processing reminder {reminder_row.rid}: {e}")
-            # If there's an error, delete the reminder to prevent infinite loops
+        # Handle recurrence or deletion
+        if reminder_row.rrule:
+            # This is a recurring reminder, schedule next occurrence
+            await self._schedule_next_occurrence(reminder_row)
+        else:
+            # One-time reminder, delete it
             await self._delete_reminder(reminder_row.rid)
 
     async def _schedule_next_occurrence(self, reminder_row: Row[Any]) -> None:
@@ -322,44 +314,39 @@ class RemindersCog(BaseExtensionCog, name="user-reminders"):
             await self._delete_reminder(reminder_row.rid)
             return
 
-        try:
-            # Ensure next_time is timezone-aware (UTC)
-            next_time = reminder_row.next_time
+        # Ensure next_time is timezone-aware (UTC)
+        next_time = reminder_row.next_time
 
-            # Handle string datetime from database
-            if isinstance(next_time, str):
-                next_time = datetime.datetime.fromisoformat(next_time)
+        # Handle string datetime from database
+        if isinstance(next_time, str):
+            next_time = datetime.datetime.fromisoformat(next_time)
 
-            if hasattr(next_time, "tzinfo") and next_time.tzinfo is None:
-                next_time = next_time.replace(tzinfo=datetime.timezone.utc)
+        if hasattr(next_time, "tzinfo") and next_time.tzinfo is None:
+            next_time = next_time.replace(tzinfo=datetime.timezone.utc)
 
-            # Parse the RRULE
-            rule = rrulestr(reminder_row.rrule, dtstart=next_time)
+        # Parse the RRULE
+        rule = rrulestr(reminder_row.rrule, dtstart=next_time)
 
-            # Get the next occurrence after the current time
-            now = datetime.datetime.now(datetime.timezone.utc)
-            next_occurrence = rule.after(now, inc=False)
+        # Get the next occurrence after the current time
+        now = datetime.datetime.now(datetime.timezone.utc)
+        next_occurrence = rule.after(now, inc=False)
 
-            if next_occurrence is None:
-                # No more occurrences, delete the reminder
-                await self._delete_reminder(reminder_row.rid)
-                return
-
-            # Update the reminder with the new time and increment recurrences
-            conn: AsyncConnection
-            async with self.db_engine.begin() as conn:
-                await conn.execute(
-                    text(
-                        f"UPDATE '{DB_PREFIX}reminders' "
-                        "SET next_time = :next_time, recurrences = recurrences + 1 "
-                        "WHERE rid = :rid"
-                    ),
-                    dict(next_time=next_occurrence, rid=reminder_row.rid),
-                )
-        except Exception as e:
-            _logger.error(f"Error parsing RRULE for reminder {reminder_row.rid}: {e}")
-            # Delete invalid reminder
+        if next_occurrence is None:
+            # No more occurrences, delete the reminder
             await self._delete_reminder(reminder_row.rid)
+            return
+
+        # Update the reminder with the new time and increment recurrences
+        conn: AsyncConnection
+        async with self.db_engine.begin() as conn:
+            await conn.execute(
+                text(
+                    f"UPDATE '{DB_PREFIX}reminders' "
+                    "SET next_time = :next_time, recurrences = recurrences + 1 "
+                    "WHERE rid = :rid"
+                ),
+                dict(next_time=next_occurrence, rid=reminder_row.rid),
+            )
 
     def _generate_rrule(
         self, pattern: str, start_time: datetime.datetime
@@ -861,10 +848,13 @@ class RemindersCog(BaseExtensionCog, name="user-reminders"):
         now = datetime.datetime.now(datetime.timezone.utc)
         if time <= now:
             raise invocation_error(ctx, "Reminder time must be in the future.")
-            
+
         # For recurring reminders, ensure at least 3 minutes from now to prevent spam
         if is_recurring and time <= now + datetime.timedelta(minutes=3):
-            raise invocation_error(ctx, f"Recurring reminders must be set at least 3 minutes in the future. Please choose a time after {(now + datetime.timedelta(minutes=3)).strftime('%Y-%m-%d %H:%M UTC')}.")
+            raise invocation_error(
+                ctx,
+                f"Recurring reminders must be set at least 3 minutes in the future. Please choose a time after {(now + datetime.timedelta(minutes=3)).strftime('%Y-%m-%d %H:%M UTC')}.",
+            )
 
         # Generate RRULE if recurring
         rrule_str = self._generate_rrule_new(time, interval, iunit, weekdays, monthday)
@@ -1217,10 +1207,13 @@ class RemindersCog(BaseExtensionCog, name="user-reminders"):
                 now = datetime.datetime.now(datetime.timezone.utc)
                 if time <= now:
                     raise invocation_error(ctx, "Reminder time must be in the future.")
-                    
+
                 # For recurring reminders, ensure at least 3 minutes from now to prevent spam
                 if time <= now + datetime.timedelta(minutes=3):
-                    raise invocation_error(ctx, f"Recurring reminders must be set at least 3 minutes in the future. Please choose a time after {(now + datetime.timedelta(minutes=3)).strftime('%Y-%m-%d %H:%M UTC')}.")
+                    raise invocation_error(
+                        ctx,
+                        f"Recurring reminders must be set at least 3 minutes in the future. Please choose a time after {(now + datetime.timedelta(minutes=3)).strftime('%Y-%m-%d %H:%M UTC')}.",
+                    )
 
             updates.append("next_time = :next_time")
             params["next_time"] = time
