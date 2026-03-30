@@ -2,11 +2,12 @@
 
 services:
   pygamecommunitybot:
-    image: pygamecommunitybot:latest
-    restart: unless-stopped
     build:
       context: .
       dockerfile: Dockerfile
+    image: pcbot-main:latest
+    container_name: pcbot-main
+    restart: unless-stopped
     stop_signal: SIGINT
     environment:
       - TOKEN=${TOKEN:-} # A string representation of a discord bot token
@@ -17,3 +18,8 @@ services:
       - pcbot-logs-volume:/app/logs/
       - pcbot-db-volume:/app/db/
     tty: true
+
+volumes:
+  pcbot-env-volume:
+  pcbot-logs-volume:
+  pcbot-db-volume:

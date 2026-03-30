@@ -1,6 +1,6 @@
 services:
   pygamecommunitybot-dev:
-    image: pygamecommunitybot-dev:latest
+    image: pcbot-dev:latest
     restart: unless-stopped
     build:
       context: .
