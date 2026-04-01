@@ -10,9 +10,12 @@ import io
 import json
 from typing import Literal
 
+import aiohttp
 import discord
 from discord.ext import commands
 import snakecore
+
+from snakecore.utils.regex_patterns import HTTP_URL
 from snakecore.commands.decorators import flagconverter_kwargs
 from snakecore.commands.converters import (
     CodeBlock,
@@ -20,6 +23,7 @@ from snakecore.commands.converters import (
     ReferencedMessage,
     String,
     TimeDelta,
+    StringExpr,
 )
 
 from ..base import BaseExtensionCog
@@ -215,12 +219,135 @@ def get_msg_info_embed(msg: discord.Message, author: bool = True):
 
 
 class Messaging(BaseExtensionCog, name="messaging"):
+    async def _fetch_url_bytes(self, url: str) -> bytes:
+        """Fetch raw bytes from a URL using aiohttp.
+
+        Reuses the Discord.py HTTP session when available.
+        """
+
+        existing_session = getattr(self.bot.http, "_HTTPClient__session", None)
+        owns_session = (
+            not isinstance(existing_session, aiohttp.ClientSession)
+            or existing_session.closed
+        )
+
+        session: aiohttp.ClientSession
+        if owns_session:
+            session = aiohttp.ClientSession()
+        else:
+            assert isinstance(existing_session, aiohttp.ClientSession)
+            session = existing_session
+
+        try:
+            async with session.get(url) as response:
+                if response.status >= 400:
+                    raise commands.CommandInvokeError(
+                        commands.CommandError(
+                            "Failed to fetch URL resource: "
+                            f"HTTP {response.status} {response.reason or ''}".strip()
+                        )
+                    )
+                return await response.read()
+        except commands.CommandInvokeError:
+            raise
+        except aiohttp.ClientError as err:
+            raise commands.CommandInvokeError(
+                commands.CommandError(
+                    f"Failed to fetch URL resource: {err.__class__.__name__}: {err}"
+                )
+            )
+        finally:
+            if owns_session:
+                await session.close()
+
+    async def _resolve_messaging_webhook(
+        self,
+        channel: MessageableGuildChannel | discord.ForumChannel,
+        *,
+        webhook_name: str | None = None,
+        webhook_url: str | None = None,
+        webhook_avatar_url: str | None = None,
+    ) -> tuple[discord.Webhook, discord.Thread | None]:
+        """Resolve a webhook for a target channel/thread, creating one if needed.
+
+        If `webhook_url` is provided, it is used directly.
+        Otherwise, this resolves an existing channel webhook by name or creates one.
+        """
+
+        thread = channel if isinstance(channel, discord.Thread) else None
+
+        if webhook_url:
+            try:
+                webhook = discord.Webhook.from_url(str(webhook_url), client=self.bot)
+            except Exception as err:
+                raise commands.CommandInvokeError(
+                    commands.CommandError(
+                        "Invalid `webhook_url:` flag value: "
+                        f"{err.__class__.__name__}: {err}"
+                    )
+                )
+
+            return (webhook, thread)
+
+        target_channel = (
+            channel.parent if isinstance(channel, discord.Thread) else channel
+        )
+        if not isinstance(target_channel, (discord.TextChannel, discord.ForumChannel)):
+            raise commands.CommandInvokeError(
+                commands.CommandError(
+                    "Webhooks can only be used in text/forum channels and threads."
+                )
+            )
+
+        resolved_webhook_name = str(
+            webhook_name
+            if webhook_name
+            else f"{self.bot.user.name} Messaging"
+            if self.bot.user
+            else "Messaging"
+        )
+
+        try:
+            existing_webhooks = await target_channel.webhooks()
+        except discord.HTTPException as err:
+            raise commands.CommandInvokeError(
+                commands.CommandError(
+                    "Failed to fetch channel webhooks: "
+                    f"{err.__class__.__name__}: {err.text or err}"
+                )
+            )
+
+        for webhook in existing_webhooks:
+            if webhook.name == resolved_webhook_name:
+                return webhook, thread
+
+        avatar_bytes = (
+            await self._fetch_url_bytes(str(webhook_avatar_url))
+            if webhook_avatar_url
+            else None
+        )
+
+        try:
+            webhook = await target_channel.create_webhook(
+                name=resolved_webhook_name,
+                avatar=avatar_bytes,
+            )
+        except discord.HTTPException as err:
+            raise commands.CommandInvokeError(
+                commands.CommandError(
+                    "Failed to create webhook in target channel: "
+                    f"{err.__class__.__name__}: {err.text or err}"
+                )
+            )
+
+        return (webhook, thread)
+
     async def message_send_func(
         self,
         ctx: commands.Context[BotT],
         attachments: commands.Greedy[discord.Attachment],
         *,
-        content: String | None = None,
+        content: String | str | None = None,
         embeds: tuple[
             Parens[discord.Message, int] | discord.Message | CodeBlock, ...
         ] = (),
@@ -234,6 +361,10 @@ class Messaging(BaseExtensionCog, name="messaging"):
         mention_roles: bool = False,
         mention_these_roles: tuple[discord.Role, ...] = (),
         mention_replied_user: bool = False,
+        webhook_name: String[80] | None = None,
+        webhook_url: StringExpr[HTTP_URL] | None = None,
+        webhook_username: String[80] | None = None,
+        webhook_avatar_url: StringExpr[HTTP_URL] | None = None,
     ):
         assert (
             ctx.guild
@@ -385,65 +516,115 @@ class Messaging(BaseExtensionCog, name="messaging"):
                     )
                 files.append(await att.to_file(use_cached=True))
 
+        allowed_mentions = (
+            discord.AllowedMentions.all()
+            if mention_all
+            else discord.AllowedMentions(
+                everyone=mention_everyone,
+                users=(mention_these_users if mention_these_users else mention_users),
+                roles=(mention_these_roles if mention_these_roles else mention_roles),
+                replied_user=mention_replied_user,
+            )
+        )
+
+        delete_after_seconds = (
+            delete_after.total_seconds()
+            if isinstance(delete_after, datetime.timedelta)
+            else delete_after
+        )
+
+        explicit_webhook_flags = bool(
+            webhook_name or webhook_url or webhook_username or webhook_avatar_url
+        )
+        if reply_to is not None and explicit_webhook_flags:
+            raise commands.CommandInvokeError(
+                commands.CommandError(
+                    "Webhook flags cannot be used together with `reply_to:`."
+                )
+            )
+
         for dest in destinations:
-            msg = await (
-                reply_to.reply(
+            if reply_to is None:
+                try:
+                    webhook, thread = await self._resolve_messaging_webhook(
+                        dest,
+                        webhook_name=webhook_name,
+                        webhook_url=webhook_url,
+                        webhook_avatar_url=webhook_avatar_url,
+                    )
+                except commands.CommandInvokeError:
+                    if explicit_webhook_flags:
+                        raise
+
+                    webhook = None
+                    thread = None
+
+                if webhook is not None:
+                    try:
+                        if thread is not None:
+                            msg = await webhook.send(
+                                content=str(content) if content is not None else "",
+                                embeds=parsed_embeds,
+                                files=files,
+                                allowed_mentions=allowed_mentions,
+                                username=(
+                                    str(webhook_username)
+                                    if webhook_username
+                                    else discord.utils.MISSING
+                                ),
+                                avatar_url=(
+                                    str(webhook_avatar_url)
+                                    if webhook_avatar_url
+                                    else discord.utils.MISSING
+                                ),
+                                thread=thread,
+                                wait=True,
+                            )
+                        else:
+                            msg = await webhook.send(
+                                content=str(content) if content is not None else "",
+                                embeds=parsed_embeds,
+                                files=files,
+                                allowed_mentions=allowed_mentions,
+                                username=(
+                                    str(webhook_username)
+                                    if webhook_username
+                                    else discord.utils.MISSING
+                                ),
+                                avatar_url=(
+                                    str(webhook_avatar_url)
+                                    if webhook_avatar_url
+                                    else discord.utils.MISSING
+                                ),
+                                wait=True,
+                            )
+                    except discord.HTTPException as err:
+                        raise commands.CommandInvokeError(
+                            commands.CommandError(
+                                "Failed to send message via webhook: "
+                                f"{err.__class__.__name__}: {err.text or err}"
+                            )
+                        )
+
+                    if delete_after_seconds:
+                        await msg.delete(delay=delete_after_seconds)
+                    continue
+
+                msg = await dest.send(
                     content=content,
                     embeds=parsed_embeds,
                     files=files,
-                    allowed_mentions=(
-                        discord.AllowedMentions.all()
-                        if mention_all
-                        else discord.AllowedMentions(
-                            everyone=mention_everyone,
-                            users=(
-                                mention_these_users
-                                if mention_these_users
-                                else mention_users
-                            ),
-                            roles=(
-                                mention_these_roles
-                                if mention_these_roles
-                                else mention_roles
-                            ),
-                            replied_user=mention_replied_user,
-                        )
-                    ),
-                    delete_after=(
-                        delete_after.total_seconds()
-                        if isinstance(delete_after, datetime.timedelta)
-                        else delete_after
-                    ),  # type: ignore
+                    allowed_mentions=allowed_mentions,
+                    delete_after=delete_after_seconds,  # type: ignore
                 )
-                if reply_to
-                else dest.send(
-                    content=content,
-                    embeds=parsed_embeds,
-                    files=files,
-                    allowed_mentions=(
-                        discord.AllowedMentions.all()
-                        if mention_all
-                        else discord.AllowedMentions(
-                            everyone=mention_everyone,
-                            users=(
-                                mention_these_users
-                                if mention_these_users
-                                else mention_users
-                            ),
-                            roles=(
-                                mention_these_roles
-                                if mention_these_roles
-                                else mention_roles
-                            ),
-                            replied_user=mention_replied_user,
-                        )
-                    ),
-                    delete_after=(
-                        delete_after.total_seconds()
-                        if isinstance(delete_after, datetime.timedelta)
-                        else delete_after
-                    ),  # type: ignore
-                )
+                continue
+
+            await reply_to.reply(
+                content=content,
+                embeds=parsed_embeds,
+                files=files,
+                allowed_mentions=allowed_mentions,
+                delete_after=delete_after_seconds,  # type: ignore
             )
 
     @commands.group(
@@ -451,6 +632,8 @@ class Messaging(BaseExtensionCog, name="messaging"):
         aliases=["msg"],
         usage="[attachments (upload files < 8 MiB)]... [content: Text[2000]] "
         "[embeds: CodeBlock...] [to: Channel] [reply_to: Message] "
+        "[webhook_name: Text[80]] [webhook_url: Text] "
+        "[webhook_username: Text[80]] [webhook_avatar_url: Text] "
         "[delete_after: Number/TimeDelta] [mention_all: yes|no] "
         "[mention_everyone: yes|no] [mention_users: yes|no] "
         "[mention_these_users: User...] [mention_roles: yes|no] "
@@ -468,6 +651,10 @@ class Messaging(BaseExtensionCog, name="messaging"):
         ] = (),
         to: tuple[MessageableGuildChannel, ...] = (),
         reply_to: discord.PartialMessage | None = None,
+        webhook_name: String[80] | None = None,
+        webhook_url: StringExpr[HTTP_URL] | None = None,
+        webhook_username: String[80] | None = None,
+        webhook_avatar_url: StringExpr[HTTP_URL] | None = None,
         delete_after: float | TimeDelta | None = None,
         mention_all: bool = False,
         mention_everyone: bool = False,
@@ -497,6 +684,19 @@ class Messaging(BaseExtensionCog, name="messaging"):
 
         **`[reply_to: Message]`**
         > A flag for The URL of the message to use as a reference.
+
+        **`[webhook_name: Text[80]]`**
+        > A flag for the internal webhook name to resolve/create in each target channel.
+        > If omitted and `webhook_url:` is not provided, `{bot_name} Messaging` is used.
+
+        **`[webhook_url: Text]`**
+        > A flag for a pre-existing webhook URL to use directly.
+
+        **`[webhook_username: Text[80]]`**
+        > A flag for overriding the displayed sender name for webhook-delivered messages.
+
+        **`[webhook_avatar_url: Text]`**
+        > A flag for overriding the displayed sender avatar for webhook-delivered messages.
 
         **`[delete_after: Number/TimeDelta]`**
         > A flag to set a deletion timeout for the message upon its creation.
@@ -536,6 +736,10 @@ class Messaging(BaseExtensionCog, name="messaging"):
             embeds=embeds,
             to=to,
             reply_to=reply_to,
+            webhook_name=webhook_name,
+            webhook_url=webhook_url,
+            webhook_username=webhook_username,
+            webhook_avatar_url=webhook_avatar_url,
             delete_after=delete_after,
             mention_all=mention_all,
             mention_everyone=mention_everyone,
@@ -565,6 +769,10 @@ class Messaging(BaseExtensionCog, name="messaging"):
         ] = (),
         to: tuple[MessageableGuildChannel, ...] = (),
         reply_to: discord.PartialMessage | None = None,
+        webhook_name: String[80] | None = None,
+        webhook_url: StringExpr[HTTP_URL] | None = None,
+        webhook_username: String[80] | None = None,
+        webhook_avatar_url: StringExpr[HTTP_URL] | None = None,
         delete_after: float | TimeDelta | None = None,
         mention_all: bool = False,
         mention_everyone: bool = False,
@@ -581,6 +789,10 @@ class Messaging(BaseExtensionCog, name="messaging"):
             embeds=embeds,
             to=to,
             reply_to=reply_to,
+            webhook_name=webhook_name,
+            webhook_url=webhook_url,
+            webhook_username=webhook_username,
+            webhook_avatar_url=webhook_avatar_url,
             delete_after=delete_after,
             mention_all=mention_all,
             mention_everyone=mention_everyone,
@@ -598,6 +810,8 @@ class Messaging(BaseExtensionCog, name="messaging"):
         "<name|title: Text[100]> [content: Text[2000]] "
         "[embeds: CodeBlock...] [tags: String[20]...] "
         "[auto_hide_duration: 1h|24h|1d|3d|1w] [slowmode_delay: TimeDelta] "
+        "[webhook_name: Text[80]] [webhook_url: Text] "
+        "[webhook_username: Text[80]] [webhook_avatar_url: Text] "
         "[mention_all: yes|no] [mention_everyone: yes|no] [mention_users: yes|no] "
         "[mention_these_users: User...] [mention_roles: yes|no] "
         "[mention_these_roles: Role...] [mention_replied_user: yes|no]",
@@ -620,6 +834,10 @@ class Messaging(BaseExtensionCog, name="messaging"):
             Literal["1h", "24h", "1d", "3d", "1w"] | None
         ) = commands.flag(aliases=["auto_archive_duration"], default=None),
         slowmode_delay: TimeDelta = datetime.timedelta(),
+        webhook_name: String[80] | None = None,
+        webhook_url: StringExpr[HTTP_URL] | None = None,
+        webhook_username: String[80] | None = None,
+        webhook_avatar_url: StringExpr[HTTP_URL] | None = None,
         mention_all: bool = False,
         mention_everyone: bool = False,
         mention_users: bool = False,
@@ -658,6 +876,19 @@ class Messaging(BaseExtensionCog, name="messaging"):
 
         **`[slowmode_delay: TimeDelta]`**
         > The slowmode delay to use. Omission disables slowmode.
+
+        **`[webhook_name: Text[80]]`**
+        > A flag for the internal webhook name to resolve/create in each target channel.
+        > If omitted and `webhook_url:` is not provided, `{bot_name} Messaging` is used.
+
+        **`[webhook_url: Text]`**
+        > A flag for a pre-existing webhook URL to use directly.
+
+        **`[webhook_username: Text[80]]`**
+        > A flag for overriding the displayed sender name for webhook-delivered posts.
+
+        **`[webhook_avatar_url: Text]`**
+        > A flag for overriding the displayed sender avatar for webhook-delivered posts.
 
         **`[mention_all: yes|no]`**
         > A flag for whether all mentionable targets in the message text content (users, roles, user being replied to) should receive a mention ping.
@@ -843,43 +1074,71 @@ class Messaging(BaseExtensionCog, name="messaging"):
                     )
                 files.append(await att.to_file(use_cached=True))
 
+        allowed_mentions = (
+            discord.AllowedMentions.all()
+            if mention_all
+            else discord.AllowedMentions(
+                everyone=mention_everyone,
+                users=(mention_these_users if mention_these_users else mention_users),
+                roles=(mention_these_roles if mention_these_roles else mention_roles),
+            )
+        )
+
+        auto_archive_duration = (
+            {"1h": 60, "24h": 1440, "3d": 4320, "1w": 10080}[auto_hide_duration]
+            if auto_hide_duration
+            else discord.utils.MISSING
+        )
+
         for dest in destinations:
             assert isinstance(dest, discord.ForumChannel)
-            msg = await dest.create_thread(
-                name=name,
-                content=content,
-                embeds=parsed_embeds,
-                files=files,
-                allowed_mentions=(
-                    discord.AllowedMentions.all()
-                    if mention_all
-                    else discord.AllowedMentions(
-                        everyone=mention_everyone,
-                        users=(
-                            mention_these_users
-                            if mention_these_users
-                            else mention_users
-                        ),
-                        roles=(
-                            mention_these_roles
-                            if mention_these_roles
-                            else mention_roles
-                        ),
-                    )
-                ),
-                auto_archive_duration=(
-                    {"1h": 60, "24h": 1440, "3d": 4320, "1w": 10080}[auto_hide_duration]
-                    if auto_hide_duration
-                    else discord.utils.MISSING
-                ),  # type: ignore
-                slowmode_delay=slowmode_delay.seconds if slowmode_delay else None,
-                applied_tags=[
-                    tag
-                    for tag in dest.available_tags
-                    if tag.name.casefold() in tag_names
-                ]
-                or discord.utils.MISSING,
+            applied_tags = [
+                tag for tag in dest.available_tags if tag.name.casefold() in tag_names
+            ]
+            webhook, _ = await self._resolve_messaging_webhook(
+                dest,
+                webhook_name=webhook_name,
+                webhook_url=webhook_url,
+                webhook_avatar_url=webhook_avatar_url,
             )
+
+            try:
+                msg = await webhook.send(
+                    content=str(content) if content is not None else "",
+                    embeds=parsed_embeds,
+                    files=files,
+                    allowed_mentions=allowed_mentions,
+                    username=(
+                        str(webhook_username)
+                        if webhook_username
+                        else discord.utils.MISSING
+                    ),
+                    avatar_url=(
+                        str(webhook_avatar_url)
+                        if webhook_avatar_url
+                        else discord.utils.MISSING
+                    ),
+                    thread_name=str(name),
+                    applied_tags=(applied_tags or discord.utils.MISSING),
+                    wait=True,
+                )  # type: ignore
+            except discord.HTTPException as err:
+                raise commands.CommandInvokeError(
+                    commands.CommandError(
+                        "Failed to create forum post via webhook: "
+                        f"{err.__class__.__name__}: {err.text or err}"
+                    )
+                )
+
+            if isinstance(msg.channel, discord.Thread):
+                await msg.channel.edit(
+                    auto_archive_duration=auto_archive_duration,  # type: ignore
+                    slowmode_delay=(
+                        slowmode_delay.seconds
+                        if slowmode_delay
+                        else discord.utils.MISSING
+                    ),
+                )
 
     @commands.guild_only()
     @message.command(
@@ -1044,6 +1303,8 @@ class Messaging(BaseExtensionCog, name="messaging"):
         usage="[attachments (upload files < 8 MiB)]... <message> [content: Text[2000]] "
         "[embeds: CodeBlock/Message/( Message Integer ) ... ] [tags: String[20]...] "
         "[auto_hide_duration: 1h|24h|1d|3d|1w] [slowmode_delay: TimeDelta] "
+        "[webhook_name: Text[80]] [webhook_url: Text] "
+        "[webhook_username: Text[80]] [webhook_avatar_url: Text] "
         "[mention_everyone: yes|no] [mention_users: yes|no] "
         "[mention_these_users: User...] [mention_roles: yes|no] "
         "[mention_these_roles: Role...] [mention_replied_user: yes|no]",
@@ -1056,8 +1317,9 @@ class Messaging(BaseExtensionCog, name="messaging"):
         message: discord.Message | ReferencedMessage,
         attachments: commands.Greedy[discord.Attachment],
         *,
-        name: String[100]
-        | None = commands.flag(name="name", aliases=["title"], default=None),
+        name: String[100] | None = commands.flag(
+            name="name", aliases=["title"], default=None
+        ),
         content: String | None = None,
         embeds: tuple[
             Parens[discord.Message, int] | discord.Message | CodeBlock, ...
@@ -1071,6 +1333,10 @@ class Messaging(BaseExtensionCog, name="messaging"):
         remove_embeds: bool = False,
         remove_all_attachments: bool = False,
         remove_old_attachments: bool = False,
+        webhook_name: String[80] | None = None,
+        webhook_url: StringExpr[HTTP_URL] | None = None,
+        webhook_username: String[80] | None = None,
+        webhook_avatar_url: StringExpr[HTTP_URL] | None = None,
         mention_all: bool | None = None,
         mention_everyone: bool | None = None,
         mention_users: bool | None = None,
@@ -1118,6 +1384,19 @@ class Messaging(BaseExtensionCog, name="messaging"):
 
         **`[remove_content: yes|no]`**
         > A flag for whether all mentionable targets in the message text content (users, roles, user being replied to) should receive a mention ping.
+
+        **`[webhook_name: Text[80]]`**
+        > A flag for the internal webhook name to resolve/create when editing webhook messages.
+        > If omitted and `webhook_url:` is not provided, `{bot_name} Messaging` is used.
+
+        **`[webhook_url: Text]`**
+        > A flag for a pre-existing webhook URL to use directly for webhook edits.
+
+        **`[webhook_username: Text[80]]`**
+        > A flag for updating the webhook display name before editing the message.
+
+        **`[webhook_avatar_url: Text]`**
+        > A flag for updating the webhook display avatar before editing the message.
 
         **`[mention_all: yes|no]`**
         > A flag for whether all mentionable targets in the message text content (users, roles, user being replied to) should receive a mention ping.
@@ -1364,33 +1643,113 @@ class Messaging(BaseExtensionCog, name="messaging"):
                 ),
             )
 
-        await message.edit(
-            content=(
-                content
-                if content
-                else None
-                if remove_content
-                else discord.utils.MISSING
-            ),
-            embeds=(
-                parsed_embeds
-                if parsed_embeds
-                else []
-                if remove_embeds
-                else discord.utils.MISSING
-            ),
-            attachments=final_attachments,
-            allowed_mentions=(
-                discord.AllowedMentions.all()
-                if mention_all
-                else (
-                    discord.AllowedMentions(
-                        **allowed_mentions_kwargs,
-                    )
-                    if allowed_mentions_kwargs
-                    else discord.utils.MISSING
+        final_content = (
+            str(content)
+            if content
+            else None
+            if remove_content
+            else discord.utils.MISSING
+        )
+        final_embeds = (
+            parsed_embeds
+            if parsed_embeds
+            else []
+            if remove_embeds
+            else discord.utils.MISSING
+        )
+        final_allowed_mentions = (
+            discord.AllowedMentions.all()
+            if mention_all
+            else (
+                discord.AllowedMentions(
+                    **allowed_mentions_kwargs,
                 )
-            ),
+                if allowed_mentions_kwargs
+                else discord.utils.MISSING
+            )
+        )
+
+        resolved_webhook: discord.Webhook | None = None
+        resolved_thread: discord.Thread | None = None
+        explicit_webhook_flags = bool(
+            webhook_url or webhook_name or webhook_username or webhook_avatar_url
+        )
+        if (
+            webhook_url
+            or webhook_name
+            or webhook_username
+            or webhook_avatar_url
+            or message.webhook_id
+        ):
+            resolved_webhook, resolved_thread = await self._resolve_messaging_webhook(
+                message.channel,  # type: ignore[arg-type]
+                webhook_name=webhook_name,
+                webhook_url=webhook_url,
+                webhook_avatar_url=webhook_avatar_url,
+            )
+
+        if resolved_webhook is not None:
+            if webhook_username or webhook_avatar_url:
+                try:
+                    await resolved_webhook.edit(
+                        name=(
+                            str(webhook_username)
+                            if webhook_username
+                            else discord.utils.MISSING
+                        ),
+                        avatar=(
+                            await self._fetch_url_bytes(str(webhook_avatar_url))
+                            if webhook_avatar_url
+                            else discord.utils.MISSING
+                        ),
+                    )
+                except discord.HTTPException as err:
+                    raise commands.CommandInvokeError(
+                        commands.CommandError(
+                            "Failed to update webhook profile: "
+                            f"{err.__class__.__name__}: {err.text or err}"
+                        )
+                    )
+
+            try:
+                if resolved_thread is not None:
+                    await resolved_webhook.edit_message(
+                        message.id,
+                        content=final_content,
+                        embeds=final_embeds,
+                        attachments=final_attachments,
+                        allowed_mentions=final_allowed_mentions,
+                        thread=resolved_thread,
+                    )
+                else:
+                    await resolved_webhook.edit_message(
+                        message.id,
+                        content=final_content,
+                        embeds=final_embeds,
+                        attachments=final_attachments,
+                        allowed_mentions=final_allowed_mentions,
+                    )
+                return
+            except discord.HTTPException as err:
+                raise commands.CommandInvokeError(
+                    commands.CommandError(
+                        "Failed to edit message via webhook: "
+                        f"{err.__class__.__name__}: {err.text or err}"
+                    )
+                )
+
+        if explicit_webhook_flags:
+            raise commands.CommandInvokeError(
+                commands.CommandError(
+                    "Webhook flags were provided but no usable webhook could be resolved."
+                )
+            )
+
+        await message.edit(
+            content=final_content,
+            embeds=final_embeds,
+            attachments=final_attachments,
+            allowed_mentions=final_allowed_mentions,
         )
 
     @commands.guild_only()
@@ -1660,7 +2019,7 @@ class Messaging(BaseExtensionCog, name="messaging"):
             if attached_files:
                 for i in range(len(attached_files)):
                     await ctx.send(
-                        content=f"**Message attachments** ({i+1}):",
+                        content=f"**Message attachments** ({i + 1}):",
                         files=attached_files,
                     )
 
@@ -2208,7 +2567,9 @@ class Messaging(BaseExtensionCog, name="messaging"):
                                             footer=dict(text="Full message data"),
                                         )
                                     ),
-                                    file=discord.File(strio, filename="messagedata.txt"),  # type: ignore
+                                    file=discord.File(
+                                        strio, filename="messagedata.txt"
+                                    ),  # type: ignore
                                     allowed_mentions=no_mentions,
                                 )
 
@@ -2279,7 +2640,8 @@ class Messaging(BaseExtensionCog, name="messaging"):
                             with io.StringIO(msg.content) as strio2:
                                 message_id_cache[msg.id] = await destination.send(
                                     file=discord.File(
-                                        strio2, filename="messagedata.txt"  # type: ignore
+                                        strio2,
+                                        filename="messagedata.txt",  # type: ignore
                                     ),
                                     allowed_mentions=no_mentions,
                                     reference=msg_reference_id,  # type: ignore
@@ -2441,8 +2803,8 @@ class Messaging(BaseExtensionCog, name="messaging"):
             )
         )
         message_count = len(messages)
-        system_message_check = (
-            lambda m: m.channel.id == channel.id  # type: ignore
+        system_message_check = lambda m: (
+            m.channel.id == channel.id  # type: ignore
             and m.type == discord.MessageType.pins_add
         )
         for i, msg in enumerate(messages):

@@ -34,7 +34,5 @@ combine_star = true
 line_length = 88
 
 [tool.pyright]
-exclude = [
-  "**/__pycache__",
-]
+exclude = ["**/__pycache__"]
 pythonVersion = "3.11"
