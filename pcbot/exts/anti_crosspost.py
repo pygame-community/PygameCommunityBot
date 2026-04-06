@@ -6,7 +6,7 @@ Copyright (c) 2022-present pygame-community.
 import discord
 from discord.ext import commands
 import snakecore
-from typing import TypedDict, Collection, cast
+from typing import TypedDict, Collection
 from collections import OrderedDict
 import logging
 
@@ -22,8 +22,12 @@ logger = logging.getLogger(__name__)
 
 fetched_attachments: OrderedDict[int, bytes] = OrderedDict()
 
+SIMILARITY_THRESHOLD = 0.80
+MAX_ATTACHMENT_COMPARE_BYTES = 8 * 2**20
+MAX_FETCHED_ATTACHMENTS = 100
 
-def hamming_distance_padded(str1, str2):
+
+def hamming_distance_padded(str1: str, str2: str) -> int:
     # Pad the shorter string with spaces to match the lengths
     max_len = max(len(str1), len(str2))
     str1 = str1.ljust(max_len)
@@ -32,7 +36,7 @@ def hamming_distance_padded(str1, str2):
     return sum(c1 != c2 for c1, c2 in zip(str1, str2))
 
 
-def hamming_similarity_score(str1, str2):
+def hamming_similarity_score(str1: str, str2: str) -> float:
     distance = hamming_distance_padded(str1, str2)
     max_len = max(len(str1), len(str2))
     similarity_ratio = (max_len - distance) / max_len
@@ -48,7 +52,7 @@ async def fetch_attachment(attachment: discord.Attachment, cache: bool = True) -
         fetched_attachments[attachment.id] = data
     logger.debug(f"Fetched attachment from source: {attachment.id}")
 
-    if len(fetched_attachments) > 100:
+    if len(fetched_attachments) > MAX_FETCHED_ATTACHMENTS:
         fetched_attachments.popitem(last=False)
 
     return data
@@ -71,39 +75,55 @@ async def crosspost_cmp(message: discord.Message, other: discord.Message) -> boo
         True if the messages are similar enough to be considered duplicates, otherwise False.
     """
 
-    similarity_score = None
-    matching_attachments = None
-
-    have_content = message.content and other.content
-    have_attachments = message.attachments and other.attachments
+    have_content = bool(message.content and other.content)
+    have_attachments = bool(message.attachments and other.attachments)
 
     logger.debug(
         f"Comparing messages {message.jump_url} and {other.jump_url} from {message.author.name}"
     )
 
+    similarity_score = (
+        hamming_similarity_score(message.content, other.content)
+        if have_content
+        else 0.0
+    )
     if have_content:
-        similarity_score = hamming_similarity_score(message.content, other.content)
         logger.debug(f"Computed similarity score for content: {similarity_score}")
-    else:
-        similarity_score = 0
 
     if have_attachments:
         try:
-            matching_attachments = all(
-                [
-                    att1.filename == att2.filename
-                    and att1.size == att2.size
-                    and att1.size < 2**20 * 8
-                    and att2.size < 2**20 * 8
-                    and att1.content_type == att2.content_type
-                    and (await fetch_attachment(att1) == await fetch_attachment(att2))
-                    for att1, att2 in zip(
-                        sorted(message.attachments, key=lambda x: (x.filename, x.size)),
-                        sorted(other.attachments, key=lambda x: (x.filename, x.size)),
-                    )
-                ]
-            )
-            logger.debug(f"Attachment comparison result: {matching_attachments}")
+            if len(message.attachments) != len(other.attachments):
+                logger.debug(
+                    "Attachment comparison failed due to differing attachment counts"
+                )
+                matching_attachments = False
+            else:
+                sorted_message_attachments = sorted(
+                    message.attachments,
+                    key=lambda x: (x.filename, x.size),
+                )
+                sorted_other_attachments = sorted(
+                    other.attachments,
+                    key=lambda x: (x.filename, x.size),
+                )
+
+                matching_attachments = all(
+                    [
+                        att1.filename == att2.filename
+                        and att1.size == att2.size
+                        and att1.size < MAX_ATTACHMENT_COMPARE_BYTES
+                        and att2.size < MAX_ATTACHMENT_COMPARE_BYTES
+                        and att1.content_type == att2.content_type
+                        and (
+                            await fetch_attachment(att1) == await fetch_attachment(att2)
+                        )
+                        for att1, att2 in zip(
+                            sorted_message_attachments,
+                            sorted_other_attachments,
+                        )
+                    ]
+                )
+                logger.debug(f"Attachment comparison result: {matching_attachments}")
         except discord.HTTPException as e:
             logger.debug(f"HTTPException during attachment comparison: {e}")
             matching_attachments = False
@@ -115,9 +135,9 @@ async def crosspost_cmp(message: discord.Message, other: discord.Message) -> boo
     elif not have_attachments and (message.attachments or other.attachments):
         return False
     elif have_content and have_attachments:
-        return similarity_score > 0.80 and matching_attachments
+        return similarity_score > SIMILARITY_THRESHOLD and matching_attachments
     elif have_content:
-        return similarity_score > 0.80
+        return similarity_score > SIMILARITY_THRESHOLD
     elif have_attachments:
         return matching_attachments
 
@@ -130,7 +150,9 @@ class UserCrosspostCache(TypedDict):
     """
 
     message_groups: list[list[discord.Message]]
-    message_to_alert_map: dict[int, int]  # Mapping from message ID to alert message ID
+    message_to_alert_map: dict[
+        int, tuple[int, int]
+    ]  # Mapping from source message ID -> (alert channel ID, alert message ID)
 
 
 class AntiCrosspostCog(BaseExtensionCog, name="anti-crosspost"):
@@ -185,6 +207,51 @@ class AntiCrosspostCog(BaseExtensionCog, name="anti-crosspost"):
             cross_channel_message_length_threshold
         )
 
+        if not self.channel_ids:
+            raise ValueError(
+                "'channel_ids' must contain at least one channel/category ID"
+            )
+        if self.crosspost_timedelta_threshold <= 0:
+            raise ValueError("'crosspost_timedelta_threshold' must be greater than 0")
+        if self.same_channel_message_length_threshold <= 0:
+            raise ValueError(
+                "'same_channel_message_length_threshold' must be greater than 0"
+            )
+        if self.cross_channel_message_length_threshold <= 0:
+            raise ValueError(
+                "'cross_channel_message_length_threshold' must be greater than 0"
+            )
+        if self.max_tracked_users <= 0:
+            raise ValueError("'max_tracked_users' must be greater than 0")
+        if self.max_tracked_message_groups_per_user <= 0:
+            raise ValueError(
+                "'max_tracked_message_groups_per_user' must be greater than 0"
+            )
+
+    def _enforce_user_cache_size_limit(self) -> None:
+        while len(self.crossposting_cache) > self.max_tracked_users:
+            evicted_user_id, _ = self.crossposting_cache.popitem(last=False)
+            logger.debug(
+                f"Removed user {evicted_user_id} from cache to enforce size limit"
+            )
+
+    def _enforce_message_group_limit(
+        self, user_cache: UserCrosspostCache, username: str
+    ) -> None:
+        while (
+            len(user_cache["message_groups"]) > self.max_tracked_message_groups_per_user
+        ):
+            remove_index = next(
+                (
+                    i
+                    for i, group in enumerate(user_cache["message_groups"])
+                    if len(group) < 2
+                ),
+                0,
+            )
+            user_cache["message_groups"].pop(remove_index)
+            logger.debug(f"Removed old message group for user {username}")
+
     @commands.Cog.listener()
     async def on_message(self, message: discord.Message):
         if (
@@ -209,25 +276,16 @@ class AntiCrosspostCog(BaseExtensionCog, name="anti-crosspost"):
             f"Received noteworthy message from {message.author.name}: {message.jump_url}"
         )
 
-        # Attempt to enforce the cache size limit
-        for user_id in list(self.crossposting_cache.keys()):
-            if len(self.crossposting_cache) <= self.max_tracked_users:
-                break
-
-            user_cache = self.crossposting_cache[user_id]
-            if not any(len(group) > 1 for group in user_cache["message_groups"]):
-                # Remove user from cache if they dont have any crossposts
-                self.crossposting_cache.pop(user_id)
-                logger.debug(f"Removed user {user_id} from cache to enforce size limit")
-
         # Initialize cache for new users
         if message.author.id not in self.crossposting_cache:
             self.crossposting_cache[message.author.id] = UserCrosspostCache(
                 message_groups=[[message]],
                 message_to_alert_map={},
             )
+            self._enforce_user_cache_size_limit()
             logger.debug(f"Initialized cache for new user {message.author.name}")
         else:
+            self.crossposting_cache.move_to_end(message.author.id)
             user_cache = self.crossposting_cache[message.author.id]
             logger.debug(f"Checking for crossposts for user {message.author.name}")
 
@@ -252,36 +310,28 @@ class AntiCrosspostCog(BaseExtensionCog, name="anti-crosspost"):
 
                     elif (
                         await crosspost_cmp(message, existing_message)
-                        and message.created_at.timestamp()
-                        - existing_message.created_at.timestamp()
+                        and abs(
+                            message.created_at.timestamp()
+                            - existing_message.created_at.timestamp()
+                        )
                         <= self.crosspost_timedelta_threshold
                     ):
                         messages.append(message)
                         logger.debug(
                             f"Found crosspost for user {message.author.name}, message URL {message.jump_url}!!!!!!!!!!"
                         )
-                        alert_channel = cast(MessageableGuildChannel, message.channel)
+                        alert_channel: MessageableGuildChannel = message.channel  # type: ignore[assignment]
                         if (
                             self.exclude_alert_channel_ids
                             and not await self._check_channel(
                                 alert_channel, deny=self.exclude_alert_channel_ids
                             )
                         ):
-                            # Attempt to find the next best channel to alert in
-                            print([msg.content for msg in messages[:-1]])
-                            for message in reversed(messages[:-1]):
-                                alert_channel = cast(
-                                    MessageableGuildChannel, message.channel
-                                )
-                                if await self._check_channel(
-                                    alert_channel, deny=self.exclude_alert_channel_ids
-                                ):
-                                    break
-                            else:
-                                logger.debug(
-                                    f"No allowed alerting channel for user {message.author.name} found"
-                                )
-                                break  # Don't issue an alert if not possible
+                            logger.debug(
+                                "Crosspost alert suppressed because the source "
+                                f"channel is excluded: {message.jump_url}"
+                            )
+                            break  # Don't issue an alert if this channel is excluded
 
                         if message.id in user_cache["message_to_alert_map"]:
                             logger.debug(
@@ -296,9 +346,10 @@ class AntiCrosspostCog(BaseExtensionCog, name="anti-crosspost"):
                                 + ".\n\nPlease delete all duplicate messages.",
                                 reference=message,
                             )
-                            user_cache["message_to_alert_map"][
-                                message.id
-                            ] = alert_message.id
+                            user_cache["message_to_alert_map"][message.id] = (
+                                alert_message.channel.id,
+                                alert_message.id,
+                            )
                             logger.debug(
                                 f"Sent alert message for crosspost URL {message.jump_url}"
                             )
@@ -314,20 +365,8 @@ class AntiCrosspostCog(BaseExtensionCog, name="anti-crosspost"):
                     f"Added message to new group for user {message.author.name}"
                 )
 
-                # Remove oldest message groups if limit is exceeded and the group is too small
-                if (
-                    len(user_cache["message_groups"])
-                    > self.max_tracked_message_groups_per_user
-                ):
-                    for i, messages in reversed(
-                        tuple(enumerate(user_cache["message_groups"]))
-                    ):
-                        if len(messages) < 2:
-                            user_cache["message_groups"].pop(i)
-                            logger.debug(
-                                f"Removed oldest message group for user {message.author.name}"
-                            )
-                            break
+                # Keep message group cache bounded and deterministic
+                self._enforce_message_group_limit(user_cache, message.author.name)
 
     @commands.Cog.listener()
     async def on_message_delete(self, message: discord.Message):
@@ -338,14 +377,14 @@ class AntiCrosspostCog(BaseExtensionCog, name="anti-crosspost"):
             return
 
         user_cache = self.crossposting_cache[message.author.id]
-        stale_alert_message_ids: list[int] = []
+        stale_alert_messages: list[tuple[int, int]] = []
 
         for messages in user_cache["message_groups"]:
             for j in range(len(messages) - 1, -1, -1):
                 if message.id == messages[j].id:
                     del messages[j]
                     if message.id in user_cache["message_to_alert_map"]:
-                        stale_alert_message_ids.append(
+                        stale_alert_messages.append(
                             user_cache["message_to_alert_map"].pop(message.id)
                         )
                     logger.debug(
@@ -359,21 +398,49 @@ class AntiCrosspostCog(BaseExtensionCog, name="anti-crosspost"):
                 len(messages) == 1
                 and messages[0].id in user_cache["message_to_alert_map"]
             ):
-                stale_alert_message_ids.append(
+                stale_alert_messages.append(
                     user_cache["message_to_alert_map"].pop(messages[0].id)
                 )
 
+        user_cache["message_groups"] = [
+            m_group for m_group in user_cache["message_groups"] if m_group
+        ]
+
         # Delete stale alert messages
-        for alert_message_id in stale_alert_message_ids:
+        for alert_channel_id, alert_message_id in stale_alert_messages:
+            alert_channel: MessageableGuildChannel | None = self.bot.get_channel(  # type: ignore[assignment]
+                alert_channel_id
+            )
+
+            if alert_channel is None and message.guild is not None:
+                alert_channel = (  # type: ignore[assignment]
+                    message.guild.get_channel(alert_channel_id)
+                    or message.guild.get_thread(alert_channel_id)
+                )
+
+            if alert_channel is None:
+                logger.debug(
+                    "Could not resolve alert channel "
+                    f"{alert_channel_id} when deleting stale alert "
+                    f"message {alert_message_id}"
+                )
+                continue
+
             try:
                 await discord.PartialMessage(
-                    channel=message.channel, id=alert_message_id
+                    channel=alert_channel, id=alert_message_id
                 ).delete()
                 logger.debug(f"Deleted stale alert message ID {alert_message_id}")
             except (discord.NotFound, discord.Forbidden) as e:
                 logger.debug(
                     f"Failed to delete alert message ID {alert_message_id}: {e}"
                 )
+
+        if not user_cache["message_groups"] and not user_cache["message_to_alert_map"]:
+            self.crossposting_cache.pop(message.author.id, None)
+            logger.debug(
+                f"Removed user {message.author.name} from cache because no tracked messages remain"
+            )
 
     @staticmethod
     async def _check_channel(
@@ -395,42 +462,48 @@ class AntiCrosspostCog(BaseExtensionCog, name="anti-crosspost"):
 
         Returns
         -------
-            bool: True if the channel is allowed, False if it is denied, and None if neither is allowed.
+            bool: True if the channel is allowed, False otherwise.
         """
 
         if not (allow or deny):
             raise ValueError("Either 'allow' or 'deny' must be provided")
 
-        result = False
+        allow_set = set(allow)
+        deny_set = set(deny)
 
-        if isinstance(channel, discord.abc.GuildChannel):
-            # Check if the channel ID or category ID is in the monitored channel IDs
-            result = (
-                bool(allow) and (channel.id in allow or channel.category_id in allow)
-            ) or not (
-                bool(deny) and (channel.id in deny or channel.category_id in deny)
+        def _is_allowed(*ids: int | None) -> bool:
+            valid_ids = tuple(
+                candidate_id for candidate_id in ids if candidate_id is not None
             )
 
-        # If the channel is a thread, check if the parent or the parent's category ID is in the monitored channel IDs
-        elif isinstance(channel, discord.Thread):
-            if not (
-                result := (bool(allow) and channel.parent_id in allow)
-                or not (bool(deny) and channel.parent_id in deny)
+            if allow_set and not any(
+                candidate_id in allow_set for candidate_id in valid_ids
             ):
-                try:
-                    parent = (
-                        channel.parent
-                        or channel.guild.get_channel(channel.parent_id)
-                        or await channel.guild.fetch_channel(channel.parent_id)
-                    )
-                except discord.NotFound:
-                    pass
-                else:
-                    result = (bool(allow) and parent.category_id in allow) or not (
-                        bool(deny) and parent.category_id in deny
-                    )
+                return False
 
-        return result
+            if deny_set and any(candidate_id in deny_set for candidate_id in valid_ids):
+                return False
+
+            return True
+
+        if isinstance(channel, discord.abc.GuildChannel):
+            # Guild channels may match by channel id or category id
+            return _is_allowed(channel.id, channel.category_id)
+
+        # Threads may match by thread id, parent id, or parent category id.
+        parent_category_id: int | None = None
+        parent = channel.parent or channel.guild.get_channel(channel.parent_id)
+
+        if parent is None:
+            try:
+                parent = await channel.guild.fetch_channel(channel.parent_id)
+            except (discord.NotFound, discord.Forbidden, discord.HTTPException):
+                parent = None
+
+        if isinstance(parent, discord.abc.GuildChannel):
+            parent_category_id = parent.category_id
+
+        return _is_allowed(channel.id, channel.parent_id, parent_category_id)
 
 
 @snakecore.commands.decorators.with_config_kwargs
@@ -438,11 +511,11 @@ async def setup(
     bot: BotT,
     channel_ids: Collection[int],
     exclude_alert_channel_ids: Collection[int] | None = None,
-    max_tracked_users: int = 10,
+    max_tracked_users: int = 50,
     max_tracked_message_groups_per_user: int = 10,
-    crosspost_timedelta_threshold: int = 86400,
+    crosspost_timedelta_threshold: int = 21600,
     same_channel_message_length_threshold: int = 64,
-    cross_channel_message_length_threshold: int = 16,
+    cross_channel_message_length_threshold: int = 24,
     theme_color: int | discord.Color = 0,
 ):
     """
@@ -457,15 +530,15 @@ async def setup(
     exclude_alert_channel_ids : Collection[int] or None, optional
         Collection of channel IDs to exclude from alerting, by default None
     max_tracked_users : int, optional
-        Maximum number of users to track, by default 10
+        Maximum number of users to track, by default 50
     max_tracked_message_groups_per_user : int, optional
         Maximum number of message groups to track per user, by default 10
     crosspost_timedelta_threshold : int, optional
-        Minimum time difference between messages to not be considered crossposts, by default 86400
+        Maximum time difference between messages to be considered crossposts, by default 21600
     same_channel_message_length_threshold : int, optional
         Minimum length of a text-only message to be considered if the messages are in the same channel, by default 64
     cross_channel_message_length_threshold : int, optional
-        Minimum length of a text-only message to be considered if the messages are in different channels, by default 16
+        Minimum length of a text-only message to be considered if the messages are in different channels, by default 24
     """
     await bot.add_cog(
         AntiCrosspostCog(
