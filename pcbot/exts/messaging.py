@@ -260,6 +260,25 @@ class Messaging(BaseExtensionCog, name="messaging"):
             if owns_session:
                 await session.close()
 
+    def _resolve_webhook_avatar_url(
+        self,
+        *,
+        webhook_avatar_url: str | None = None,
+        webhook_no_avatar: bool = False,
+    ) -> str | None:
+        """Resolve the effective avatar URL to use for webhook operations."""
+
+        if webhook_no_avatar:
+            return None
+
+        if webhook_avatar_url:
+            return webhook_avatar_url
+
+        if self.bot.user is not None:
+            return self.bot.user.display_avatar.url
+
+        return None
+
     async def _resolve_messaging_webhook(
         self,
         channel: MessageableGuildChannel | discord.ForumChannel,
@@ -267,6 +286,7 @@ class Messaging(BaseExtensionCog, name="messaging"):
         webhook_name: str | None = None,
         webhook_url: str | None = None,
         webhook_avatar_url: str | None = None,
+        webhook_no_avatar: bool = False,
     ) -> tuple[discord.Webhook, discord.Thread | None]:
         """Resolve a webhook for a target channel/thread, creating one if needed.
 
@@ -321,9 +341,13 @@ class Messaging(BaseExtensionCog, name="messaging"):
             if webhook.name == resolved_webhook_name:
                 return webhook, thread
 
+        effective_webhook_avatar_url = self._resolve_webhook_avatar_url(
+            webhook_avatar_url=webhook_avatar_url,
+            webhook_no_avatar=webhook_no_avatar,
+        )
         avatar_bytes = (
-            await self._fetch_url_bytes(str(webhook_avatar_url))
-            if webhook_avatar_url
+            await self._fetch_url_bytes(effective_webhook_avatar_url)
+            if effective_webhook_avatar_url
             else None
         )
 
@@ -365,6 +389,7 @@ class Messaging(BaseExtensionCog, name="messaging"):
         webhook_url: StringExpr[HTTP_URL] | None = None,
         webhook_username: String[80] | None = None,
         webhook_avatar_url: StringExpr[HTTP_URL] | None = None,
+        webhook_no_avatar: bool = False,
     ):
         assert (
             ctx.guild
@@ -534,8 +559,18 @@ class Messaging(BaseExtensionCog, name="messaging"):
         )
 
         explicit_webhook_flags = bool(
-            webhook_name or webhook_url or webhook_username or webhook_avatar_url
+            webhook_name
+            or webhook_url
+            or webhook_username
+            or webhook_avatar_url
+            or webhook_no_avatar
         )
+
+        effective_webhook_avatar_url = self._resolve_webhook_avatar_url(
+            webhook_avatar_url=(webhook_avatar_url if webhook_avatar_url else None),
+            webhook_no_avatar=webhook_no_avatar,
+        )
+
         if reply_to is not None and explicit_webhook_flags:
             raise commands.CommandInvokeError(
                 commands.CommandError(
@@ -545,19 +580,18 @@ class Messaging(BaseExtensionCog, name="messaging"):
 
         for dest in destinations:
             if reply_to is None:
-                try:
+                webhook = None
+                thread = None
+                if explicit_webhook_flags:
                     webhook, thread = await self._resolve_messaging_webhook(
                         dest,
                         webhook_name=webhook_name,
                         webhook_url=webhook_url,
-                        webhook_avatar_url=webhook_avatar_url,
+                        webhook_avatar_url=(
+                            webhook_avatar_url if webhook_avatar_url else None
+                        ),
+                        webhook_no_avatar=webhook_no_avatar,
                     )
-                except commands.CommandInvokeError:
-                    if explicit_webhook_flags:
-                        raise
-
-                    webhook = None
-                    thread = None
 
                 if webhook is not None:
                     try:
@@ -573,8 +607,8 @@ class Messaging(BaseExtensionCog, name="messaging"):
                                     else discord.utils.MISSING
                                 ),
                                 avatar_url=(
-                                    str(webhook_avatar_url)
-                                    if webhook_avatar_url
+                                    effective_webhook_avatar_url
+                                    if effective_webhook_avatar_url
                                     else discord.utils.MISSING
                                 ),
                                 thread=thread,
@@ -592,8 +626,8 @@ class Messaging(BaseExtensionCog, name="messaging"):
                                     else discord.utils.MISSING
                                 ),
                                 avatar_url=(
-                                    str(webhook_avatar_url)
-                                    if webhook_avatar_url
+                                    effective_webhook_avatar_url
+                                    if effective_webhook_avatar_url
                                     else discord.utils.MISSING
                                 ),
                                 wait=True,
@@ -634,6 +668,7 @@ class Messaging(BaseExtensionCog, name="messaging"):
         "[embeds: CodeBlock...] [to: Channel] [reply_to: Message] "
         "[webhook_name: Text[80]] [webhook_url: Text] "
         "[webhook_username: Text[80]] [webhook_avatar_url: Text] "
+        "[webhook_no_avatar: yes|no] "
         "[delete_after: Number/TimeDelta] [mention_all: yes|no] "
         "[mention_everyone: yes|no] [mention_users: yes|no] "
         "[mention_these_users: User...] [mention_roles: yes|no] "
@@ -655,6 +690,7 @@ class Messaging(BaseExtensionCog, name="messaging"):
         webhook_url: StringExpr[HTTP_URL] | None = None,
         webhook_username: String[80] | None = None,
         webhook_avatar_url: StringExpr[HTTP_URL] | None = None,
+        webhook_no_avatar: bool = False,
         delete_after: float | TimeDelta | None = None,
         mention_all: bool = False,
         mention_everyone: bool = False,
@@ -686,17 +722,21 @@ class Messaging(BaseExtensionCog, name="messaging"):
         > A flag for The URL of the message to use as a reference.
 
         **`[webhook_name: Text[80]]`**
-        > A flag for the internal webhook name to resolve/create in each target channel.
-        > If omitted and `webhook_url:` is not provided, `{bot_name} Messaging` is used.
+        > A flag for enabling webhook mode with an internal webhook in each target channel.
+        > If webhook mode is enabled and `webhook_url:` is omitted, `{bot_name} Messaging` is used.
 
         **`[webhook_url: Text]`**
-        > A flag for a pre-existing webhook URL to use directly.
+        > A flag for enabling webhook mode with a pre-existing webhook URL.
 
         **`[webhook_username: Text[80]]`**
         > A flag for overriding the displayed sender name for webhook-delivered messages.
 
         **`[webhook_avatar_url: Text]`**
         > A flag for overriding the displayed sender avatar for webhook-delivered messages.
+
+        **`[webhook_no_avatar: yes|no]`**
+        > A flag for disabling webhook avatars.
+        > This overrides `webhook_avatar_url:` when set to 'yes'.
 
         **`[delete_after: Number/TimeDelta]`**
         > A flag to set a deletion timeout for the message upon its creation.
@@ -740,6 +780,7 @@ class Messaging(BaseExtensionCog, name="messaging"):
             webhook_url=webhook_url,
             webhook_username=webhook_username,
             webhook_avatar_url=webhook_avatar_url,
+            webhook_no_avatar=webhook_no_avatar,
             delete_after=delete_after,
             mention_all=mention_all,
             mention_everyone=mention_everyone,
@@ -773,6 +814,7 @@ class Messaging(BaseExtensionCog, name="messaging"):
         webhook_url: StringExpr[HTTP_URL] | None = None,
         webhook_username: String[80] | None = None,
         webhook_avatar_url: StringExpr[HTTP_URL] | None = None,
+        webhook_no_avatar: bool = False,
         delete_after: float | TimeDelta | None = None,
         mention_all: bool = False,
         mention_everyone: bool = False,
@@ -793,6 +835,7 @@ class Messaging(BaseExtensionCog, name="messaging"):
             webhook_url=webhook_url,
             webhook_username=webhook_username,
             webhook_avatar_url=webhook_avatar_url,
+            webhook_no_avatar=webhook_no_avatar,
             delete_after=delete_after,
             mention_all=mention_all,
             mention_everyone=mention_everyone,
@@ -812,6 +855,7 @@ class Messaging(BaseExtensionCog, name="messaging"):
         "[auto_hide_duration: 1h|24h|1d|3d|1w] [slowmode_delay: TimeDelta] "
         "[webhook_name: Text[80]] [webhook_url: Text] "
         "[webhook_username: Text[80]] [webhook_avatar_url: Text] "
+        "[webhook_no_avatar: yes|no] "
         "[mention_all: yes|no] [mention_everyone: yes|no] [mention_users: yes|no] "
         "[mention_these_users: User...] [mention_roles: yes|no] "
         "[mention_these_roles: Role...] [mention_replied_user: yes|no]",
@@ -838,6 +882,7 @@ class Messaging(BaseExtensionCog, name="messaging"):
         webhook_url: StringExpr[HTTP_URL] | None = None,
         webhook_username: String[80] | None = None,
         webhook_avatar_url: StringExpr[HTTP_URL] | None = None,
+        webhook_no_avatar: bool = False,
         mention_all: bool = False,
         mention_everyone: bool = False,
         mention_users: bool = False,
@@ -878,17 +923,21 @@ class Messaging(BaseExtensionCog, name="messaging"):
         > The slowmode delay to use. Omission disables slowmode.
 
         **`[webhook_name: Text[80]]`**
-        > A flag for the internal webhook name to resolve/create in each target channel.
-        > If omitted and `webhook_url:` is not provided, `{bot_name} Messaging` is used.
+        > A flag for enabling webhook mode for forum post creation.
+        > If set and `webhook_url:` is omitted, an internal `{bot_name} Messaging` webhook is resolved/created.
 
         **`[webhook_url: Text]`**
-        > A flag for a pre-existing webhook URL to use directly.
+        > A flag for enabling webhook mode with a pre-existing webhook URL.
 
         **`[webhook_username: Text[80]]`**
         > A flag for overriding the displayed sender name for webhook-delivered posts.
 
         **`[webhook_avatar_url: Text]`**
         > A flag for overriding the displayed sender avatar for webhook-delivered posts.
+
+        **`[webhook_no_avatar: yes|no]`**
+        > A flag for disabling webhook avatars.
+        > This overrides `webhook_avatar_url:` when set to 'yes'.
 
         **`[mention_all: yes|no]`**
         > A flag for whether all mentionable targets in the message text content (users, roles, user being replied to) should receive a mention ping.
@@ -1090,55 +1139,84 @@ class Messaging(BaseExtensionCog, name="messaging"):
             else discord.utils.MISSING
         )
 
+        explicit_webhook_flags = bool(
+            webhook_name
+            or webhook_url
+            or webhook_username
+            or webhook_avatar_url
+            or webhook_no_avatar
+        )
+
+        effective_webhook_avatar_url = self._resolve_webhook_avatar_url(
+            webhook_avatar_url=(webhook_avatar_url if webhook_avatar_url else None),
+            webhook_no_avatar=webhook_no_avatar,
+        )
+
         for dest in destinations:
             assert isinstance(dest, discord.ForumChannel)
             applied_tags = [
                 tag for tag in dest.available_tags if tag.name.casefold() in tag_names
             ]
-            webhook, _ = await self._resolve_messaging_webhook(
-                dest,
-                webhook_name=webhook_name,
-                webhook_url=webhook_url,
-                webhook_avatar_url=webhook_avatar_url,
-            )
+            if explicit_webhook_flags:
+                webhook, _ = await self._resolve_messaging_webhook(
+                    dest,
+                    webhook_name=webhook_name,
+                    webhook_url=webhook_url,
+                    webhook_avatar_url=(
+                        webhook_avatar_url if webhook_avatar_url else None
+                    ),
+                    webhook_no_avatar=webhook_no_avatar,
+                )
 
-            try:
-                msg = await webhook.send(
-                    content=str(content) if content is not None else "",
-                    embeds=parsed_embeds,
-                    files=files,
-                    allowed_mentions=allowed_mentions,
-                    username=(
-                        str(webhook_username)
-                        if webhook_username
-                        else discord.utils.MISSING
-                    ),
-                    avatar_url=(
-                        str(webhook_avatar_url)
-                        if webhook_avatar_url
-                        else discord.utils.MISSING
-                    ),
-                    thread_name=str(name),
-                    applied_tags=(applied_tags or discord.utils.MISSING),
-                    wait=True,
-                )  # type: ignore
-            except discord.HTTPException as err:
-                raise commands.CommandInvokeError(
-                    commands.CommandError(
-                        "Failed to create forum post via webhook: "
-                        f"{err.__class__.__name__}: {err.text or err}"
+                try:
+                    msg = await webhook.send(
+                        content=str(content) if content is not None else "",
+                        embeds=parsed_embeds,
+                        files=files,
+                        allowed_mentions=allowed_mentions,
+                        username=(
+                            str(webhook_username)
+                            if webhook_username
+                            else discord.utils.MISSING
+                        ),
+                        avatar_url=(
+                            effective_webhook_avatar_url
+                            if effective_webhook_avatar_url
+                            else discord.utils.MISSING
+                        ),
+                        thread_name=str(name),
+                        applied_tags=(applied_tags or discord.utils.MISSING),
+                        wait=True,
+                    )  # type: ignore
+                except discord.HTTPException as err:
+                    raise commands.CommandInvokeError(
+                        commands.CommandError(
+                            "Failed to create forum post via webhook: "
+                            f"{err.__class__.__name__}: {err.text or err}"
+                        )
                     )
-                )
 
-            if isinstance(msg.channel, discord.Thread):
-                await msg.channel.edit(
-                    auto_archive_duration=auto_archive_duration,  # type: ignore
-                    slowmode_delay=(
-                        slowmode_delay.seconds
-                        if slowmode_delay
-                        else discord.utils.MISSING
-                    ),
-                )
+                if isinstance(msg.channel, discord.Thread):
+                    await msg.channel.edit(
+                        auto_archive_duration=auto_archive_duration,  # type: ignore
+                        slowmode_delay=(
+                            slowmode_delay.seconds
+                            if slowmode_delay
+                            else discord.utils.MISSING
+                        ),
+                    )
+                continue
+
+            await dest.create_thread(
+                name=name,
+                content=content,
+                embeds=parsed_embeds,
+                files=files,
+                allowed_mentions=allowed_mentions,
+                auto_archive_duration=auto_archive_duration,  # type: ignore
+                slowmode_delay=slowmode_delay.seconds if slowmode_delay else None,
+                applied_tags=(applied_tags or discord.utils.MISSING),
+            )
 
     @commands.guild_only()
     @message.command(
@@ -1305,6 +1383,7 @@ class Messaging(BaseExtensionCog, name="messaging"):
         "[auto_hide_duration: 1h|24h|1d|3d|1w] [slowmode_delay: TimeDelta] "
         "[webhook_name: Text[80]] [webhook_url: Text] "
         "[webhook_username: Text[80]] [webhook_avatar_url: Text] "
+        "[webhook_no_avatar: yes|no] "
         "[mention_everyone: yes|no] [mention_users: yes|no] "
         "[mention_these_users: User...] [mention_roles: yes|no] "
         "[mention_these_roles: Role...] [mention_replied_user: yes|no]",
@@ -1317,8 +1396,9 @@ class Messaging(BaseExtensionCog, name="messaging"):
         message: discord.Message | ReferencedMessage,
         attachments: commands.Greedy[discord.Attachment],
         *,
-        name: String[100]
-        | None = commands.flag(name="name", aliases=["title"], default=None),
+        name: String[100] | None = commands.flag(
+            name="name", aliases=["title"], default=None
+        ),
         content: String | None = None,
         embeds: tuple[
             Parens[discord.Message, int] | discord.Message | CodeBlock, ...
@@ -1336,6 +1416,7 @@ class Messaging(BaseExtensionCog, name="messaging"):
         webhook_url: StringExpr[HTTP_URL] | None = None,
         webhook_username: String[80] | None = None,
         webhook_avatar_url: StringExpr[HTTP_URL] | None = None,
+        webhook_no_avatar: bool = False,
         mention_all: bool | None = None,
         mention_everyone: bool | None = None,
         mention_users: bool | None = None,
@@ -1385,17 +1466,21 @@ class Messaging(BaseExtensionCog, name="messaging"):
         > A flag for whether all mentionable targets in the message text content (users, roles, user being replied to) should receive a mention ping.
 
         **`[webhook_name: Text[80]]`**
-        > A flag for the internal webhook name to resolve/create when editing webhook messages.
-        > If omitted and `webhook_url:` is not provided, `{bot_name} Messaging` is used.
+        > A flag for enabling webhook mode when editing messages.
+        > If webhook mode is enabled and `webhook_url:` is omitted, `{bot_name} Messaging` is used.
 
         **`[webhook_url: Text]`**
-        > A flag for a pre-existing webhook URL to use directly for webhook edits.
+        > A flag for enabling webhook mode with a pre-existing webhook URL for edits.
 
         **`[webhook_username: Text[80]]`**
         > A flag for updating the webhook display name before editing the message.
 
         **`[webhook_avatar_url: Text]`**
         > A flag for updating the webhook display avatar before editing the message.
+
+        **`[webhook_no_avatar: yes|no]`**
+        > A flag for disabling webhook avatars while editing.
+        > This overrides `webhook_avatar_url:` when set to 'yes'.
 
         **`[mention_all: yes|no]`**
         > A flag for whether all mentionable targets in the message text content (users, roles, user being replied to) should receive a mention ping.
@@ -1671,24 +1756,27 @@ class Messaging(BaseExtensionCog, name="messaging"):
         resolved_webhook: discord.Webhook | None = None
         resolved_thread: discord.Thread | None = None
         explicit_webhook_flags = bool(
-            webhook_url or webhook_name or webhook_username or webhook_avatar_url
-        )
-        if (
             webhook_url
             or webhook_name
             or webhook_username
             or webhook_avatar_url
-            or message.webhook_id
-        ):
+            or webhook_no_avatar
+        )
+        effective_webhook_avatar_url = self._resolve_webhook_avatar_url(
+            webhook_avatar_url=(webhook_avatar_url if webhook_avatar_url else None),
+            webhook_no_avatar=webhook_no_avatar,
+        )
+        if explicit_webhook_flags:
             resolved_webhook, resolved_thread = await self._resolve_messaging_webhook(
                 message.channel,  # type: ignore[arg-type]
                 webhook_name=webhook_name,
                 webhook_url=webhook_url,
-                webhook_avatar_url=webhook_avatar_url,
+                webhook_avatar_url=(webhook_avatar_url if webhook_avatar_url else None),
+                webhook_no_avatar=webhook_no_avatar,
             )
 
         if resolved_webhook is not None:
-            if webhook_username or webhook_avatar_url:
+            if webhook_username or webhook_avatar_url or webhook_no_avatar:
                 try:
                     await resolved_webhook.edit(
                         name=(
@@ -1697,9 +1785,15 @@ class Messaging(BaseExtensionCog, name="messaging"):
                             else discord.utils.MISSING
                         ),
                         avatar=(
-                            await self._fetch_url_bytes(str(webhook_avatar_url))
-                            if webhook_avatar_url
-                            else discord.utils.MISSING
+                            None
+                            if webhook_no_avatar
+                            else (
+                                await self._fetch_url_bytes(
+                                    effective_webhook_avatar_url
+                                )
+                                if effective_webhook_avatar_url
+                                else discord.utils.MISSING
+                            )
                         ),
                     )
                 except discord.HTTPException as err:
