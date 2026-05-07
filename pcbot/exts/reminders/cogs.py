@@ -230,7 +230,9 @@ class RemindersCog(BaseExtensionCog, name="user-reminders"):
                         discord.Thread,
                     ),
                 ):
-                    await channel.send(f"[{user.mention}] **Reminder**: {reminder_row.title}\n\n-# Reminder ID: {reminder_row.rid}")  # type: ignore
+                    await channel.send(
+                        f"[{user.mention}] **Reminder**: {reminder_row.title}\n\n-# Reminder ID: {reminder_row.rid}"
+                    )  # type: ignore
                 else:
                     # Fallback to DM if channel not found or not sendable
                     dm_channel = user.dm_channel or await user.create_dm()
@@ -411,12 +413,8 @@ class RemindersCog(BaseExtensionCog, name="user-reminders"):
                 "weeks": WEEKLY,
                 "months": MONTHLY,
                 "years": YEARLY,
-                "Days": DAILY,
-                "Weeks": WEEKLY,
-                "Months": MONTHLY,
-                "Years": YEARLY,
             }
-            freq = freq_map[iunit]
+            freq = freq_map[iunit.lower()]
 
             # Build kwargs based on what's provided
             kwargs = {"freq": freq, "dtstart": start_time}
@@ -541,8 +539,7 @@ class RemindersCog(BaseExtensionCog, name="user-reminders"):
             if is_admin:
                 all_result = await conn.execute(
                     text(
-                        f"SELECT * FROM '{DB_PREFIX}reminders' "
-                        "ORDER BY next_time ASC"
+                        f"SELECT * FROM '{DB_PREFIX}reminders' ORDER BY next_time ASC"
                     ),
                 )
             else:
@@ -738,10 +735,6 @@ class RemindersCog(BaseExtensionCog, name="user-reminders"):
             app_commands.Choice(name="weeks", value="weeks"),
             app_commands.Choice(name="months", value="months"),
             app_commands.Choice(name="years", value="years"),
-            app_commands.Choice(name="Days", value="Days"),
-            app_commands.Choice(name="Weeks", value="Weeks"),
-            app_commands.Choice(name="Months", value="Months"),
-            app_commands.Choice(name="Years", value="Years"),
         ]
     )
     async def reminders_add_app_cmd(
@@ -751,12 +744,7 @@ class RemindersCog(BaseExtensionCog, name="user-reminders"):
         title: str,
         message: str | None = None,
         interval: int | None = None,
-        iunit: (
-            Literal[
-                "days", "Days", "weeks", "Weeks", "months", "Months", "years", "Years"
-            ]
-            | None
-        ) = None,
+        iunit: (Literal["days", "weeks", "months", "years"] | None) = None,
         weekdays: str | None = None,
         monthday: app_commands.Range[int, 1, 31] | None = None,
         dm: bool = False,
@@ -795,7 +783,7 @@ class RemindersCog(BaseExtensionCog, name="user-reminders"):
                 if day in weekday_map:
                     parsed_weekdays.append(weekday_map[day])
                 else:
-                    raise invocation_error(ctx, f"❌ Invalid weekday: {day}")
+                    raise invocation_error(ctx, f"Invalid weekday: {day}")
 
         return await self.reminders_add_func(
             ctx,
@@ -1056,10 +1044,6 @@ class RemindersCog(BaseExtensionCog, name="user-reminders"):
             app_commands.Choice(name="weeks", value="weeks"),
             app_commands.Choice(name="months", value="months"),
             app_commands.Choice(name="years", value="years"),
-            app_commands.Choice(name="Days", value="Days"),
-            app_commands.Choice(name="Weeks", value="Weeks"),
-            app_commands.Choice(name="Months", value="Months"),
-            app_commands.Choice(name="Years", value="Years"),
         ]
     )
     async def reminders_edit_app_cmd(
@@ -1115,7 +1099,7 @@ class RemindersCog(BaseExtensionCog, name="user-reminders"):
                 if day in weekday_map:
                     parsed_weekdays.append(weekday_map[day])
                 else:
-                    raise invocation_error(ctx, f"❌ Invalid weekday: {day}")
+                    raise invocation_error(ctx, f"Invalid weekday: {day}")
 
         return await self.reminders_edit_func(
             ctx,
