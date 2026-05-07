@@ -447,21 +447,241 @@ class Messaging(BaseExtensionCog, name="messaging"):
 
         return (webhook, thread)
 
-    async def message_send_func(
+    async def _parse_embeds(
         self,
-        ctx: commands.Context[BotT],
-        attachments: commands.Greedy[discord.Attachment],
-        *,
-        content: String | str | None = None,
-        content_src: discord.Message | ReferencedMessage | None = None,
+        embeds: tuple[Parens[discord.Message, int] | discord.Message | CodeBlock, ...],
+    ) -> list[discord.Embed]:
+        parsed: list[discord.Embed] = []
+        for i, item in enumerate(embeds):
+            if isinstance(item, CodeBlock):
+                code_block = item
+                if code_block.language in ("json", None):
+                    try:
+                        embed_dict = json.loads(code_block.code)
+                    except Exception as err:
+                        raise commands.CommandInvokeError(
+                            commands.CommandError(
+                                f"Error while parsing JSON code block "
+                                f"{i}: {err.__class__.__name__}: {err.args[0]}"
+                            )
+                        )
+                elif code_block.language in ("py", "python"):
+                    try:
+                        embed_dict = literal_eval(code_block.code)
+                    except Exception as err:
+                        raise commands.CommandInvokeError(
+                            commands.CommandError(
+                                f"Error while parsing Python dict code block "
+                                f"{i}: {err.__class__.__name__}: {err.args[0]}"
+                            )
+                        )
+                else:
+                    raise commands.CommandInvokeError(
+                        commands.CommandError(
+                            f"Unsupported code block language: {code_block.language}"
+                        )
+                    )
+            elif isinstance(item, (discord.Message, tuple)):
+                embed_msg = item
+                attachment_index = 0
+                if isinstance(embed_msg, tuple):
+                    embed_msg, attachment_index = embed_msg[0], embed_msg[1]
+
+                if not (embed_msg_attachments := embed_msg.attachments):
+                    raise commands.CommandInvokeError(
+                        commands.CommandError(
+                            f"Error with `embeds` argument {i}: Messages "
+                            "specified for flag `embeds` must have at least one "
+                            "attachment as `.txt`, `.py` file containing a Python "
+                            "dictionary, or a `.json` file containing embed data. "
+                            "It must be less than 10KB in size."
+                        )
+                    )
+
+                embed_attachment = embed_msg_attachments[
+                    min(attachment_index, len(embed_msg_attachments) - 1)
+                ]
+
+                if not (
+                    embed_attachment.content_type
+                    and embed_attachment.content_type.startswith(
+                        ("text", "application/json")
+                    )
+                    and embed_attachment.size < 10240
+                ):
+                    raise commands.CommandInvokeError(
+                        commands.CommandError(
+                            f"Error with `embeds` argument {i}: Messages "
+                            "specified for flag `embeds` must have at least one "
+                            "attachment as `.txt`, `.py` file containing a Python "
+                            "dictionary, or a `.json` file containing embed data. "
+                            "It must be less than 10KB in size."
+                        )
+                    )
+
+                embed_data = (await embed_attachment.read()).decode("utf-8")
+
+                if (
+                    embed_attachment.content_type.startswith(
+                        ("application/json", "text")
+                    )
+                    and "x-python" not in embed_attachment.content_type
+                ):
+                    try:
+                        embed_dict = json.loads(embed_data)
+                    except Exception as err:
+                        raise commands.CommandInvokeError(
+                            commands.CommandError(
+                                f"Error while parsing embed JSON from attachment "
+                                f"{i}: {err.__class__.__name__}: {err.args[0]}"
+                            )
+                        )
+                else:
+                    try:
+                        embed_dict = literal_eval(embed_data)
+                    except Exception as err:
+                        raise commands.CommandInvokeError(
+                            commands.CommandError(
+                                f"Error while parsing Python embed dict from attachment "
+                                f"{i}: {err.__class__.__name__}: {err.args[0]}"
+                            )
+                        )
+            else:
+                continue
+
+            parsed.append(discord.Embed.from_dict(embed_dict))
+
+        return parsed
+
+    async def _resolve_embeds(
+        self,
         embeds: tuple[
             Parens[discord.Message, int] | discord.Message | CodeBlock, ...
         ] = (),
         embed_src: list[tuple[discord.Message | ReferencedMessage, int]] = (),
         embeds_src: discord.Message | ReferencedMessage | None = None,
+        message_src: discord.Message | ReferencedMessage | None = None,
+        *,
+        former_embeds: list[discord.Embed] | None = None,
+    ) -> list[discord.Embed]:
+        if embeds:
+            parsed = await self._parse_embeds(embeds)
+            if former_embeds is not None:
+                parsed = [
+                    embed or former_embeds[i]
+                    for i, embed in enumerate(parsed)
+                    if embed or i < len(former_embeds)
+                ]
+            return parsed
+
+        if embed_src:
+            return [
+                get_message_embed_by_index(msg, index=idx) for msg, idx in embed_src
+            ]
+
+        if embeds_src is not None:
+            if not embeds_src.embeds:
+                raise commands.CommandInvokeError(
+                    commands.CommandError(
+                        "Message specified for `embeds_src` has no embeds to use."
+                    )
+                )
+            return list(embeds_src.embeds)
+
+        if message_src is not None:
+            return list(message_src.embeds)
+
+        return []
+
+    async def _resolve_send_files(
+        self,
+        attachments: list[discord.Attachment],
         attachment_src: list[tuple[discord.Message | ReferencedMessage, int]] = (),
         attachments_src: discord.Message | ReferencedMessage | None = None,
         message_src: discord.Message | ReferencedMessage | None = None,
+        *,
+        size_limit: int = 2**20 * 25,
+    ) -> list[discord.File]:
+        files: list[discord.File] = []
+
+        if attachments:
+            for i, att in enumerate(attachments):
+                if att.size > size_limit:
+                    raise commands.CommandInvokeError(
+                        commands.CommandError(
+                            f"Attachment {i} is too large to be resent "
+                            f"(> {size_limit // 2**20} MiB)"
+                        )
+                    )
+                files.append(await att.to_file(use_cached=True))
+            return files
+
+        if attachment_src:
+            for src_message, index in attachment_src:
+                files.append(
+                    await get_message_attachment_file(
+                        src_message,
+                        index=index,
+                        size_limit=size_limit,
+                    )
+                )
+        elif attachments_src is not None:
+            if not attachments_src.attachments:
+                raise commands.CommandInvokeError(
+                    commands.CommandError(
+                        "Message specified for `attachments_src` has no attachments to use."
+                    )
+                )
+            files.extend(
+                await get_message_attachments_files(
+                    attachments_src,
+                    size_limit=size_limit,
+                )
+            )
+        elif message_src is not None and message_src.attachments:
+            files.extend(
+                await get_message_attachments_files(
+                    message_src,
+                    size_limit=size_limit,
+                )
+            )
+
+        return files
+
+    def _build_allowed_mentions(
+        self,
+        mention_all: bool,
+        mention_everyone: bool = False,
+        mention_users: bool | tuple = False,
+        mention_these_users: tuple[discord.User, ...] = (),
+        mention_roles: bool | tuple = False,
+        mention_these_roles: tuple[discord.Role, ...] = (),
+        mention_replied_user: bool = False,
+    ) -> discord.AllowedMentions:
+        if mention_all:
+            return discord.AllowedMentions.all()
+        return discord.AllowedMentions(
+            everyone=mention_everyone,
+            users=(mention_these_users if mention_these_users else mention_users),
+            roles=(mention_these_roles if mention_these_roles else mention_roles),
+            replied_user=mention_replied_user,
+        )
+
+    async def message_send_func(
+        self,
+        ctx: commands.Context[BotT],
+        attachments: commands.Greedy[discord.Attachment],
+        *,
+        message_src: discord.Message | ReferencedMessage | None = None,
+        content_src: discord.Message | ReferencedMessage | None = None,
+        content: String | str | None = None,
+        attachments_src: discord.Message | ReferencedMessage | None = None,
+        attachment_src: list[tuple[discord.Message | ReferencedMessage, int]] = (),
+        embeds_src: discord.Message | ReferencedMessage | None = None,
+        embed_src: list[tuple[discord.Message | ReferencedMessage, int]] = (),
+        embeds: tuple[
+            Parens[discord.Message, int] | discord.Message | CodeBlock, ...
+        ] = (),
         to: tuple[MessageableGuildChannel, ...] = (),
         reply_to: discord.PartialMessage | None = None,
         delete_after: float | TimeDelta | None = None,
@@ -504,14 +724,10 @@ class Messaging(BaseExtensionCog, name="messaging"):
                 commands.CommandError("Not enough arguments given as input.")
             )
 
-        destinations = to
-        if not destinations:
-            destinations = (ctx.channel,)
+        destinations = to or (ctx.channel,)
 
         if not snakecore.utils.have_permissions_in_channels(
-            ctx.author,
-            destinations,
-            "view_channel",
+            ctx.author, destinations, "view_channel"
         ):
             raise commands.CommandInvokeError(
                 commands.CommandError(
@@ -535,178 +751,27 @@ class Messaging(BaseExtensionCog, name="messaging"):
         elif message_src is not None and message_src.content:
             resolved_content = message_src.content
 
-        parsed_embeds = []
-        files = []
-
-        if embeds:
-            for i, code_block_or_msg in enumerate(embeds):
-                if isinstance((code_block := code_block_or_msg), CodeBlock):
-                    if code_block.language in ("json", None):
-                        try:
-                            embed_dict = json.loads(code_block.code)
-                        except Exception as jerr:
-                            raise commands.CommandInvokeError(
-                                commands.CommandError(
-                                    "Error while parsing JSON code block "
-                                    f"{i}: {jerr.__class__.__name__}: {jerr.args[0]}"
-                                )
-                            )
-                    elif code_block.language in ("py", "python"):
-                        try:
-                            embed_dict = literal_eval(code_block.code)
-                        except Exception as perr:
-                            raise commands.CommandInvokeError(
-                                commands.CommandError(
-                                    "Error while parsing Python dict code block "
-                                    f"{i}: {perr.__class__.__name__}: {perr.args[0]}"
-                                )
-                            )
-
-                    else:
-                        raise commands.CommandInvokeError(
-                            commands.CommandError(
-                                f"Unsupported code block language: {code_block.language}"
-                            )
-                        )
-                elif isinstance(
-                    (embed_msg := code_block_or_msg), (discord.Message, tuple)
-                ):
-                    attachment_index = 0
-                    if isinstance(embed_msg, tuple):
-                        embed_msg, attachment_index = (
-                            embed_msg[0],
-                            embed_msg[1],
-                        )
-
-                    if not (embed_msg_attachments := embed_msg.attachments):
-                        raise commands.CommandInvokeError(
-                            commands.CommandError(
-                                f"Error with `embeds` argument {i}: Messages "
-                                "speficied for flag `embeds` must have at least one "
-                                "attachment as `.txt`, `.py` file containing a Python "
-                                "dictionary, or a `.json` file containing embed data. "
-                                "It must be less than 10KB in size.",
-                            )
-                        )
-
-                    embed_attachment = embed_msg_attachments[
-                        min(attachment_index, len(embed_msg_attachments))
-                    ]
-
-                    if not (
-                        embed_attachment.content_type
-                        and embed_attachment.content_type.startswith(
-                            ("text", "application/json")
-                        )
-                        and embed_attachment.size < 10240
-                    ):
-                        raise commands.CommandInvokeError(
-                            commands.CommandError(
-                                f"Error with `embeds` argument {i}: Messages "
-                                "speficied for flag `embeds` must have at least one "
-                                "attachment as `.txt`, `.py` file containing a Python "
-                                "dictionary, or a `.json` file containing embed data. "
-                                "It must be less than 10KB in size.",
-                            )
-                        )
-
-                    embed_data = (await embed_attachment.read()).decode("utf-8")
-
-                    if (
-                        embed_attachment.content_type.startswith(
-                            ("application/json", "text")
-                        )
-                        and "x-python" not in embed_attachment.content_type
-                    ):
-                        try:
-                            embed_dict = json.loads(embed_data)
-                        except Exception as jerr:
-                            raise commands.CommandInvokeError(
-                                commands.CommandError(
-                                    "Error while parsing embed JSON from attachment: "
-                                    f"{i}: {jerr.__class__.__name__}: {jerr.args[0]}"
-                                )
-                            )
-                    else:
-                        try:
-                            embed_dict = literal_eval(embed_data)
-                        except Exception as perr:
-                            raise commands.CommandInvokeError(
-                                commands.CommandError(
-                                    "Error while parsing Python embed dict from attachment: "
-                                    f"{i}: {perr.__class__.__name__}: {perr.args[0]}"
-                                )
-                            )
-                else:
-                    continue
-
-                parsed_embeds.append(discord.Embed.from_dict(embed_dict))
-        elif embed_src:
-            parsed_embeds = [
-                get_message_embed_by_index(msg, index=idx) for msg, idx in embed_src
-            ]
-        elif embeds_src is not None:
-            if not embeds_src.embeds:
-                raise commands.CommandInvokeError(
-                    commands.CommandError(
-                        "Message specified for `embeds_src` has no embeds to use."
-                    )
-                )
-            parsed_embeds = list(embeds_src.embeds)
-        elif message_src is not None:
-            parsed_embeds = list(message_src.embeds)
-
-        if attachments:
-            for i, att in enumerate(attachments):
-                if att.size > 2**20 * 25:
-                    raise commands.CommandInvokeError(
-                        commands.CommandError(
-                            f"Attachment {i} is too large to be resent (> 25MiB)"
-                        )
-                    )
-                files.append(await att.to_file(use_cached=True))
-
-        if not attachments:
-            if attachment_src:
-                for src_message, index in attachment_src:
-                    files.append(
-                        await get_message_attachment_file(
-                            src_message,
-                            index=index,
-                            size_limit=2**20 * 8,
-                        )
-                    )
-            elif attachments_src is not None:
-                if not attachments_src.attachments:
-                    raise commands.CommandInvokeError(
-                        commands.CommandError(
-                            "Message specified for `attachments_src` has no attachments to use."
-                        )
-                    )
-                files.extend(
-                    await get_message_attachments_files(
-                        attachments_src,
-                        size_limit=2**20 * 25,
-                    )
-                )
-            elif message_src is not None:
-                if message_src.attachments:
-                    files.extend(
-                        await get_message_attachments_files(
-                            message_src,
-                            size_limit=2**20 * 25,
-                        )
-                    )
-
-        allowed_mentions = (
-            discord.AllowedMentions.all()
-            if mention_all
-            else discord.AllowedMentions(
-                everyone=mention_everyone,
-                users=(mention_these_users if mention_these_users else mention_users),
-                roles=(mention_these_roles if mention_these_roles else mention_roles),
-                replied_user=mention_replied_user,
-            )
+        parsed_embeds = await self._resolve_embeds(
+            embeds=embeds,
+            embed_src=embed_src,
+            embeds_src=embeds_src,
+            message_src=message_src,
+        )
+        files = await self._resolve_send_files(
+            attachments,
+            attachment_src=attachment_src,
+            attachments_src=attachments_src,
+            message_src=message_src,
+            size_limit=2**20 * 25,
+        )
+        allowed_mentions = self._build_allowed_mentions(
+            mention_all,
+            mention_everyone,
+            mention_users,
+            mention_these_users,
+            mention_roles,
+            mention_these_roles,
+            mention_replied_user,
         )
 
         delete_after_seconds = (
@@ -722,9 +787,8 @@ class Messaging(BaseExtensionCog, name="messaging"):
             or webhook_avatar_url
             or webhook_no_avatar
         )
-
         effective_webhook_avatar_url = self._resolve_webhook_avatar_url(
-            webhook_avatar_url=(webhook_avatar_url if webhook_avatar_url else None),
+            webhook_avatar_url=(webhook_avatar_url or None),
             webhook_no_avatar=webhook_no_avatar,
         )
 
@@ -737,98 +801,351 @@ class Messaging(BaseExtensionCog, name="messaging"):
 
         for dest in destinations:
             if reply_to is None:
-                webhook = None
-                thread = None
                 if explicit_webhook_flags:
                     webhook, thread = await self._resolve_messaging_webhook(
                         dest,
                         webhook_name=webhook_name,
                         webhook_url=webhook_url,
-                        webhook_avatar_url=(
-                            webhook_avatar_url if webhook_avatar_url else None
-                        ),
+                        webhook_avatar_url=(webhook_avatar_url or None),
                         webhook_no_avatar=webhook_no_avatar,
                     )
-
-                if webhook is not None:
-                    try:
-                        if thread is not None:
-                            msg = await webhook.send(
-                                content=str(resolved_content)
-                                if resolved_content is not None
-                                else "",
-                                embeds=parsed_embeds,
-                                files=files,
-                                allowed_mentions=allowed_mentions,
-                                username=(
-                                    str(webhook_username)
-                                    if webhook_username
-                                    else discord.utils.MISSING
-                                ),
-                                avatar_url=(
-                                    effective_webhook_avatar_url
-                                    if effective_webhook_avatar_url
-                                    else discord.utils.MISSING
-                                ),
-                                thread=thread,
-                                wait=True,
-                            )
-                        else:
-                            msg = await webhook.send(
-                                content=str(resolved_content)
-                                if resolved_content is not None
-                                else "",
-                                embeds=parsed_embeds,
-                                files=files,
-                                allowed_mentions=allowed_mentions,
-                                username=(
-                                    str(webhook_username)
-                                    if webhook_username
-                                    else discord.utils.MISSING
-                                ),
-                                avatar_url=(
-                                    effective_webhook_avatar_url
-                                    if effective_webhook_avatar_url
-                                    else discord.utils.MISSING
-                                ),
-                                wait=True,
-                            )
-                    except discord.HTTPException as err:
-                        raise commands.CommandInvokeError(
-                            commands.CommandError(
-                                "Failed to send message via webhook: "
-                                f"{err.__class__.__name__}: {err.text or err}"
-                            )
+                    if webhook is not None:
+                        send_kwargs = dict(
+                            content=str(resolved_content)
+                            if resolved_content is not None
+                            else "",
+                            embeds=parsed_embeds,
+                            files=files,
+                            allowed_mentions=allowed_mentions,
+                            username=(
+                                str(webhook_username)
+                                if webhook_username
+                                else discord.utils.MISSING
+                            ),
+                            avatar_url=(
+                                effective_webhook_avatar_url
+                                if effective_webhook_avatar_url
+                                else discord.utils.MISSING
+                            ),
+                            wait=True,
                         )
+                        if thread is not None:
+                            send_kwargs["thread"] = thread
+                        try:
+                            msg = await webhook.send(**send_kwargs)
+                        except discord.HTTPException as err:
+                            raise commands.CommandInvokeError(
+                                commands.CommandError(
+                                    "Failed to send message via webhook: "
+                                    f"{err.__class__.__name__}: {err.text or err}"
+                                )
+                            )
+                        if delete_after_seconds:
+                            await msg.delete(delay=delete_after_seconds)
+                        continue
 
-                    if delete_after_seconds:
-                        await msg.delete(delay=delete_after_seconds)
-                    continue
-
-                msg = await dest.send(
+                await dest.send(
                     content=resolved_content,
                     embeds=parsed_embeds,
                     files=files,
                     allowed_mentions=allowed_mentions,
                     delete_after=delete_after_seconds,  # type: ignore
                 )
-                continue
+            else:
+                await reply_to.reply(
+                    content=resolved_content,
+                    embeds=parsed_embeds,
+                    files=files,
+                    allowed_mentions=allowed_mentions,
+                    delete_after=delete_after_seconds,  # type: ignore
+                )
 
-            await reply_to.reply(
-                content=resolved_content,
-                embeds=parsed_embeds,
-                files=files,
-                allowed_mentions=allowed_mentions,
-                delete_after=delete_after_seconds,  # type: ignore
+    async def message_edit_func(
+        self,
+        ctx: commands.Context[BotT],
+        message: discord.Message | ReferencedMessage,
+        attachments: commands.Greedy[discord.Attachment],
+        *,
+        name: String[100] | None = None,
+        message_src: discord.Message | ReferencedMessage | None = None,
+        content_src: discord.Message | ReferencedMessage | None = None,
+        content: String | None = None,
+        attachments_src: discord.Message | ReferencedMessage | None = None,
+        attachment_src: list[tuple[discord.Message | ReferencedMessage, int]] = (),
+        embeds_src: discord.Message | ReferencedMessage | None = None,
+        embed_src: list[tuple[discord.Message | ReferencedMessage, int]] = (),
+        embeds: tuple[
+            Parens[discord.Message, int] | discord.Message | CodeBlock, ...
+        ] = (),
+        tags: tuple[str, ...] = (),
+        auto_hide_duration: Literal["1h", "24h", "1d", "3d", "1w"] | None = None,
+        slowmode_delay: TimeDelta = datetime.timedelta(),
+        remove_content: bool = False,
+        remove_embeds: bool = False,
+        remove_all_attachments: bool = False,
+        remove_old_attachments: bool = False,
+        webhook_name: String[80] | None = None,
+        webhook_url: StringExpr[HTTP_URL] | None = None,
+        webhook_username: String[80] | None = None,
+        webhook_avatar_url: StringExpr[HTTP_URL] | None = None,
+        webhook_no_avatar: bool = False,
+        mention_all: bool | None = None,
+        mention_everyone: bool | None = None,
+        mention_users: bool | None = None,
+        mention_these_users: tuple[discord.User, ...] = (),
+        mention_roles: bool | None = None,
+        mention_these_roles: tuple[discord.Role, ...] = (),
+        mention_replied_user: bool | None = None,
+    ):
+        assert (
+            ctx.guild
+            and ctx.bot.user
+            and (bot_member := ctx.guild.get_member(ctx.bot.user.id))
+            and isinstance(ctx.channel, MessageableGuildChannel.__args__)
+            and isinstance(ctx.author, discord.Member)
+        )
+
+        if not (
+            content
+            or attachments
+            or embeds
+            or content_src
+            or attachment_src
+            or embed_src
+            or attachments_src
+            or embeds_src
+            or message_src
+        ):
+            raise commands.CommandInvokeError(
+                commands.CommandError("Not enough arguments given as input.")
             )
+
+        if not snakecore.utils.have_permissions_in_channels(
+            ctx.author,
+            message.channel,  # type: ignore
+            "view_channel",
+        ):
+            raise commands.CommandInvokeError(
+                commands.CommandError(
+                    "You do not have enough permissions to run this command on the "
+                    f"target channel(s) (<#{message.channel.id}>)."  # type: ignore
+                )
+            )
+
+        is_thread_starter_msg = False
+
+        if name and not isinstance(message.channel, discord.Thread):
+            raise commands.CommandInvokeError(
+                commands.CommandError(
+                    "Flag 'name:' or 'title:' can only be specified if targeting "
+                    "the starter message of a thread."
+                )
+            )
+        elif tags and not (
+            isinstance(message.channel, discord.Thread)
+            and message.channel.parent
+            and isinstance(message.channel.parent, discord.ForumChannel)
+        ):
+            raise commands.CommandInvokeError(
+                commands.CommandError(
+                    "Flag 'tags:' can only be specified if targeting the starter "
+                    "message of a forum channel post."
+                )
+            )
+        elif (name or tags) and isinstance(message.channel, discord.Thread):
+            is_thread_starter_msg = True
+
+        tag_names = tuple(tag_name.casefold() for tag_name in tags)
+
+        resolved_content = None
+        if content is not None:
+            resolved_content = content
+        elif content_src is not None:
+            if not content_src.content:
+                raise commands.CommandInvokeError(
+                    commands.CommandError(
+                        "Message specified for `content_src` has no content to use."
+                    )
+                )
+            resolved_content = content_src.content
+        elif message_src is not None and message_src.content:
+            resolved_content = message_src.content
+
+        parsed_embeds = await self._resolve_embeds(
+            embeds=embeds,
+            embed_src=embed_src,
+            embeds_src=embeds_src,
+            message_src=message_src,
+            former_embeds=message.embeds,
+        )
+        files = await self._resolve_send_files(
+            attachments,
+            attachment_src=attachment_src,
+            attachments_src=attachments_src,
+            message_src=message_src,
+            size_limit=2**20 * 8,
+        )
+
+        old_attachments = [] if remove_old_attachments else message.attachments
+        final_attachments = discord.utils.MISSING
+        if files or old_attachments:
+            final_attachments = (old_attachments + files)[
+                max(-10, -(len(old_attachments) + len(files))) :
+            ]
+        elif remove_all_attachments:
+            final_attachments = []
+
+        allowed_mentions_kwargs: dict = {}
+        if not mention_all:
+            for kwarg, value in (
+                ("everyone", mention_everyone),
+                (
+                    "users",
+                    mention_these_users if mention_these_users else mention_users,
+                ),
+                (
+                    "roles",
+                    mention_these_roles if mention_these_roles else mention_roles,
+                ),
+                ("replied_user", mention_replied_user),
+            ):
+                if value is not None:
+                    allowed_mentions_kwargs[kwarg] = value
+
+        final_allowed_mentions = (
+            discord.AllowedMentions.all()
+            if mention_all
+            else (
+                discord.AllowedMentions(**allowed_mentions_kwargs)
+                if allowed_mentions_kwargs
+                else discord.utils.MISSING
+            )
+        )
+
+        AUTO_ARCHIVE = {"1h": 60, "24h": 1440, "3d": 4320, "1w": 10080}
+        if is_thread_starter_msg:
+            await message.channel.edit(  # type: ignore
+                name=name or discord.utils.MISSING,
+                applied_tags=[
+                    tag
+                    for tag in message.channel.parent.available_tags  # type: ignore
+                    if tag.name.casefold() in tag_names
+                ]
+                or discord.utils.MISSING,
+                auto_archive_duration=(
+                    AUTO_ARCHIVE[auto_hide_duration]
+                    if auto_hide_duration
+                    else discord.utils.MISSING
+                ),  # type: ignore
+                slowmode_delay=(
+                    slowmode_delay.seconds if slowmode_delay else discord.utils.MISSING
+                ),
+            )
+
+        final_content = (
+            str(resolved_content)
+            if resolved_content
+            else None
+            if remove_content
+            else discord.utils.MISSING
+        )
+        final_embeds = (
+            parsed_embeds
+            if parsed_embeds
+            else []
+            if remove_embeds
+            else discord.utils.MISSING
+        )
+
+        explicit_webhook_flags = bool(
+            webhook_url
+            or webhook_name
+            or webhook_username
+            or webhook_avatar_url
+            or webhook_no_avatar
+        )
+        effective_webhook_avatar_url = self._resolve_webhook_avatar_url(
+            webhook_avatar_url=(webhook_avatar_url or None),
+            webhook_no_avatar=webhook_no_avatar,
+        )
+
+        if explicit_webhook_flags:
+            resolved_webhook, resolved_thread = await self._resolve_messaging_webhook(
+                message.channel,  # type: ignore
+                webhook_name=webhook_name,
+                webhook_url=webhook_url,
+                webhook_avatar_url=(webhook_avatar_url or None),
+                webhook_no_avatar=webhook_no_avatar,
+            )
+
+            if resolved_webhook is None:
+                raise commands.CommandInvokeError(
+                    commands.CommandError(
+                        "Webhook flags were provided but no usable webhook could be resolved."
+                    )
+                )
+
+            if webhook_username or webhook_avatar_url or webhook_no_avatar:
+                try:
+                    await resolved_webhook.edit(
+                        name=(
+                            str(webhook_username)
+                            if webhook_username
+                            else discord.utils.MISSING
+                        ),
+                        avatar=(
+                            None
+                            if webhook_no_avatar
+                            else (
+                                await self._fetch_url_bytes(
+                                    effective_webhook_avatar_url
+                                )
+                                if effective_webhook_avatar_url
+                                else discord.utils.MISSING
+                            )
+                        ),
+                    )
+                except discord.HTTPException as err:
+                    raise commands.CommandInvokeError(
+                        commands.CommandError(
+                            "Failed to update webhook profile: "
+                            f"{err.__class__.__name__}: {err.text or err}"
+                        )
+                    )
+
+            try:
+                edit_kwargs = dict(
+                    content=final_content,
+                    embeds=final_embeds,
+                    attachments=final_attachments,
+                    allowed_mentions=final_allowed_mentions,
+                )
+                if resolved_thread is not None:
+                    edit_kwargs["thread"] = resolved_thread
+                await resolved_webhook.edit_message(message.id, **edit_kwargs)
+            except discord.HTTPException as err:
+                raise commands.CommandInvokeError(
+                    commands.CommandError(
+                        "Failed to edit message via webhook: "
+                        f"{err.__class__.__name__}: {err.text or err}"
+                    )
+                )
+            return
+
+        await message.edit(
+            content=final_content,
+            embeds=final_embeds,
+            attachments=final_attachments,
+            allowed_mentions=final_allowed_mentions,
+        )
 
     @commands.group(
         invoke_without_command=True,
         aliases=["msg"],
         usage="[attachments (upload files < 8 MiB)]... [message_src: Message] "
         "[content_src: Message] [content: Text[2000]] "
-        "[attachments_src: Message] [attachment_src: Message Number] "
-        "[embeds_src: Message] [embed_src: Message Number] [embeds: CodeBlock...] "
+        "[attachments_src: Message] [attachment_src: Message Number]... "
+        "[embeds_src: Message] [embed_src: Message Number]... [embeds: CodeBlock...] "
         "[to: Channel] [reply_to: Message] "
         "[webhook_name: Text[80]] [webhook_url: Text] "
         "[webhook_username: Text[80]] [webhook_avatar_url: Text] "
@@ -893,7 +1210,7 @@ class Messaging(BaseExtensionCog, name="messaging"):
         > A flag for using all attachments from another message.
         > The source message must contain attachments.
 
-        **`[attachment_src: Message Number]`**
+        **`[attachment_src: Message Number]...`**
         > A flag for using one attachment from a message by 0-based index.
         > Can be specified multiple times.
 
@@ -901,7 +1218,7 @@ class Messaging(BaseExtensionCog, name="messaging"):
         > A flag for using all embeds from another message.
         > The source message must contain embeds.
 
-        **`[embed_src: Message Number]`**
+        **`[embed_src: Message Number]...`**
         > A flag for using one embed from a message by 0-based index.
         > Can be specified multiple times.
 
@@ -948,7 +1265,7 @@ class Messaging(BaseExtensionCog, name="messaging"):
 
         **`[mention_these_users: User...]`**
         > A flag for a sequence of users in the message text content that should receive a mention ping.
-         > This overrides the settings of the `mention_users:` flag.
+        > This overrides the settings of the `mention_users:` flag.
 
         **`[mention_roles: yes|no]`**
         > A flag for whether any mentioned roles in the message text content should receive a mention ping.
@@ -956,7 +1273,7 @@ class Messaging(BaseExtensionCog, name="messaging"):
         > Defaults to 'no'.
 
         **`[mention_these_roles: Role...]`**
-        > > A flag for a sequence of roles in the message text content that should receive a mention ping.
+        > A flag for a sequence of roles in the message text content that should receive a mention ping.
         > This overrides the settings of the `mention_roles:` flag.
 
         **`[mention_replied_user: yes|no]`**
@@ -1062,10 +1379,12 @@ class Messaging(BaseExtensionCog, name="messaging"):
         name="post",
         aliases=["thread"],
         usage="[attachments (upload files < 8 MiB)]... <to: ForumChannel> "
-        "<name|title: Text[100]> [content: Text[2000]] "
-        "[embeds: CodeBlock...] [tags: String[20]...] "
-        "[auto_hide_duration: 1h|24h|1d|3d|1w] [slowmode_delay: TimeDelta] "
-        "[trim_h1: yes|no] "
+        "<name|title: Text[100]> [message_src: Message] "
+        "[content_src: Message] [content: Text[2000]] "
+        "[attachments_src: Message] [attachment_src: Message Number]... "
+        "[embeds_src: Message] [embed_src: Message Number]... [embeds: CodeBlock...] "
+        "[tags: String[20]...] [auto_hide_duration: 1h|24h|1d|3d|1w] "
+        "[slowmode_delay: TimeDelta] [trim_h1: yes|no] "
         "[webhook_name: Text[80]] [webhook_url: Text] "
         "[webhook_username: Text[80]] [webhook_avatar_url: Text] "
         "[webhook_no_avatar: yes|no] "
@@ -1082,7 +1401,13 @@ class Messaging(BaseExtensionCog, name="messaging"):
         *,
         to: tuple[discord.ForumChannel, ...],
         name: String[100] = commands.flag(name="name", aliases=["title"]),
+        message_src: discord.Message | ReferencedMessage | None = None,
+        content_src: discord.Message | ReferencedMessage | None = None,
         content: String[2000] | None = None,
+        attachments_src: discord.Message | ReferencedMessage | None = None,
+        attachment_src: list[tuple[discord.Message | ReferencedMessage, int]] = (),
+        embeds_src: discord.Message | ReferencedMessage | None = None,
+        embed_src: list[tuple[discord.Message | ReferencedMessage, int]] = (),
         embeds: tuple[
             Parens[discord.Message, int] | discord.Message | CodeBlock, ...
         ] = (),
@@ -1119,9 +1444,33 @@ class Messaging(BaseExtensionCog, name="messaging"):
         > A flag for the thread or forum post name/title.
         > It must not exceed 100 characters in length.
 
+        **`[message_src: Message]`**
+        > A flag for using content, embeds, and attachments from another message.
+        > Explicit flags override the corresponding parts from this source.
+
+        **`[content_src: Message]`**
+        > A flag for using the text content from another message.
+        > The source message must contain text content.
+
         **`[content: Text[2000]]`**
         > A flag for the text content the message should contain.
         > It must not exceed 2000 characters in length.
+
+        **`[attachments_src: Message]`**
+        > A flag for using all attachments from another message.
+        > The source message must contain attachments.
+
+        **`[attachment_src: Message Number]...`**
+        > A flag for using one attachment from a message by 0-based index.
+        > Can be specified multiple times.
+
+        **`[embeds_src: Message]`**
+        > A flag for using all embeds from another message.
+        > The source message must contain embeds.
+
+        **`[embed_src: Message Number]...`**
+        > A flag for using one embed from a message by 0-based index.
+        > Can be specified multiple times.
 
         **`[embeds: CodeBlock...]`**
         > A flag for the embeds to add to the message, as 1-10 code blocks containing embed data as a JSON object/Python dictionary.
@@ -1170,7 +1519,7 @@ class Messaging(BaseExtensionCog, name="messaging"):
 
         **`[mention_these_users: User...]`**
         > A flag for a sequence of users in the message text content that should receive a mention ping.
-         > This overrides the settings of the `mention_users:` flag.
+        > This overrides the settings of the `mention_users:` flag.
 
         **`[mention_roles: yes|no]`**
         > A flag for whether any mentioned roles in the message text content should receive a mention ping.
@@ -1178,7 +1527,7 @@ class Messaging(BaseExtensionCog, name="messaging"):
         > Defaults to 'no'.
 
         **`[mention_these_roles: Role...]`**
-        > > A flag for a sequence of roles in the message text content that should receive a mention ping.
+        > A flag for a sequence of roles in the message text content that should receive a mention ping.
         > This overrides the settings of the `mention_roles:` flag.
         """
         assert (
@@ -1192,16 +1541,24 @@ class Messaging(BaseExtensionCog, name="messaging"):
             and isinstance(ctx.author, discord.Member)
         )
 
-        if not (content or attachments or embeds):
+        if not (
+            content
+            or attachments
+            or embeds
+            or content_src
+            or embed_src
+            or attachments_src
+            or attachment_src
+            or embeds_src
+            or message_src
+        ):
             raise commands.CommandInvokeError(
                 commands.CommandError("Not enough arguments given as input.")
             )
 
-        destinations = to
-        if not destinations:
-            destinations = (ctx.channel,)
+        destinations = to or (ctx.channel,)
 
-        elif len(destinations) > 1 and tags:
+        if len(destinations) > 1 and tags:
             raise commands.CommandInvokeError(
                 commands.CommandError(
                     "You cannot specify multiple channels for flag `to:` if flag "
@@ -1212,9 +1569,7 @@ class Messaging(BaseExtensionCog, name="messaging"):
         tag_names = tuple(tag_name.casefold() for tag_name in tags)
 
         if not snakecore.utils.have_permissions_in_channels(
-            ctx.author,
-            destinations,
-            "view_channel",
+            ctx.author, destinations, "view_channel"
         ):
             raise commands.CommandInvokeError(
                 commands.CommandError(
@@ -1224,135 +1579,45 @@ class Messaging(BaseExtensionCog, name="messaging"):
                 )
             )
 
-        parsed_embeds = []
-        files = []
-
-        if embeds:
-            for i, code_block_or_msg in enumerate(embeds):
-                if isinstance((code_block := code_block_or_msg), CodeBlock):
-                    if code_block.language in ("json", None):
-                        try:
-                            embed_dict = json.loads(code_block.code)
-                        except Exception as jerr:
-                            raise commands.CommandInvokeError(
-                                commands.CommandError(
-                                    "Error while parsing JSON code block "
-                                    f"{i}: {jerr.__class__.__name__}: {jerr.args[0]}"
-                                )
-                            )
-                    elif code_block.language in ("py", "python"):
-                        try:
-                            embed_dict = literal_eval(code_block.code)
-                        except Exception as perr:
-                            raise commands.CommandInvokeError(
-                                commands.CommandError(
-                                    "Error while parsing Python dict code block "
-                                    f"{i}: {perr.__class__.__name__}: {perr.args[0]}"
-                                )
-                            )
-
-                    else:
-                        raise commands.CommandInvokeError(
-                            commands.CommandError(
-                                f"Unsupported code block language: {code_block.language}"
-                            )
-                        )
-                elif isinstance(
-                    (embed_msg := code_block_or_msg), (discord.Message, tuple)
-                ):
-                    attachment_index = 0
-                    if isinstance(embed_msg, tuple):
-                        embed_msg, attachment_index = (
-                            embed_msg[0],
-                            embed_msg[1],
-                        )
-
-                    if not (embed_msg_attachments := embed_msg.attachments):
-                        raise commands.CommandInvokeError(
-                            commands.CommandError(
-                                f"Error with `embeds` argument {i}: Messages "
-                                "speficied for flag `embeds` must have at least one "
-                                "attachment as `.txt`, `.py` file containing a Python "
-                                "dictionary, or a `.json` file containing embed data. "
-                                "It must be less than 10KB in size.",
-                            )
-                        )
-
-                    embed_attachment = embed_msg_attachments[
-                        min(attachment_index, len(embed_msg_attachments))
-                    ]
-
-                    if not (
-                        embed_attachment.content_type
-                        and embed_attachment.content_type.startswith(
-                            ("text", "application/json")
-                        )
-                        and embed_attachment.size < 10240
-                    ):
-                        raise commands.CommandInvokeError(
-                            commands.CommandError(
-                                f"Error with `embeds` argument {i}: Messages "
-                                "speficied for flag `embeds` must have at least one "
-                                "attachment as `.txt`, `.py` file containing a Python "
-                                "dictionary, or a `.json` file containing embed data. "
-                                "It must be less than 10KB in size.",
-                            )
-                        )
-
-                    embed_data = (await embed_attachment.read()).decode("utf-8")
-
-                    if (
-                        embed_attachment.content_type.startswith(
-                            ("application/json", "text")
-                        )
-                        and "x-python" not in embed_attachment.content_type
-                    ):
-                        try:
-                            embed_dict = json.loads(embed_data)
-                        except Exception as jerr:
-                            raise commands.CommandInvokeError(
-                                commands.CommandError(
-                                    "Error while parsing embed JSON from attachment: "
-                                    f"{i}: {jerr.__class__.__name__}: {jerr.args[0]}"
-                                )
-                            )
-                    else:
-                        try:
-                            embed_dict = literal_eval(embed_data)
-                        except Exception as perr:
-                            raise commands.CommandInvokeError(
-                                commands.CommandError(
-                                    "Error while parsing Python embed dict from attachment: "
-                                    f"{i}: {perr.__class__.__name__}: {perr.args[0]}"
-                                )
-                            )
-                else:
-                    continue
-
-                parsed_embeds.append(discord.Embed.from_dict(embed_dict))
-
-        if attachments:
-            for i, att in enumerate(attachments):
-                if att.size > 2**20 * 25:
-                    raise commands.CommandInvokeError(
-                        commands.CommandError(
-                            f"Attachment {i} is too large to be resent (> 25MiB)"
-                        )
+        resolved_content = None
+        if content is not None:
+            resolved_content = content
+        elif content_src is not None:
+            if not content_src.content:
+                raise commands.CommandInvokeError(
+                    commands.CommandError(
+                        "Message specified for `content_src` has no content to use."
                     )
-                files.append(await att.to_file(use_cached=True))
+                )
+            resolved_content = content_src.content
+        elif message_src is not None and message_src.content:
+            resolved_content = message_src.content
 
-        allowed_mentions = (
-            discord.AllowedMentions.all()
-            if mention_all
-            else discord.AllowedMentions(
-                everyone=mention_everyone,
-                users=(mention_these_users if mention_these_users else mention_users),
-                roles=(mention_these_roles if mention_these_roles else mention_roles),
-            )
+        parsed_embeds = await self._resolve_embeds(
+            embeds=embeds,
+            embed_src=embed_src,
+            embeds_src=embeds_src,
+            message_src=message_src,
+        )
+        files = await self._resolve_send_files(
+            attachments,
+            attachment_src=attachment_src,
+            attachments_src=attachments_src,
+            message_src=message_src,
+            size_limit=2**20 * 25,
+        )
+        allowed_mentions = self._build_allowed_mentions(
+            mention_all,
+            mention_everyone,
+            mention_users,
+            mention_these_users,
+            mention_roles,
+            mention_these_roles,
         )
 
+        AUTO_ARCHIVE = {"1h": 60, "24h": 1440, "3d": 4320, "1w": 10080}
         auto_archive_duration = (
-            {"1h": 60, "24h": 1440, "3d": 4320, "1w": 10080}[auto_hide_duration]
+            AUTO_ARCHIVE[auto_hide_duration]
             if auto_hide_duration
             else discord.utils.MISSING
         )
@@ -1364,13 +1629,12 @@ class Messaging(BaseExtensionCog, name="messaging"):
             or webhook_avatar_url
             or webhook_no_avatar
         )
-
         effective_webhook_avatar_url = self._resolve_webhook_avatar_url(
-            webhook_avatar_url=(webhook_avatar_url if webhook_avatar_url else None),
+            webhook_avatar_url=(webhook_avatar_url or None),
             webhook_no_avatar=webhook_no_avatar,
         )
 
-        final_content = str(content) if content is not None else None
+        final_content = str(resolved_content) if resolved_content is not None else None
         if trim_h1 and final_content:
             final_content = trim_markdown_h1_prefix(final_content)
 
@@ -1379,20 +1643,18 @@ class Messaging(BaseExtensionCog, name="messaging"):
             applied_tags = [
                 tag for tag in dest.available_tags if tag.name.casefold() in tag_names
             ]
+
             if explicit_webhook_flags:
                 webhook, _ = await self._resolve_messaging_webhook(
                     dest,
                     webhook_name=webhook_name,
                     webhook_url=webhook_url,
-                    webhook_avatar_url=(
-                        webhook_avatar_url if webhook_avatar_url else None
-                    ),
+                    webhook_avatar_url=(webhook_avatar_url or None),
                     webhook_no_avatar=webhook_no_avatar,
                 )
-
                 try:
                     msg = await webhook.send(
-                        content=str(final_content) if final_content is not None else "",
+                        content=final_content if final_content is not None else "",
                         embeds=parsed_embeds,
                         files=files,
                         allowed_mentions=allowed_mentions,
@@ -1499,7 +1761,7 @@ class Messaging(BaseExtensionCog, name="messaging"):
 
         **`[mention_these_users: User...]`**
         > A flag for a sequence of users in the message text content that should receive a mention ping.
-         > This overrides the settings of the `mention_users:` flag.
+        > This overrides the settings of the `mention_users:` flag.
 
         **`[mention_roles: yes|no]`**
         > A flag for whether any mentioned roles in the message text content should receive a mention ping.
@@ -1507,7 +1769,7 @@ class Messaging(BaseExtensionCog, name="messaging"):
         > Defaults to 'no'.
 
         **`[mention_these_roles: Role...]`**
-        > > A flag for a sequence of roles in the message text content that should receive a mention ping.
+        > A flag for a sequence of roles in the message text content that should receive a mention ping.
         > This overrides the settings of the `mention_roles:` flag.
 
         **`[mention_replied_user: yes|no]`**
@@ -1524,14 +1786,11 @@ class Messaging(BaseExtensionCog, name="messaging"):
             )
             and isinstance(ctx.author, discord.Member)
         )
-        destinations = to
-        if not destinations:
-            destinations = (ctx.channel,)
+
+        destinations = to or (ctx.channel,)
 
         if not snakecore.utils.have_permissions_in_channels(
-            ctx.author,
-            destinations,
-            "view_channel",
+            ctx.author, destinations, "view_channel"
         ):
             raise commands.CommandInvokeError(
                 commands.CommandError(
@@ -1541,60 +1800,29 @@ class Messaging(BaseExtensionCog, name="messaging"):
                 )
             )
 
+        allowed_mentions = self._build_allowed_mentions(
+            mention_all,
+            mention_everyone,
+            mention_users,
+            mention_these_users,
+            mention_roles,
+            mention_these_roles,
+            mention_replied_user,
+        )
+        delete_after_seconds = (
+            delete_after.total_seconds()
+            if isinstance(delete_after, datetime.timedelta)
+            else delete_after
+        )
+
         for dest in destinations:
             msg = await (
-                reply_to.reply(
-                    content=content,
-                    allowed_mentions=(
-                        discord.AllowedMentions.all()
-                        if mention_all
-                        else discord.AllowedMentions(
-                            everyone=mention_everyone,
-                            users=(
-                                mention_these_users
-                                if mention_these_users
-                                else mention_users
-                            ),
-                            roles=(
-                                mention_these_roles
-                                if mention_these_roles
-                                else mention_roles
-                            ),
-                            replied_user=mention_replied_user,
-                        )
-                    ),
-                )
+                reply_to.reply(content=content, allowed_mentions=allowed_mentions)
                 if reply_to
-                else dest.send(
-                    content=content,
-                    allowed_mentions=(
-                        discord.AllowedMentions.all()
-                        if mention_all
-                        else discord.AllowedMentions(
-                            everyone=mention_everyone,
-                            users=(
-                                mention_these_users
-                                if mention_these_users
-                                else mention_users
-                            ),
-                            roles=(
-                                mention_these_roles
-                                if mention_these_roles
-                                else mention_roles
-                            ),
-                            replied_user=mention_replied_user,
-                        )
-                    ),
-                )
+                else dest.send(content=content, allowed_mentions=allowed_mentions)
             )
-            if delete_after:
-                await msg.delete(
-                    delay=(
-                        delete_after.total_seconds()
-                        if isinstance(delete_after, datetime.timedelta)
-                        else delete_after
-                    )
-                )
+            if delete_after_seconds:
+                await msg.delete(delay=delete_after_seconds)
 
     @commands.guild_only()
     @commands.max_concurrency(1, per=commands.BucketType.default, wait=True)
@@ -1602,8 +1830,8 @@ class Messaging(BaseExtensionCog, name="messaging"):
         name="edit",
         usage="[attachments (upload files < 8 MiB)]... <message> "
         "[message_src: Message] [content_src: Message] [content: Text[2000]] "
-        "[attachments_src: Message] [attachment_src: Message Number] "
-        "[embeds_src: Message] [embed_src: Message Number] "
+        "[attachments_src: Message] [attachment_src: Message Number]... "
+        "[embeds_src: Message] [embed_src: Message Number]... "
         "[embeds: CodeBlock/Message/( Message Integer ) ... ] "
         "[tags: String[20]...] "
         "[auto_hide_duration: 1h|24h|1d|3d|1w] [slowmode_delay: TimeDelta] "
@@ -1622,8 +1850,9 @@ class Messaging(BaseExtensionCog, name="messaging"):
         message: discord.Message | ReferencedMessage,
         attachments: commands.Greedy[discord.Attachment],
         *,
-        name: String[100]
-        | None = commands.flag(name="name", aliases=["title"], default=None),
+        name: String[100] | None = commands.flag(
+            name="name", aliases=["title"], default=None
+        ),
         message_src: discord.Message | ReferencedMessage | None = None,
         content_src: discord.Message | ReferencedMessage | None = None,
         content: String | None = None,
@@ -1687,7 +1916,7 @@ class Messaging(BaseExtensionCog, name="messaging"):
         > A flag for using all attachments from another message.
         > The source message must contain attachments.
 
-        **`[attachment_src: Message Number]`**
+        **`[attachment_src: Message Number]...`**
         > A flag for using one attachment from a message by 0-based index.
         > Can be specified multiple times.
 
@@ -1695,7 +1924,7 @@ class Messaging(BaseExtensionCog, name="messaging"):
         > A flag for using all embeds from another message.
         > The source message must contain embeds.
 
-        **`[embed_src: Message Number]`**
+        **`[embed_src: Message Number]...`**
         > A flag for using one embed from a message by 0-based index.
         > Can be specified multiple times.
 
@@ -1718,7 +1947,7 @@ class Messaging(BaseExtensionCog, name="messaging"):
         > The slowmode delay to use. Omission disables slowmode.
 
         **`[remove_content: yes|no]`**
-        > A flag for whether all mentionable targets in the message text content (users, roles, user being replied to) should receive a mention ping.
+        > A flag for whether to clear the message's text content.
 
         **`[webhook_name: Text[80]]`**
         > A flag for enabling webhook mode when editing messages.
@@ -1749,427 +1978,51 @@ class Messaging(BaseExtensionCog, name="messaging"):
 
         **`[mention_these_users: User...]`**
         > A flag for a sequence of users in the message text content that should receive a mention ping.
-         > This overrides the settings of the `mention_users:` flag.
+        > This overrides the settings of the `mention_users:` flag.
 
         **`[mention_roles: yes|no]`**
         > A flag for whether any mentioned roles in the message text content should receive a mention ping.
 
         **`[mention_these_roles: Role...]`**
-        > > A flag for a sequence of roles in the message text content that should receive a mention ping.
+        > A flag for a sequence of roles in the message text content that should receive a mention ping.
         > This overrides the settings of the `mention_roles:` flag.
 
         **`[mention_replied_user: yes|no]`**
         > A flag for whether a user being replied to should be pinged.
         > Defaults to 'no'.
         """
-        assert (
-            ctx.guild
-            and ctx.bot.user
-            and (bot_member := ctx.guild.get_member(ctx.bot.user.id))
-            and isinstance(
-                ctx.channel,
-                MessageableGuildChannel.__args__,
-            )
-            and isinstance(ctx.author, discord.Member)
-        )
-
-        if not (
-            content
-            or attachments
-            or embeds
-            or content_src
-            or attachment_src
-            or embed_src
-            or attachments_src
-            or embeds_src
-            or message_src
-        ):
-            raise commands.CommandInvokeError(
-                commands.CommandError("Not enough arguments given as input.")
-            )
-
-        if not snakecore.utils.have_permissions_in_channels(
-            ctx.author,
-            message.channel,  # type: ignore
-            "view_channel",
-        ):
-            raise commands.CommandInvokeError(
-                commands.CommandError(
-                    "You do not have enough permissions to run this command on the "
-                    f"target channel(s) (<#{message.channel.id}>)."  # type: ignore
-                )
-            )
-
-        is_thread_starter_msg = False
-
-        if name and not (isinstance(message.channel, discord.Thread)):
-            raise commands.CommandInvokeError(
-                commands.CommandError(
-                    "Flag 'name:' or 'title:' can only be specified if targeting the starter message of a thread."
-                )
-            )
-
-        elif tags and not (
-            isinstance(message.channel, discord.Thread)
-            and message.channel.parent
-            and isinstance(message.channel.parent, discord.ForumChannel)
-        ):
-            raise commands.CommandInvokeError(
-                commands.CommandError(
-                    "Flag 'tags:' can only be specified if targeting the starter message of a forum channel post."
-                )
-            )
-
-        elif (name or tags) and isinstance(message.channel, discord.Thread):
-            is_thread_starter_msg = True
-
-        tag_names = tuple(tag_name.casefold() for tag_name in tags)
-
-        resolved_content = None
-        if content is not None:
-            resolved_content = content
-        elif content_src is not None:
-            if not content_src.content:
-                raise commands.CommandInvokeError(
-                    commands.CommandError(
-                        "Message specified for `content_src` has no content to use."
-                    )
-                )
-            resolved_content = content_src.content
-        elif message_src is not None and message_src.content:
-            resolved_content = message_src.content
-
-        former_embeds = message.embeds
-        parsed_embeds = []
-        files = []
-        old_attachments = [] if remove_old_attachments else message.attachments
-        if embeds:
-            for i, code_block_or_msg in enumerate(embeds):
-                if isinstance((code_block := code_block_or_msg), CodeBlock):
-                    if code_block.language in ("json", None):
-                        try:
-                            embed_dict = json.loads(code_block.code)
-                        except Exception as jerr:
-                            raise commands.CommandInvokeError(
-                                commands.CommandError(
-                                    "Error while parsing JSON code block "
-                                    f"{i}: {jerr.__class__.__name__}: {jerr.args[0]}"
-                                )
-                            )
-                    elif code_block.language in ("py", "python"):
-                        try:
-                            embed_dict = literal_eval(code_block.code)
-                        except Exception as perr:
-                            raise commands.CommandInvokeError(
-                                commands.CommandError(
-                                    "Error while parsing Python dict code block "
-                                    f"{i}: {perr.__class__.__name__}: {perr.args[0]}"
-                                )
-                            )
-
-                    else:
-                        raise commands.CommandInvokeError(
-                            commands.CommandError(
-                                f"Unsupported code block language: {code_block.language}"
-                            )
-                        )
-                elif isinstance(
-                    (embed_msg := code_block_or_msg), (discord.Message, tuple)
-                ):
-                    attachment_index = 0
-                    if isinstance(embed_msg, tuple):
-                        embed_msg, attachment_index = (
-                            embed_msg[0],
-                            embed_msg[1],
-                        )
-
-                    if not (embed_msg_attachments := embed_msg.attachments):
-                        raise commands.CommandInvokeError(
-                            commands.CommandError(
-                                f"Error with `embeds` argument {i}: Messages "
-                                "speficied for flag `embeds` must have at least one "
-                                "attachment as `.txt`, `.py` file containing a Python "
-                                "dictionary, or a `.json` file containing embed data. "
-                                "It must be less than 10KB in size.",
-                            )
-                        )
-
-                    embed_attachment = embed_msg_attachments[
-                        min(attachment_index, len(embed_msg_attachments))
-                    ]
-
-                    if not (
-                        embed_attachment.content_type
-                        and embed_attachment.content_type.startswith(
-                            ("text", "application/json")
-                        )
-                        and embed_attachment.size < 10240
-                    ):
-                        raise commands.CommandInvokeError(
-                            commands.CommandError(
-                                f"Error with `embeds` argument {i}: Messages "
-                                "speficied for flag `embeds` must have at least one "
-                                "attachment as `.txt`, `.py` file containing a Python "
-                                "dictionary, or a `.json` file containing embed data. "
-                                "It must be less than 10KB in size.",
-                            )
-                        )
-
-                    embed_data = (await embed_attachment.read()).decode("utf-8")
-
-                    if (
-                        embed_attachment.content_type.startswith(
-                            ("application/json", "text")
-                        )
-                        and "x-python" not in embed_attachment.content_type
-                    ):
-                        try:
-                            embed_dict = json.loads(embed_data)
-                        except Exception as jerr:
-                            raise commands.CommandInvokeError(
-                                commands.CommandError(
-                                    "Error while parsing embed JSON from attachment: "
-                                    f"{i}: {jerr.__class__.__name__}: {jerr.args[0]}"
-                                )
-                            )
-                    else:
-                        try:
-                            embed_dict = literal_eval(embed_data)
-                        except Exception as perr:
-                            raise commands.CommandInvokeError(
-                                commands.CommandError(
-                                    "Error while parsing Python embed dict from attachment: "
-                                    f"{i}: {perr.__class__.__name__}: {perr.args[0]}"
-                                )
-                            )
-                else:
-                    continue
-
-                parsed_embeds.append(discord.Embed.from_dict(embed_dict))
-        elif embed_src:
-            parsed_embeds = [
-                get_message_embed_by_index(msg, index=idx) for msg, idx in embed_src
-            ]
-        elif embeds_src is not None:
-            if not embeds_src.embeds:
-                raise commands.CommandInvokeError(
-                    commands.CommandError(
-                        "Message specified for `embeds_src` has no embeds to use."
-                    )
-                )
-            parsed_embeds = list(embeds_src.embeds)
-        elif message_src is not None:
-            parsed_embeds = list(message_src.embeds)
-
-        if attachments:
-            for i, att in enumerate(attachments):
-                if att.size > 2**20 * 8:
-                    raise commands.CommandInvokeError(
-                        commands.CommandError(
-                            f"Attachment {i} is too large to be resent (> 8MiB)"
-                        )
-                    )
-                files.append(await att.to_file(use_cached=True))
-
-        if not attachments:
-            if attachment_src:
-                for src_message, index in attachment_src:
-                    files.append(
-                        await get_message_attachment_file(
-                            src_message,
-                            index=index,
-                            size_limit=2**20 * 25,
-                        )
-                    )
-            elif attachments_src is not None:
-                if not attachments_src.attachments:
-                    raise commands.CommandInvokeError(
-                        commands.CommandError(
-                            "Message specified for `attachments_src` has no attachments to use."
-                        )
-                    )
-                files.extend(
-                    await get_message_attachments_files(
-                        attachments_src,
-                        size_limit=2**20 * 8,
-                    )
-                )
-            elif message_src is not None:
-                if message_src.attachments:
-                    files.extend(
-                        await get_message_attachments_files(
-                            message_src,
-                            size_limit=2**20 * 8,
-                        )
-                    )
-
-        parsed_embeds = [
-            embed or former_embeds[i]
-            for i, embed in enumerate(parsed_embeds)
-            if embed or i < len(former_embeds)
-        ]
-        # filter out empty embeds, which can act as placeholders for former embeds
-
-        final_attachments = discord.utils.MISSING
-        if files or old_attachments:
-            final_attachments = (old_attachments + files)[
-                max(-10, -(len(old_attachments) + len(files))) :
-            ]  # only keep the 10 newest entries
-        elif remove_all_attachments:
-            final_attachments = []
-
-        allowed_mentions_kwargs = {}
-        if not mention_all:
-            for kwarg, value in (
-                ("everyone", mention_everyone),
-                (
-                    "users",
-                    mention_these_users if mention_these_users else mention_users,
-                ),
-                (
-                    "roles",
-                    mention_these_roles if mention_these_roles else mention_roles,
-                ),
-                ("replied_user", mention_replied_user),
-            ):
-                if value is not None:
-                    allowed_mentions_kwargs[kwarg] = value
-
-        if is_thread_starter_msg:
-            await message.channel.edit(
-                name=name or discord.utils.MISSING,  # type: ignore
-                applied_tags=[
-                    tag
-                    for tag in (message.channel.parent.available_tags)  # type: ignore
-                    if tag.name.casefold() in tag_names
-                ]
-                or discord.utils.MISSING,
-                auto_archive_duration=(
-                    {"1h": 60, "24h": 1440, "3d": 4320, "1w": 10080}[auto_hide_duration]
-                    if auto_hide_duration
-                    else discord.utils.MISSING
-                ),  # type: ignore
-                slowmode_delay=(
-                    slowmode_delay.seconds if slowmode_delay else discord.utils.MISSING
-                ),
-            )
-
-        final_content = (
-            str(resolved_content)
-            if resolved_content
-            else None
-            if remove_content
-            else discord.utils.MISSING
-        )
-        final_embeds = (
-            parsed_embeds
-            if parsed_embeds
-            else []
-            if remove_embeds
-            else discord.utils.MISSING
-        )
-        final_allowed_mentions = (
-            discord.AllowedMentions.all()
-            if mention_all
-            else (
-                discord.AllowedMentions(
-                    **allowed_mentions_kwargs,
-                )
-                if allowed_mentions_kwargs
-                else discord.utils.MISSING
-            )
-        )
-
-        resolved_webhook: discord.Webhook | None = None
-        resolved_thread: discord.Thread | None = None
-        explicit_webhook_flags = bool(
-            webhook_url
-            or webhook_name
-            or webhook_username
-            or webhook_avatar_url
-            or webhook_no_avatar
-        )
-        effective_webhook_avatar_url = self._resolve_webhook_avatar_url(
-            webhook_avatar_url=(webhook_avatar_url if webhook_avatar_url else None),
+        return await self.message_edit_func(
+            ctx,
+            message,
+            attachments,
+            name=name,
+            message_src=message_src,
+            content_src=content_src,
+            content=content,
+            attachments_src=attachments_src,
+            attachment_src=attachment_src,
+            embeds_src=embeds_src,
+            embed_src=embed_src,
+            embeds=embeds,
+            tags=tags,
+            auto_hide_duration=auto_hide_duration,
+            slowmode_delay=slowmode_delay,
+            remove_content=remove_content,
+            remove_embeds=remove_embeds,
+            remove_all_attachments=remove_all_attachments,
+            remove_old_attachments=remove_old_attachments,
+            webhook_name=webhook_name,
+            webhook_url=webhook_url,
+            webhook_username=webhook_username,
+            webhook_avatar_url=webhook_avatar_url,
             webhook_no_avatar=webhook_no_avatar,
-        )
-        if explicit_webhook_flags:
-            resolved_webhook, resolved_thread = await self._resolve_messaging_webhook(
-                message.channel,  # type: ignore[arg-type]
-                webhook_name=webhook_name,
-                webhook_url=webhook_url,
-                webhook_avatar_url=(webhook_avatar_url if webhook_avatar_url else None),
-                webhook_no_avatar=webhook_no_avatar,
-            )
-
-        if resolved_webhook is not None:
-            if webhook_username or webhook_avatar_url or webhook_no_avatar:
-                try:
-                    await resolved_webhook.edit(
-                        name=(
-                            str(webhook_username)
-                            if webhook_username
-                            else discord.utils.MISSING
-                        ),
-                        avatar=(
-                            None
-                            if webhook_no_avatar
-                            else (
-                                await self._fetch_url_bytes(
-                                    effective_webhook_avatar_url
-                                )
-                                if effective_webhook_avatar_url
-                                else discord.utils.MISSING
-                            )
-                        ),
-                    )
-                except discord.HTTPException as err:
-                    raise commands.CommandInvokeError(
-                        commands.CommandError(
-                            "Failed to update webhook profile: "
-                            f"{err.__class__.__name__}: {err.text or err}"
-                        )
-                    )
-
-            try:
-                if resolved_thread is not None:
-                    await resolved_webhook.edit_message(
-                        message.id,
-                        content=final_content,
-                        embeds=final_embeds,
-                        attachments=final_attachments,
-                        allowed_mentions=final_allowed_mentions,
-                        thread=resolved_thread,
-                    )
-                else:
-                    await resolved_webhook.edit_message(
-                        message.id,
-                        content=final_content,
-                        embeds=final_embeds,
-                        attachments=final_attachments,
-                        allowed_mentions=final_allowed_mentions,
-                    )
-                return
-            except discord.HTTPException as err:
-                raise commands.CommandInvokeError(
-                    commands.CommandError(
-                        "Failed to edit message via webhook: "
-                        f"{err.__class__.__name__}: {err.text or err}"
-                    )
-                )
-
-        if explicit_webhook_flags:
-            raise commands.CommandInvokeError(
-                commands.CommandError(
-                    "Webhook flags were provided but no usable webhook could be resolved."
-                )
-            )
-
-        await message.edit(
-            content=final_content,
-            embeds=final_embeds,
-            attachments=final_attachments,
-            allowed_mentions=final_allowed_mentions,
+            mention_all=mention_all,
+            mention_everyone=mention_everyone,
+            mention_users=mention_users,
+            mention_these_users=mention_these_users,
+            mention_roles=mention_roles,
+            mention_these_roles=mention_these_roles,
+            mention_replied_user=mention_replied_user,
         )
 
     @commands.guild_only()
@@ -2229,9 +2082,8 @@ class Messaging(BaseExtensionCog, name="messaging"):
                     f"target channel(s) (<#{message.channel.id}>)."
                 )
             )
-        await message.edit(
-            content=content,
-        )
+
+        await message.edit(content=content)
 
     @commands.guild_only()
     @commands.max_concurrency(1, per=commands.BucketType.default, wait=True)
