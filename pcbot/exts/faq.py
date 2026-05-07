@@ -130,7 +130,7 @@ class FAQChannelCog(BaseExtensionCog, name="faq-channel"):
 
         If the match contains '/' or '|', split into separate keys.
         """
-        match = self._key_re.match(thread_name)
+        match = self._key_re.search(thread_name)
         if not match:
             return []
 
