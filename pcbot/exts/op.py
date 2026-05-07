@@ -20,13 +20,14 @@ MessageableGuildChannel = (
 )
 
 
-invocation_error = lambda ctx, *args: (
-    app_commands.CommandInvokeError(
-        ctx.interaction.command, app_commands.AppCommandError(*args)
+def invocation_error(ctx, *args):
+    return (
+        app_commands.CommandInvokeError(
+            ctx.interaction.command, app_commands.AppCommandError(*args)
+        )
+        if ctx.interaction
+        else commands.CommandInvokeError(commands.CommandError(*args))
     )
-    if ctx.interaction
-    else commands.CommandInvokeError(commands.CommandError(*args))
-)
 
 
 class OPCog(BaseExtensionCog, name="op"):
@@ -146,8 +147,10 @@ class OPCog(BaseExtensionCog, name="op"):
                 system_message: discord.Message = await ctx.bot.wait_for(
                     "message",
                     check=(
-                        lambda m: m.channel.id == channel.id
-                        and m.type == discord.MessageType.pins_add
+                        lambda m: (
+                            m.channel.id == channel.id
+                            and m.type == discord.MessageType.pins_add
+                        )
                     ),
                     timeout=2,
                 )
