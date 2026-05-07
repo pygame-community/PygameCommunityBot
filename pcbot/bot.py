@@ -2,7 +2,7 @@
 This project has been licensed under the MIT license.
 Copyright (c) 2022-present pygame-community.
 
-This file should define the `discord.ext.commands.Bot` subclass to use for the project. 
+This file should define the `discord.ext.commands.Bot` subclass to use for the project.
 """
 
 import asyncio
@@ -322,29 +322,31 @@ class PygameCommunityBot(snakecore.commands.Bot):
                 )
 
         if self.config.get("sync_app_commands"):
-            if self.config.get("dev_guild_id") is not None:
-                if self.config.get("copy_global_app_commands_to_dev_guild"):
-                    self.tree.copy_global_to(
-                        guild=discord.Object(self.config["dev_guild_id"])
-                    )
-                    await self.tree.sync(
-                        guild=discord.Object(self.config["dev_guild_id"])
-                    )
-                elif self.config.get("clear_dev_guild_app_commands"):
-                    self.tree.clear_commands(
-                        guild=discord.Object(self.config["dev_guild_id"]),
-                        type=self.config.get("clear_app_command_type"),
-                    )
-                    await self.tree.sync(
-                        guild=discord.Object(self.config["dev_guild_id"])
-                    )
+            dev_guild_ids: list[int] = self.config.get("dev_guild_ids", [])
 
-            if self.config.get("clear_global_app_commands"):
+            if "dev_guild_id" in self.config:
+                dev_guild_ids.insert(0, self.config["dev_guild_id"])
+
+            if dev_guild_ids:
+                if self.config.get("copy_global_app_commands_to_dev_guild"):
+                    for dev_guild_id in dev_guild_ids:
+                        self.tree.copy_global_to(guild=discord.Object(dev_guild_id))
+
+                elif self.config.get("clear_dev_guild_app_commands"):
+                    for dev_guild_id in dev_guild_ids:
+                        self.tree.clear_commands(
+                            guild=discord.Object(dev_guild_id),
+                            type=self.config.get("clear_app_command_type"),
+                        )
+                for dev_guild_id in dev_guild_ids:
+                    await self.tree.sync(guild=discord.Object(dev_guild_id))
+
+            elif self.config.get("clear_global_app_commands"):
                 self.tree.clear_commands(
                     guild=None, type=self.config.get("clear_app_command_type")
                 )
-
-            await self.tree.sync()
+            else:
+                await self.tree.sync()
 
     async def teardown_hook(self) -> None:
         if self.handle_loading_reactions.is_running():
@@ -380,7 +382,8 @@ class PygameCommunityBot(snakecore.commands.Bot):
         if context.interaction:
             if isinstance(exception, commands.CommandInvokeError):
                 app_command_exc = app_commands.CommandInvokeError(
-                    context.interaction.command, exception.original  # type: ignore
+                    context.interaction.command,
+                    exception.original,  # type: ignore
                 ).with_traceback(exception.__traceback__)
 
                 app_command_exc.original = exception.original

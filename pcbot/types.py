@@ -112,6 +112,9 @@ class Config(TypedDict, total=False):
     dev_guild_id: int
     "The ID of the guild used for bot development."
 
+    dev_guild_ids: list[int] | tuple[int, ...]
+    "The IDs of the guilds used for bot development."
+
     sync_app_commands: bool
     """Whether to sync all app commands with Discord.
     Only enable this if actual changes were made to app commands,

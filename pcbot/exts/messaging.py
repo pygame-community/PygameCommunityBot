@@ -1850,9 +1850,8 @@ class Messaging(BaseExtensionCog, name="messaging"):
         message: discord.Message | ReferencedMessage,
         attachments: commands.Greedy[discord.Attachment],
         *,
-        name: String[100] | None = commands.flag(
-            name="name", aliases=["title"], default=None
-        ),
+        name: String[100]
+        | None = commands.flag(name="name", aliases=["title"], default=None),
         message_src: discord.Message | ReferencedMessage | None = None,
         content_src: discord.Message | ReferencedMessage | None = None,
         content: String | None = None,
