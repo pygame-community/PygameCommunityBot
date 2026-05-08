@@ -1144,7 +1144,7 @@ class Messaging(BaseExtensionCog, name="messaging"):
     @commands.group(
         invoke_without_command=True,
         aliases=["msg"],
-        usage="[attachments (upload files < 8 MiB)]... [message_src: Message] "
+        usage="[attachments 'upload files < 8 MiB']... [message_src: Message] "
         "[content_src: Message] [content: Text[2000]] "
         "[attachments_src: Message] [attachment_src: Message Number]... "
         "[embeds_src: Message] [embed_src: Message Number]... [embeds: CodeBlock...] "
@@ -1380,7 +1380,7 @@ class Messaging(BaseExtensionCog, name="messaging"):
     @message.command(
         name="post",
         aliases=["thread"],
-        usage="[attachments (upload files < 8 MiB)]... <to: ForumChannel> "
+        usage="[attachments 'upload files < 8 MiB']... <to: ForumChannel> "
         "<name|title: Text[100]> [message_src: Message] "
         "[content_src: Message] [content: Text[2000]] "
         "[attachments_src: Message] [attachment_src: Message Number]... "
@@ -1709,7 +1709,7 @@ class Messaging(BaseExtensionCog, name="messaging"):
         name="sendcontent",
         aliases=["createcontent", "sendtext", "createtext"],
         extras=dict(delete_invocation=True),
-        usage="<content (Text[2000])> [to: Channel] [reply_to: Message] "
+        usage="<content Text[2000]> [to: Channel] [reply_to: Message] "
         "[delete_after: Number/TimeDelta] [mention_all: yes|no] "
         "[mention_everyone: yes|no] [mention_users: yes|no] "
         "[mention_these_users: User...] [mention_roles: yes|no] "
@@ -1736,7 +1736,7 @@ class Messaging(BaseExtensionCog, name="messaging"):
 
         __**Parameters:**__
 
-        **`<content (Text[2000])>`**
+        **`<content Text[2000]>`**
         > A flag for the text content the message should contain.
         > It must not exceed 2000 characters in length.
 
@@ -1830,7 +1830,7 @@ class Messaging(BaseExtensionCog, name="messaging"):
     @commands.max_concurrency(1, per=commands.BucketType.default, wait=True)
     @message.command(
         name="edit",
-        usage="[attachments (upload files < 8 MiB)]... <message> "
+        usage="[attachments 'upload files < 8 MiB']... <message Message> "
         "[message_src: Message] [content_src: Message] [content: Text[2000]] "
         "[attachments_src: Message] [attachment_src: Message Number]... "
         "[embeds_src: Message] [embed_src: Message Number]... "
@@ -1890,10 +1890,10 @@ class Messaging(BaseExtensionCog, name="messaging"):
 
         __**Parameters:**__
 
-        **`<message: Message>...`**
+        **`<message Message>`**
         > The URL of the message to edit.
 
-        **`[attachments (upload files < 8 MiB)]...`**
+        **`[attachments 'upload files < 8 MiB']...`**
         > One or more new attachments to add to the message.
         > They must not exceed 8 MiB in size.
 
@@ -2090,7 +2090,7 @@ class Messaging(BaseExtensionCog, name="messaging"):
     @commands.max_concurrency(1, per=commands.BucketType.default, wait=True)
     @message.command(
         name="extract",
-        usage="<messages>... [to: Channel] [content: yes|no] "
+        usage="<message Message>... [to: Channel] [content: yes|no] "
         "[content_attachment: yes|no] [attachments: yes|no] [embeds: yes|no] "
         "[info: yes|no] [author_info: yes|no]",
         extras=dict(
@@ -2101,7 +2101,7 @@ class Messaging(BaseExtensionCog, name="messaging"):
     async def message_extract(
         self,
         ctx: commands.Context[BotT],
-        *messages: discord.Message | ReferencedMessage,
+        *message: discord.Message | ReferencedMessage,
         to: MessageableGuildChannel | None = None,
         content: bool = True,
         content_attachment: bool = False,
@@ -2115,8 +2115,8 @@ class Messaging(BaseExtensionCog, name="messaging"):
 
         __**Parameters:**__
 
-        **`<messages>...`**
-        > The URL of the messages to extract parts from.
+        **`<message Message>...`**
+        > The messages to extract parts from.
 
         **`[to: Channel]`**
         > A flag for the channel to send the extracted parts to.
@@ -2160,6 +2160,7 @@ class Messaging(BaseExtensionCog, name="messaging"):
             and isinstance(ctx.author, discord.Member)
         )
 
+        messages = message
         destination = to or ctx.channel
 
         if not snakecore.utils.have_permissions_in_channels(
@@ -2322,7 +2323,7 @@ class Messaging(BaseExtensionCog, name="messaging"):
     @commands.max_concurrency(1, per=commands.BucketType.default, wait=True)
     @message.command(
         name="clone",
-        usage="<messages>... [to: Channel] [embeds: yes|no] [attachments: yes|no] "
+        usage="<message Message>... [to: Channel] [embeds: yes|no] [attachments: yes|no] "
         "[as_spoiler: yes|no] [info: yes|no] [author_info: yes|no] [skip_empty: yes|no]",
         extras=dict(
             response_deletion_with_reaction=True,
@@ -2347,8 +2348,8 @@ class Messaging(BaseExtensionCog, name="messaging"):
 
         __**Parameters:**__
 
-        **`<messages>...`**
-        > The URL of the messages to clone.
+        **`<message Message>...`**
+        > The messages to clone.
 
         **`[to: Channel]`**
         > A flag for the channel to send the cloned messages to.
@@ -2390,6 +2391,7 @@ class Messaging(BaseExtensionCog, name="messaging"):
             and isinstance(ctx.author, discord.Member)
         )
 
+        messages = message
         destinations = to or (ctx.channel,)
 
         if not snakecore.utils.have_permissions_in_channels(
@@ -2969,7 +2971,7 @@ class Messaging(BaseExtensionCog, name="messaging"):
     @commands.guild_only()
     @message.group(
         name="pin",
-        usage="<messages>... [delete_system_message: yes|no] [unpin_last: yes|no]",
+        usage="<message Message>... [delete_system_message: yes|no] [unpin_last: yes|no]",
         invoke_without_command=True,
         extras=dict(
             response_deletion_with_reaction=True,
@@ -2979,7 +2981,7 @@ class Messaging(BaseExtensionCog, name="messaging"):
     async def message_pin(
         self,
         ctx: commands.Context[BotT],
-        *messages: discord.PartialMessage | ReferencedMessage,
+        *message: discord.PartialMessage | ReferencedMessage,
         delete_system_message: bool = False,
         unpin_last: bool = False,
         _channel: MessageableGuildChannel | None = None,
@@ -2988,8 +2990,8 @@ class Messaging(BaseExtensionCog, name="messaging"):
 
         __**Parameters:**__
 
-        **`<messages>...`**
-        > The URL of the messages to pin.
+        **`<message Message>...`**
+        > The messages to pin.
 
         **`[delete_system_message: yes|no]`**
         > A flag for whether any system messages about pinning should be automatically deleted.
@@ -3010,6 +3012,7 @@ class Messaging(BaseExtensionCog, name="messaging"):
             and isinstance(ctx.author, discord.Member)
         )
 
+        messages = message
         channel = _channel or ctx.channel
 
         if not snakecore.utils.have_permissions_in_channels(
@@ -3120,7 +3123,7 @@ class Messaging(BaseExtensionCog, name="messaging"):
     @commands.guild_only()
     @message_pin.command(
         name="in",
-        usage="<messages>... [channel: TextChannel/Thread] [delete_system_message: yes|no] [unpin_last: yes|no]",
+        usage="<message Message>... [channel: TextChannel/Thread] [delete_system_message: yes|no] [unpin_last: yes|no]",
         extras=dict(response_deletion_with_reaction=True),
     )
     @flagconverter_kwargs()
@@ -3128,7 +3131,7 @@ class Messaging(BaseExtensionCog, name="messaging"):
         self,
         ctx: commands.Context[BotT],
         channel: MessageableGuildChannel | None = None,
-        *messages: discord.PartialMessage,
+        *message: discord.PartialMessage,
         delete_system_message: bool = False,
         unpin_last: bool = True,
     ):
@@ -3136,8 +3139,8 @@ class Messaging(BaseExtensionCog, name="messaging"):
 
         __**Parameters:**__
 
-        **`<messages>...`**
-        > The URL of the messages to pin.
+        **`<message Message>...`**
+        > The messages to pin.
 
         **`[channel: TextChannel/Thread]`**
         > A flag for the channel the messages are contained in.
@@ -3153,7 +3156,7 @@ class Messaging(BaseExtensionCog, name="messaging"):
         """
         await self.message_pin(
             ctx,
-            *messages,
+            *(messages := message),  # noqa: F841
             delete_system_message=delete_system_message,
             unpin_last=unpin_last,
             _channel=channel,
@@ -3162,7 +3165,7 @@ class Messaging(BaseExtensionCog, name="messaging"):
     @commands.guild_only()
     @message.group(
         name="unpin",
-        usage="<messages>...",
+        usage="<message Message>...",
         invoke_without_command=True,
         extras=dict(
             response_deletion_with_reaction=True,
@@ -3171,15 +3174,15 @@ class Messaging(BaseExtensionCog, name="messaging"):
     async def message_unpin(
         self,
         ctx: commands.Context[BotT],
-        *messages: discord.PartialMessage | ReferencedMessage,
+        *message: discord.PartialMessage | ReferencedMessage,
         _channel: MessageableGuildChannel | None = None,
     ):
         """Unpin the specified messages.
 
         __**Parameters:**__
 
-        **`<messages>...`**
-        > The URL of the messages to unpin.
+        **`<message Message>...`**
+        > The messages to unpin.
         """
         assert (
             ctx.guild
@@ -3192,6 +3195,7 @@ class Messaging(BaseExtensionCog, name="messaging"):
             and isinstance(ctx.author, discord.Member)
         )
 
+        messages = message
         channel = _channel or ctx.channel
 
         if not snakecore.utils.have_permissions_in_channels(
@@ -3286,7 +3290,7 @@ class Messaging(BaseExtensionCog, name="messaging"):
     @commands.guild_only()
     @message_unpin.command(
         name="in",
-        usage="<messages>... [channel: TextChannel/Thread]",
+        usage="<messages Message>... [channel: TextChannel/Thread]",
         extras=dict(response_deletion_with_reaction=True),
     )
     async def message_unpin_in(
@@ -3299,7 +3303,7 @@ class Messaging(BaseExtensionCog, name="messaging"):
 
         __**Parameters:**__
 
-        **`<messages>...`**
+        **`<messages Message>...`**
         > The URL of the messages to unpin.
 
         **`[channel: TextChannel/Thread]`**
