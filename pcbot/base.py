@@ -222,9 +222,92 @@ class BaseExtensionCog(commands.Cog):
             return
 
         destination = destination or ctx.channel
+        cache_key: int | None = None
+        if getattr(ctx, "message", None) is not None:
+            cache_key = ctx.message.id
+        elif ctx.interaction is not None:
+            cache_key = ctx.interaction.id
+
+        if ctx.interaction is not None:
+            interaction = ctx.interaction
+            response_message: discord.Message | None = None
+            if cache_key is not None:
+                response_message = self.cached_response_messages.get(cache_key)
+
+            if response_message is not None:
+                try:
+                    if (
+                        paginator_tuple := self.cached_embed_paginators.get(
+                            response_message.id
+                        )
+                    ) is not None:
+                        if paginator_tuple[0].is_running():
+                            await paginator_tuple[0].stop()
+
+                    if len(embeds) == 1:
+                        await response_message.edit(embed=embeds[0])
+                        return
+
+                    paginator = snakecore.utils.pagination.EmbedPaginator(
+                        (
+                            response_message := await response_message.edit(
+                                content="\u200b", embed=None
+                            )
+                        ),
+                        *embeds,
+                        member=member or ctx.author,
+                        inactivity_timeout=60,
+                        theme_color=int(self.theme_color),
+                    )
+                except discord.NotFound:
+                    response_message = None
+            if response_message is None:
+                if len(embeds) == 1:
+                    if not interaction.response.is_done():
+                        await interaction.response.send_message(embed=embeds[0])
+                        response_message = await interaction.original_response()
+                    else:
+                        response_message = await interaction.followup.send(
+                            embed=embeds[0]
+                        )
+                    if cache_key is not None:
+                        self.cached_response_messages[cache_key] = response_message
+                    return
+
+                if not interaction.response.is_done():
+                    await interaction.response.send_message(content="\u200b")
+                    response_message = await interaction.original_response()
+                else:
+                    response_message = await interaction.followup.send(content="\u200b")
+
+                paginator = snakecore.utils.pagination.EmbedPaginator(
+                    response_message,
+                    *embeds,
+                    member=member or ctx.author,
+                    inactivity_timeout=(
+                        inactivity_timeout if inactivity_timeout is not None else 60
+                    ),
+                    theme_color=int(self.theme_color),
+                )
+
+            paginator_tuple = (
+                paginator,
+                asyncio.create_task(
+                    paginator.mainloop(client=ctx.bot),
+                    name=f"embed_paginator({response_message.jump_url})",
+                ),
+            )
+
+            if cache_key is not None:
+                self.cached_response_messages[cache_key] = response_message
+            self.cached_embed_paginators[response_message.id] = paginator_tuple
+            return
+
+        if cache_key is None:
+            cache_key = ctx.message.id
 
         if (
-            response_message := self.cached_response_messages.get(ctx.message.id)
+            response_message := self.cached_response_messages.get(cache_key)
         ) is not None:
             try:
                 if (
@@ -252,9 +335,9 @@ class BaseExtensionCog(commands.Cog):
                 )
             except discord.NotFound:
                 if len(embeds) == 1:
-                    self.cached_response_messages[
-                        ctx.message.id
-                    ] = await destination.send(embed=embeds[0])
+                    self.cached_response_messages[cache_key] = await destination.send(
+                        embed=embeds[0]
+                    )
                     return
 
                 paginator = snakecore.utils.pagination.EmbedPaginator(
@@ -266,7 +349,7 @@ class BaseExtensionCog(commands.Cog):
                 )
         else:
             if len(embeds) == 1:  # don't use paginator for single embed
-                self.cached_response_messages[ctx.message.id] = await destination.send(
+                self.cached_response_messages[cache_key] = await destination.send(
                     embed=embeds[0]
                 )
                 return
@@ -289,7 +372,7 @@ class BaseExtensionCog(commands.Cog):
             ),
         )
 
-        self.cached_response_messages[ctx.message.id] = response_message
+        self.cached_response_messages[cache_key] = response_message
         self.cached_embed_paginators[response_message.id] = paginator_tuple
 
 
