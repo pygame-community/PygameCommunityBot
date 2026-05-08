@@ -462,6 +462,52 @@ class InfoChannelCog(BaseExtensionCog, name="info-channel"):
         )
 
     @commands.Cog.listener()
+    async def on_thread_create(self, thread: discord.Thread) -> None:
+        if thread.parent_id not in self.info_channel_ids:
+            return
+
+        if thread.archived:
+            return
+
+        if thread.starter_message is None:
+            return
+
+        keys = self._extract_keys(thread.name)
+        if not keys:
+            return
+
+        async with self._db_lock:
+            try:
+                starter = thread.starter_message or await thread.fetch_message(
+                    thread.id
+                )
+            except (discord.NotFound, discord.Forbidden, discord.HTTPException):
+                return
+
+            try:
+                await starter.pin(
+                    reason="Pinning starter message for easier thread navigation."
+                )
+            except (discord.Forbidden, discord.HTTPException):
+                pass
+
+            content = starter.content or ""
+
+            async with self.db_engine.begin() as conn:
+                await self._upsert_entry(
+                    conn,
+                    thread.id,
+                    thread.name,
+                    content,
+                )
+                await self._update_keys_for_thread(
+                    conn,
+                    thread.id,
+                    keys,
+                    thread.parent_id or thread.id,
+                )
+
+    @commands.Cog.listener()
     async def on_message_edit(
         self, before: discord.Message, after: discord.Message
     ) -> None:
