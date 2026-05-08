@@ -58,6 +58,10 @@ class PygameCommunityBot(snakecore.commands.Bot):
 
         self.after_invoke(self.bot_after_invoke)
 
+        self._command_tree_synced: bool | None = (
+            False if self.config.get("sync_app_commands") is True else None
+        )
+
         if (
             isinstance(self.tree.on_error, MethodType)
             and self.tree.on_error.__func__ is self.tree.__class__.on_error
@@ -321,6 +325,10 @@ class PygameCommunityBot(snakecore.commands.Bot):
                     f"'{ext_dict.get('package', '')}{ext_dict['name']}' at launch"
                 )
 
+    async def _command_tree_sync(self) -> None:
+        if self._command_tree_synced is True:
+            return
+
         if self.config.get("sync_app_commands"):
             dev_guild_ids: list[int] = self.config.get("dev_guild_ids", [])
 
@@ -348,6 +356,8 @@ class PygameCommunityBot(snakecore.commands.Bot):
             else:
                 await self.tree.sync()
 
+            self._command_tree_synced = True
+
     async def teardown_hook(self) -> None:
         if self.handle_loading_reactions.is_running():
             self.handle_loading_reactions.cancel()
@@ -370,11 +380,14 @@ class PygameCommunityBot(snakecore.commands.Bot):
         )
         print(f"Logged in as {self.user} (ID: {self.user.id})")
         print("------")
+
+        await self._command_tree_sync()
+
         handle_loading_reactions = self.handle_loading_reactions
         if not handle_loading_reactions.is_running():
             handle_loading_reactions.start()
 
-    async def on_command_error(
+    async def on_command_error(  # pyright: ignore[reportIncompatibleMethodOverride]
         self,
         context: commands.Context["PygameCommunityBot"],
         exception: commands.CommandError,

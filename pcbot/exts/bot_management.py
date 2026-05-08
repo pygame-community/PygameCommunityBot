@@ -753,6 +753,66 @@ class BotManagementCog(BaseExtensionCog, name="bot-management"):
 
         await response_message.edit(embed=response_embed)
 
+    @commands.command(usage="[guild_id Integer]... [clear: yes|no]", hidden=True)
+    async def synctree(
+        self,
+        ctx: commands.Context[BotT],
+        *guild_ids: int,
+        clear: bool = False,
+    ):
+        """Sync the bot's application command tree with Discord.
+
+        __**Parameters:**__
+
+        **`[guild_id Integer]...`**
+        > One or more guild IDs to sync the application command tree to.
+        > If omitted, the command tree is synced globally.
+
+        **`[clear: yes|no]`**
+        > A flag for whether to clear any existing commands in the target scope before syncing.
+        """
+        if guild_ids:
+            for guild_id in guild_ids:
+                guild = self.bot.get_guild(guild_id) or await self.bot.fetch_guild(
+                    guild_id
+                )
+                if not guild:
+                    raise commands.CommandInvokeError(
+                        commands.CommandError(
+                            "Could not find a guild with the specified ID."
+                        )
+                    )
+                if clear:
+                    self.bot.tree.clear_commands(guild=guild)
+                    await self.bot.tree.sync(guild=guild)
+                    await ctx.send(
+                        embed=discord.Embed(
+                            title="Successfully cleared command tree in guild "
+                            f"'{guild.name}' (ID: {guild.id})",
+                            color=int(self.theme_color),
+                        )
+                    )
+                else:
+                    self.bot.tree.copy_global_to(guild=guild)
+                    await self.bot.tree.sync(guild=guild)
+                    await ctx.send(
+                        embed=discord.Embed(
+                            title="Successfully synced command tree to guild "
+                            f"'{guild.name}' (ID: {guild.id})",
+                            color=int(self.theme_color),
+                        )
+                    )
+        else:
+            if clear:
+                self.bot.tree.clear_commands(guild=None)
+            await self.bot.tree.sync()
+            await ctx.send(
+                embed=discord.Embed(
+                    title="Successfully synced command tree globally.",
+                    color=int(self.theme_color),
+                )
+            )
+
 
 @snakecore.commands.decorators.with_config_kwargs
 async def setup(
