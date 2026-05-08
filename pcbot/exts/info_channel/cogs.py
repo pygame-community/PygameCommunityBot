@@ -355,6 +355,18 @@ class InfoChannelCog(BaseExtensionCog, name="info-channel"):
             return text[:limit]
         return text[: limit - 3] + "..."
 
+    @staticmethod
+    def _split_entry_description_by_divider(text: str) -> list[str]:
+        """Split description into pages using "---" while preserving the prefix."""
+        divider_index = text.find("---")
+        if divider_index == -1:
+            return [text]
+
+        prefix = text[: divider_index + 3]
+        remainder = text[divider_index + 3 :]
+        parts = remainder.split("---")
+        return [prefix + part for part in parts]
+
     def _build_info_embed(
         self, ctx: commands.Context[BotT], title: str, description: str, thread_id: int
     ) -> list[discord.Embed]:
@@ -412,14 +424,15 @@ class InfoChannelCog(BaseExtensionCog, name="info-channel"):
             description = (
                 entry.get("content", "") or "(No content found for this entry.)"
             )
-            embeds.extend(
-                self._build_info_embed(
-                    ctx,
-                    entry.get("name", "Info Entry"),
-                    description,
-                    thread_id,
+            for segment in self._split_entry_description_by_divider(description):
+                embeds.extend(
+                    self._build_info_embed(
+                        ctx,
+                        entry.get("name", "Info Entry"),
+                        segment,
+                        thread_id,
+                    )
                 )
-            )
 
         if missing:
             embeds.extend(
@@ -431,14 +444,19 @@ class InfoChannelCog(BaseExtensionCog, name="info-channel"):
                 )
             )
 
-        if ctx.interaction:
-            await ctx.interaction.response.send_message(embeds=embeds[:10])
-            if len(embeds) > 10:
-                for i in range(10, len(embeds), 10):
-                    await ctx.interaction.followup.send(embeds=embeds[i : i + 10])
-            return
+        reply_member: discord.Member | None = None
+        reference = ctx.message.reference
+        if reference and isinstance(reference.resolved, discord.Message):
+            if isinstance(reference.resolved.author, discord.Member):
+                reply_member = reference.resolved.author
 
-        await self.send_or_edit_response(ctx, embeds=embeds[:10])
+        await self.send_paginated_response_embeds(
+            ctx,
+            *embeds,
+            member=[ctx.author, reply_member]
+            if reply_member
+            else ctx.author,  # pyright: ignore[reportArgumentType]
+        )
 
     @commands.Cog.listener()
     async def on_message_edit(
