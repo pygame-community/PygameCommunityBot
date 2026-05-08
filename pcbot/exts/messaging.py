@@ -907,6 +907,8 @@ class Messaging(BaseExtensionCog, name="messaging"):
 
         if not (
             content
+            or name
+            or tags
             or attachments
             or embeds
             or content_src
