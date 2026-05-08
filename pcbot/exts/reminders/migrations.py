@@ -9,7 +9,7 @@ from ...base import Revision, validate_revision_list as _
 MIGRATIONS: list[Revision] = _(
     [
         {  # Revision: 0
-            "date": "2069-04-20T13:26:39",
+            "date": "2026-07-26T08:27:00",
             "description": "Initial migration",
             # creates, updates or deletes database tables used by this bot extension
             "migrate": {

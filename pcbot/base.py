@@ -394,7 +394,7 @@ class ExtensionManager:
         if old_revision_number >= len(self.migrations):
             raise RuntimeError(
                 f"Stored revision number {old_revision_number} exceeds "
-                f"highest available revision number {len(self.migrations)-1}"
+                f"highest available revision number {len(self.migrations) - 1}"
             )
 
         conn: AsyncConnection
@@ -499,7 +499,7 @@ class ExtensionManager:
         if old_revision_number >= len(self.migrations):
             raise RuntimeError(
                 f"Stored revision number {old_revision_number} exceeds "
-                f"highest available revision number {len(self.migrations)-1}"
+                f"highest available revision number {len(self.migrations) - 1}"
             )
         elif old_revision_number < 0:
             raise RuntimeError(
@@ -585,7 +585,7 @@ class ExtensionManager:
         if old_revision_number >= len(self.migrations):
             raise RuntimeError(
                 f"Stored revision number {old_revision_number} exceeds "
-                f"highest available revision number {len(self.migrations)-1}"
+                f"highest available revision number {len(self.migrations) - 1}"
             )
 
         conn: AsyncConnection
@@ -688,7 +688,7 @@ class ExtensionManager:
                 raise RuntimeError(
                     "Extension setup preparation failed: "
                     "Auto-migration is disabled, and "
-                    f"{max_revision_number-stored_revision_number} migrations are "
+                    f"{max_revision_number - stored_revision_number} migrations are "
                     "unapplied "
                 )
 
@@ -743,8 +743,7 @@ def validate_revision_list(lst: list[Revision]) -> list[Revision]:
 
             elif k == "delete" and j == 0:
                 raise ValueError(
-                    f"Revision dictionary 0 (first revision) must define "
-                    "field 'delete'"
+                    f"Revision dictionary 0 (first revision) must define field 'delete'"
                 )
             else:
                 raise ValueError(
