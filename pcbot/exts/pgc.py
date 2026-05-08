@@ -21,7 +21,7 @@ PRESENCE_MAP = {
     discord.ActivityType.watching: ["the pygame community", "over fellow pygamers"],
     discord.ActivityType.playing: ["Hiss at newcomers", "at Pygame Community Discord"],
     discord.ActivityType.listening: [
-        *("'pg!help'" for i in range(4)),
+        *(random.choice(["'pg?help'", "pg!help", "?help"]) for _ in range(4)),
         "bugs in my head",
     ],
 }
