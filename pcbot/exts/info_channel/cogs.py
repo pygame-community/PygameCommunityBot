@@ -411,6 +411,9 @@ class InfoChannelCog(BaseExtensionCog, name="info-channel"):
                 f"You can only request up to {MAX_INFO_KEYS} keys at once.",
             )
 
+        if ctx.interaction and not ctx.interaction.response.is_done():
+            await ctx.interaction.response.defer(thinking=True)
+
         resolved, missing = await self._get_entries_for_keys(list(keys))
 
         if not resolved:
@@ -503,7 +506,7 @@ class InfoChannelCog(BaseExtensionCog, name="info-channel"):
     @commands.group(
         invoke_without_command=True,
         name="info",
-        usage="<keys>...",
+        usage="<keys Text>...",
         description="Look up info entries by key.",
         extras=dict(
             response_deletion_with_reaction=True,
@@ -514,7 +517,7 @@ class InfoChannelCog(BaseExtensionCog, name="info-channel"):
 
         __**Parameters:**__
 
-        **`<keys>...`**
+        **`<keys Text>...`**
         > One or more info entry keys separated by spaces.
         """
         await self._send_info_response(ctx, keys)
