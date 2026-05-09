@@ -558,7 +558,7 @@ class Messaging(BaseExtensionCog, name="messaging"):
         embeds: tuple[
             Parens[discord.Message, int] | discord.Message | CodeBlock, ...
         ] = (),
-        embed_src: list[tuple[discord.Message | ReferencedMessage, int]] = (),
+        embed_src: list[tuple[discord.Message | ReferencedMessage, int]] = [],
         embeds_src: discord.Message | ReferencedMessage | None = None,
         message_src: discord.Message | ReferencedMessage | None = None,
         *,
@@ -596,7 +596,7 @@ class Messaging(BaseExtensionCog, name="messaging"):
     async def _resolve_send_files(
         self,
         attachments: list[discord.Attachment],
-        attachment_src: list[tuple[discord.Message | ReferencedMessage, int]] = (),
+        attachment_src: list[tuple[discord.Message | ReferencedMessage, int]] = [],
         attachments_src: discord.Message | ReferencedMessage | None = None,
         message_src: discord.Message | ReferencedMessage | None = None,
         *,
@@ -676,9 +676,9 @@ class Messaging(BaseExtensionCog, name="messaging"):
         content_src: discord.Message | ReferencedMessage | None = None,
         content: String | str | None = None,
         attachments_src: discord.Message | ReferencedMessage | None = None,
-        attachment_src: list[tuple[discord.Message | ReferencedMessage, int]] = (),
+        attachment_src: list[tuple[discord.Message | ReferencedMessage, int]] = [],
         embeds_src: discord.Message | ReferencedMessage | None = None,
-        embed_src: list[tuple[discord.Message | ReferencedMessage, int]] = (),
+        embed_src: list[tuple[discord.Message | ReferencedMessage, int]] = [],
         embeds: tuple[
             Parens[discord.Message, int] | discord.Message | CodeBlock, ...
         ] = (),
@@ -701,7 +701,7 @@ class Messaging(BaseExtensionCog, name="messaging"):
         assert (
             ctx.guild
             and ctx.bot.user
-            and (bot_member := ctx.guild.get_member(ctx.bot.user.id))
+            and ctx.guild.get_member(ctx.bot.user.id)
             and isinstance(
                 ctx.channel,
                 (discord.TextChannel, discord.VoiceChannel, discord.Thread),
@@ -811,9 +811,11 @@ class Messaging(BaseExtensionCog, name="messaging"):
                     )
                     if webhook is not None:
                         send_kwargs = dict(
-                            content=str(resolved_content)
-                            if resolved_content is not None
-                            else "",
+                            content=(
+                                str(resolved_content)
+                                if resolved_content is not None
+                                else ""
+                            ),
                             embeds=parsed_embeds,
                             files=files,
                             allowed_mentions=allowed_mentions,
@@ -830,9 +832,9 @@ class Messaging(BaseExtensionCog, name="messaging"):
                             wait=True,
                         )
                         if thread is not None:
-                            send_kwargs["thread"] = thread
+                            send_kwargs["thread"] = thread  # type: ignore
                         try:
-                            msg = await webhook.send(**send_kwargs)
+                            msg = await webhook.send(**send_kwargs)  # type: ignore
                         except discord.HTTPException as err:
                             raise commands.CommandInvokeError(
                                 commands.CommandError(
@@ -871,9 +873,9 @@ class Messaging(BaseExtensionCog, name="messaging"):
         content_src: discord.Message | ReferencedMessage | None = None,
         content: String | None = None,
         attachments_src: discord.Message | ReferencedMessage | None = None,
-        attachment_src: list[tuple[discord.Message | ReferencedMessage, int]] = (),
+        attachment_src: list[tuple[discord.Message | ReferencedMessage, int]] = [],
         embeds_src: discord.Message | ReferencedMessage | None = None,
-        embed_src: list[tuple[discord.Message | ReferencedMessage, int]] = (),
+        embed_src: list[tuple[discord.Message | ReferencedMessage, int]] = [],
         embeds: tuple[
             Parens[discord.Message, int] | discord.Message | CodeBlock, ...
         ] = (),
@@ -900,7 +902,7 @@ class Messaging(BaseExtensionCog, name="messaging"):
         assert (
             ctx.guild
             and ctx.bot.user
-            and (bot_member := ctx.guild.get_member(ctx.bot.user.id))
+            and ctx.guild.get_member(ctx.bot.user.id)
             and isinstance(ctx.channel, MessageableGuildChannel.__args__)
             and isinstance(ctx.author, discord.Member)
         )
@@ -1124,7 +1126,7 @@ class Messaging(BaseExtensionCog, name="messaging"):
                 )
                 if resolved_thread is not None:
                     edit_kwargs["thread"] = resolved_thread
-                await resolved_webhook.edit_message(message.id, **edit_kwargs)
+                await resolved_webhook.edit_message(message.id, **edit_kwargs)  # type: ignore
             except discord.HTTPException as err:
                 raise commands.CommandInvokeError(
                     commands.CommandError(
@@ -1167,9 +1169,9 @@ class Messaging(BaseExtensionCog, name="messaging"):
         content_src: discord.Message | ReferencedMessage | None = None,
         content: String[2000] | None = None,
         attachments_src: discord.Message | ReferencedMessage | None = None,
-        attachment_src: list[tuple[discord.Message | ReferencedMessage, int]] = (),
+        attachment_src: list[tuple[discord.Message | ReferencedMessage, int]] = [],
         embeds_src: discord.Message | ReferencedMessage | None = None,
-        embed_src: list[tuple[discord.Message | ReferencedMessage, int]] = (),
+        embed_src: list[tuple[discord.Message | ReferencedMessage, int]] = [],
         embeds: tuple[
             Parens[discord.Message, int] | discord.Message | CodeBlock, ...
         ] = (),
@@ -1327,9 +1329,9 @@ class Messaging(BaseExtensionCog, name="messaging"):
         content_src: discord.Message | ReferencedMessage | None = None,
         content: String[2000] | None = None,
         attachments_src: discord.Message | ReferencedMessage | None = None,
-        attachment_src: list[tuple[discord.Message | ReferencedMessage, int]] = (),
+        attachment_src: list[tuple[discord.Message | ReferencedMessage, int]] = [],
         embeds_src: discord.Message | ReferencedMessage | None = None,
-        embed_src: list[tuple[discord.Message | ReferencedMessage, int]] = (),
+        embed_src: list[tuple[discord.Message | ReferencedMessage, int]] = [],
         embeds: tuple[
             Parens[discord.Message, int] | discord.Message | CodeBlock, ...
         ] = (),
@@ -1407,9 +1409,9 @@ class Messaging(BaseExtensionCog, name="messaging"):
         content_src: discord.Message | ReferencedMessage | None = None,
         content: String[2000] | None = None,
         attachments_src: discord.Message | ReferencedMessage | None = None,
-        attachment_src: list[tuple[discord.Message | ReferencedMessage, int]] = (),
+        attachment_src: list[tuple[discord.Message | ReferencedMessage, int]] = [],
         embeds_src: discord.Message | ReferencedMessage | None = None,
-        embed_src: list[tuple[discord.Message | ReferencedMessage, int]] = (),
+        embed_src: list[tuple[discord.Message | ReferencedMessage, int]] = [],
         embeds: tuple[
             Parens[discord.Message, int] | discord.Message | CodeBlock, ...
         ] = (),
@@ -1535,7 +1537,7 @@ class Messaging(BaseExtensionCog, name="messaging"):
         assert (
             ctx.guild
             and ctx.bot.user
-            and (bot_member := ctx.guild.get_member(ctx.bot.user.id))
+            and ctx.guild.get_member(ctx.bot.user.id)
             and isinstance(
                 ctx.channel,
                 (discord.TextChannel, discord.VoiceChannel, discord.Thread),
@@ -1781,7 +1783,7 @@ class Messaging(BaseExtensionCog, name="messaging"):
         assert (
             ctx.guild
             and ctx.bot.user
-            and (bot_member := ctx.guild.get_member(ctx.bot.user.id))
+            and ctx.guild.get_member(ctx.bot.user.id)
             and isinstance(
                 ctx.channel,
                 (discord.TextChannel, discord.VoiceChannel, discord.Thread),
@@ -1858,9 +1860,9 @@ class Messaging(BaseExtensionCog, name="messaging"):
         content_src: discord.Message | ReferencedMessage | None = None,
         content: String | None = None,
         attachments_src: discord.Message | ReferencedMessage | None = None,
-        attachment_src: list[tuple[discord.Message | ReferencedMessage, int]] = (),
+        attachment_src: list[tuple[discord.Message | ReferencedMessage, int]] = [],
         embeds_src: discord.Message | ReferencedMessage | None = None,
-        embed_src: list[tuple[discord.Message | ReferencedMessage, int]] = (),
+        embed_src: list[tuple[discord.Message | ReferencedMessage, int]] = [],
         embeds: tuple[
             Parens[discord.Message, int] | discord.Message | CodeBlock, ...
         ] = (),
@@ -2053,7 +2055,7 @@ class Messaging(BaseExtensionCog, name="messaging"):
         assert (
             ctx.guild
             and ctx.bot.user
-            and (bot_member := ctx.guild.get_member(ctx.bot.user.id))
+            and ctx.guild.get_member(ctx.bot.user.id)
             and isinstance(
                 ctx.channel,
                 (discord.TextChannel, discord.VoiceChannel, discord.Thread),
@@ -2152,7 +2154,7 @@ class Messaging(BaseExtensionCog, name="messaging"):
         assert (
             ctx.guild
             and ctx.bot.user
-            and (bot_member := ctx.guild.get_member(ctx.bot.user.id))
+            and ctx.guild.get_member(ctx.bot.user.id)
             and isinstance(
                 ctx.channel,
                 (discord.TextChannel, discord.VoiceChannel, discord.Thread),
@@ -2210,13 +2212,15 @@ class Messaging(BaseExtensionCog, name="messaging"):
                 with io.BytesIO(
                     "This file could not be duplicated due to the "
                     "message file limit of 8 MiB being exceeded.".encode("utf-8")
-                ) as strio:
+                ) as bytesio:
                     cum_size = 0
                     attached_files = [
                         (
                             await a.to_file(spoiler=a.is_spoiler())
                             if (cum_size := cum_size + a.size) <= filesize_limit
-                            else discord.File(strio, f"filetoolarge - {a.filename}.txt")
+                            else discord.File(
+                                bytesio, f"filetoolarge - {a.filename}.txt"
+                            )
                         )
                         for a in msg.attachments
                     ]
@@ -2243,15 +2247,17 @@ class Messaging(BaseExtensionCog, name="messaging"):
 
                 content_file = None
                 if content_attachment or len(msg.content) > 2000:
-                    with io.BytesIO(msg.content.encode("utf-8")) as strio:
-                        content_file = discord.File(strio, "messagedata.txt")
+                    with io.BytesIO(msg.content.encode("utf-8")) as bytesio:
+                        content_file = discord.File(bytesio, "messagedata.txt")
 
-                await destination.send(embed=info_embed, file=content_file)  # type: ignore
+                    await destination.send(embed=info_embed, file=content_file)
+                else:
+                    await destination.send(embed=info_embed)
 
             elif content_attachment and msg.content:
-                with io.BytesIO(msg.content.encode("utf-8")) as strio:
+                with io.BytesIO(msg.content.encode("utf-8")) as bytesio:
                     await destination.send(
-                        file=discord.File(strio, "messagedata.txt"),
+                        file=discord.File(bytesio, "messagedata.txt"),
                         embed=discord.Embed.from_dict(
                             dict(
                                 author=dict(name="Message Data"),
@@ -2262,9 +2268,9 @@ class Messaging(BaseExtensionCog, name="messaging"):
                     )
             elif content:
                 if len(msg.content) > 2000 or len(escaped_msg_content) > 2000:
-                    with io.BytesIO(msg.content.encode("utf-8")) as strio:
+                    with io.BytesIO(msg.content.encode("utf-8")) as bytesio:
                         await destination.send(
-                            file=discord.File(strio, "messagedata.txt"),
+                            file=discord.File(bytesio, "messagedata.txt"),
                             embed=discord.Embed.from_dict(
                                 dict(
                                     author=dict(name="Message Data"),
@@ -2298,24 +2304,24 @@ class Messaging(BaseExtensionCog, name="messaging"):
                     )
 
             if embeds and msg.embeds:
-                embed_data_strios = []
+                embed_data_bytesios = []
                 for embed in msg.embeds:
-                    embed_data_strio = io.StringIO(
-                        json.dumps(embed.to_dict(), indent=4)
+                    embed_data_bytesio = io.BytesIO(
+                        json.dumps(embed.to_dict(), indent=4).encode("utf-8")
                     )
-                    embed_data_strio.seek(0)
-                    embed_data_strios.append(embed_data_strio)
+                    embed_data_bytesio.seek(0)
+                    embed_data_bytesios.append(embed_data_bytesio)
 
                 await ctx.send(
-                    content=f"**Message embeds** ({len(embed_data_strios)}):",
+                    content=f"**Message embeds** ({len(embed_data_bytesios)}):",
                     files=[
-                        discord.File(strio, filename=f"embeddata{i}.json")
-                        for i, strio in enumerate(embed_data_strios)
+                        discord.File(bytesio, filename=f"embeddata{i}.json")
+                        for i, bytesio in enumerate(embed_data_bytesios)
                     ],
                 )
 
-                for embed_data_strio in embed_data_strios:
-                    embed_data_strio.close()
+                for embed_data_bytesio in embed_data_bytesios:
+                    embed_data_bytesio.close()
 
             await asyncio.sleep(0)
 
@@ -2333,7 +2339,7 @@ class Messaging(BaseExtensionCog, name="messaging"):
     async def message_clone(
         self,
         ctx: commands.Context[BotT],
-        *messages: discord.Message | ReferencedMessage,
+        *message: discord.Message | ReferencedMessage,
         to: tuple[MessageableGuildChannel, ...] = (),
         content: bool = True,
         embeds: bool = True,
@@ -2383,7 +2389,7 @@ class Messaging(BaseExtensionCog, name="messaging"):
         assert (
             ctx.guild
             and ctx.bot.user
-            and (bot_member := ctx.guild.get_member(ctx.bot.user.id))
+            and ctx.guild.get_member(ctx.bot.user.id)
             and isinstance(
                 ctx.channel,
                 (discord.TextChannel, discord.VoiceChannel, discord.Thread),
@@ -2438,10 +2444,10 @@ class Messaging(BaseExtensionCog, name="messaging"):
             attached_files = []
             if msg.attachments and attachments:
                 filesize_limit = 2**20 * 8  # 8 MiB
-                with io.StringIO(
-                    "This file could not be duplicated due to the "
-                    "message file limit of 8 MiB being exceeded."
-                ) as strio:
+                with io.BytesIO(
+                    b"This file could not be duplicated due to the "
+                    b"message file limit of 8 MiB being exceeded."
+                ) as bytesio:
                     cum_size = 0
                     attached_files = [
                         (
@@ -2453,7 +2459,9 @@ class Messaging(BaseExtensionCog, name="messaging"):
                                 )
                             )
                             if (cum_size := cum_size + a.size) <= filesize_limit
-                            else discord.File(strio, f"filetoolarge - {a.filename}.txt")  # type: ignore
+                            else discord.File(
+                                bytesio, f"filetoolarge - {a.filename}.txt"
+                            )
                         )
                         for a in msg.attachments
                     ]
@@ -2479,7 +2487,7 @@ class Messaging(BaseExtensionCog, name="messaging"):
                                     allowed_mentions=no_mentions,
                                 )
 
-                        with io.StringIO(msg.content) as strio:
+                        with io.BytesIO(msg.content.encode("utf-8")) as bytesio:
                             await destination.send(
                                 content=msg.content[stop_idx:],
                                 embed=discord.Embed.from_dict(
@@ -2488,7 +2496,7 @@ class Messaging(BaseExtensionCog, name="messaging"):
                                         footer=dict(text="Full message data"),
                                     )
                                 ),
-                                file=discord.File(strio, filename="messagedata.txt"),  # type: ignore
+                                file=discord.File(bytesio, filename="messagedata.txt"),
                                 allowed_mentions=no_mentions,
                             )
                         await destination.send(
@@ -2549,10 +2557,11 @@ class Messaging(BaseExtensionCog, name="messaging"):
         oldest_first: bool = True,
         same_channel: bool = False,
     ):
+        """Archive messages from a channel in an accessible format."""
         assert (
             ctx.guild
             and ctx.bot.user
-            and (bot_member := ctx.guild.get_member(ctx.bot.user.id))
+            and ctx.guild.get_member(ctx.bot.user.id)
             and isinstance(
                 ctx.channel,
                 (discord.TextChannel, discord.VoiceChannel, discord.Thread),
@@ -2703,7 +2712,7 @@ class Messaging(BaseExtensionCog, name="messaging"):
             )
         )
         message_count = len(messages)
-        with io.StringIO("This file was too large to be archived.") as strio:
+        with io.BytesIO(b"This file was too large to be archived.") as bytesio:
             msg: discord.Message
             for i, msg in enumerate(
                 reversed(messages) if not oldest_first else messages
@@ -2731,7 +2740,7 @@ class Messaging(BaseExtensionCog, name="messaging"):
 
                 await destination.typing()
 
-                strio.seek(0)
+                bytesio.seek(0)
 
                 filesize_limit = 2**20 * 8  # 8 MiB
 
@@ -2740,7 +2749,7 @@ class Messaging(BaseExtensionCog, name="messaging"):
                     (
                         await a.to_file(spoiler=a.is_spoiler())
                         if (cum_size := cum_size + a.size) <= filesize_limit
-                        else discord.File(strio, f"filetoolarge - {a.filename}.txt")  # type: ignore
+                        else discord.File(bytesio, f"filetoolarge - {a.filename}.txt")
                     )
                     for a in msg.attachments
                 ]
@@ -2833,7 +2842,7 @@ class Messaging(BaseExtensionCog, name="messaging"):
                                         allowed_mentions=no_mentions,
                                     )
 
-                            with io.StringIO(msg.content) as strio:
+                            with io.BytesIO(msg.content.encode("utf-8")) as bytesio:
                                 await destination.send(
                                     content=msg.content[stop_idx:],
                                     embed=discord.Embed.from_dict(
@@ -2843,8 +2852,8 @@ class Messaging(BaseExtensionCog, name="messaging"):
                                         )
                                     ),
                                     file=discord.File(
-                                        strio, filename="messagedata.txt"
-                                    ),  # type: ignore
+                                        bytesio, filename="messagedata.txt"
+                                    ),
                                     allowed_mentions=no_mentions,
                                 )
 
@@ -2890,9 +2899,9 @@ class Messaging(BaseExtensionCog, name="messaging"):
                                 len(msg.content) > 2000
                                 or len(escaped_msg_content) + 7 > 2000
                             ):
-                                with io.StringIO(msg.content) as strio:
+                                with io.BytesIO(msg.content.encode("utf-8")) as bytesio:
                                     message_id_cache[msg.id] = await destination.send(
-                                        file=discord.File(strio, "messagedata.txt"),  # type: ignore
+                                        file=discord.File(bytesio, "messagedata.txt"),
                                         reference=msg_reference_id,  # type: ignore
                                     )
                             else:
@@ -2912,11 +2921,11 @@ class Messaging(BaseExtensionCog, name="messaging"):
                                 )
                     else:
                         if msg.content:
-                            with io.StringIO(msg.content) as strio2:
+                            with io.BytesIO(msg.content.encode("utf-8")) as bytesio2:
                                 message_id_cache[msg.id] = await destination.send(
                                     file=discord.File(
-                                        strio2,
-                                        filename="messagedata.txt",  # type: ignore
+                                        bytesio2,
+                                        filename="messagedata.txt",
                                     ),
                                     allowed_mentions=no_mentions,
                                     reference=msg_reference_id,  # type: ignore
@@ -2930,23 +2939,24 @@ class Messaging(BaseExtensionCog, name="messaging"):
                                 )
 
                     if msg.embeds:
-                        embed_data_strios = []
+                        embed_data_bytesios: list[io.BytesIO] = []
                         for embed in msg.embeds:
-                            embed_data_strio = io.StringIO()
-                            json.dump(embed.to_dict(), embed_data_strio, indent=4)
-                            embed_data_strio.seek(0)
-                            embed_data_strios.append(embed_data_strio)
+                            embed_data_bytesio = io.BytesIO(
+                                json.dumps(embed.to_dict()).encode("utf-8")
+                            )
+                            embed_data_bytesio.seek(0)
+                            embed_data_bytesios.append(embed_data_bytesio)
 
                         await destination.send(
                             content=f"**Message embeds** ({i + 1}):",
                             files=[
-                                discord.File(strio, filename=f"embeddata{i}.json")
-                                for strio in embed_data_strios
+                                discord.File(bytesio, filename=f"embeddata{i}.json")
+                                for bytesio in embed_data_bytesios
                             ],
                         )
 
-                        for embed_data_strio in embed_data_strios:
-                            embed_data_strio.close()
+                        for embed_data_bytesio in embed_data_bytesios:
+                            embed_data_bytesio.close()
 
                 await asyncio.sleep(0)
 
@@ -3004,7 +3014,7 @@ class Messaging(BaseExtensionCog, name="messaging"):
         assert (
             ctx.guild
             and ctx.bot.user
-            and (bot_member := ctx.guild.get_member(ctx.bot.user.id))
+            and ctx.guild.get_member(ctx.bot.user.id)
             and isinstance(
                 ctx.channel,
                 (discord.TextChannel, discord.VoiceChannel, discord.Thread),
@@ -3079,10 +3089,10 @@ class Messaging(BaseExtensionCog, name="messaging"):
             )
         )
         message_count = len(messages)
-        system_message_check = lambda m: (
-            m.channel.id == channel.id  # type: ignore
-            and m.type == discord.MessageType.pins_add
-        )
+
+        def system_message_check(m):
+            return m.channel.id == channel.id and m.type == discord.MessageType.pins_add
+
         for i, msg in enumerate(messages):
             if message_count > 2 and not i % 3:
                 await self.send_or_edit_response(
@@ -3156,7 +3166,7 @@ class Messaging(BaseExtensionCog, name="messaging"):
         """
         await self.message_pin(
             ctx,
-            *(messages := message),  # noqa: F841
+            message,  # type: ignore
             delete_system_message=delete_system_message,
             unpin_last=unpin_last,
             _channel=channel,
@@ -3187,7 +3197,7 @@ class Messaging(BaseExtensionCog, name="messaging"):
         assert (
             ctx.guild
             and ctx.bot.user
-            and (bot_member := ctx.guild.get_member(ctx.bot.user.id))
+            and ctx.guild.get_member(ctx.bot.user.id)
             and isinstance(
                 ctx.channel,
                 (discord.TextChannel, discord.VoiceChannel, discord.Thread),
