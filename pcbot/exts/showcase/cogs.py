@@ -395,7 +395,7 @@ class Showcasing(BaseExtensionCog, name="showcasing"):
                     ),
                     files=[
                         discord.File(
-                            io.StringIO(message.content),  # type: ignore
+                            io.BytesIO(message.content.encode("utf-8")),
                             filename="showcase_message_content.txt",
                         ),
                         *[

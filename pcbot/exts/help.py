@@ -54,7 +54,7 @@ class EmbedHelpCommand(commands.HelpCommand):
 
         self.theme_color = discord.Color(int(options.get("theme_color", 0)))
         self.bot_help_message = options.get("bot_help_message", "")
-        self.context: commands.Context[PygameCommunityBot]
+        self.context: commands.Context[PygameCommunityBot]  # type: ignore
         super().__init__(**options)
 
     def get_ending_note(self):
@@ -112,7 +112,7 @@ class EmbedHelpCommand(commands.HelpCommand):
                         "`"
                         + (
                             self.get_command_signature(c)
-                            if len((sig := self.get_command_signature(c))) < 16
+                            if len(self.get_command_signature(c)) < 16
                             else c.qualified_name + " ..."
                         )
                         + "`"

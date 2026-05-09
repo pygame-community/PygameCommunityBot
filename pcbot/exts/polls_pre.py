@@ -247,7 +247,7 @@ class PollsPreCog(BaseExtensionCog, name="polls-pre"):
                 poll_config_map = parse_text_to_mapping(
                     split_footer[1], delimiter=":", separator=" | "
                 )
-            except (SyntaxError, ValueError) as err:
+            except (SyntaxError, ValueError):
                 raise commands.CommandInvokeError(
                     commands.CommandError(
                         "The specified message's poll embed is malformed.",

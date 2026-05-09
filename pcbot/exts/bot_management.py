@@ -138,8 +138,8 @@ class BotManagementCog(BaseExtensionCog, name="bot-management"):
         log_txt_file = None
         escaped_cmd_text = discord.utils.escape_markdown(ctx.message.content)
 
-        with io.StringIO(ctx.message.content) as log_buffer:
-            log_txt_file = discord.File(log_buffer, filename="command.txt")  # type: ignore
+        with io.BytesIO(ctx.message.content.encode("utf-8")) as log_buffer:
+            log_txt_file = discord.File(log_buffer, filename="command.txt")
 
         invocation_embed_dict = dict(
             author=dict(
@@ -203,14 +203,14 @@ class BotManagementCog(BaseExtensionCog, name="bot-management"):
             command_error_task.cancelled() or command_error_task.exception()
         ):
             command_exception: Exception = command_error_task.result()[1]
-            with io.StringIO() as strio:
+            with io.TextIOWrapper(io.BytesIO(), encoding="utf-8") as tiow:
                 traceback.print_exception(
                     type(command_exception),
                     command_exception,
                     tb=command_exception.__traceback__,
-                    file=strio,
+                    file=tiow,
                 )
-                strio.seek(0)
+                tiow.seek(0)
                 await asyncio.sleep(5)
                 is_unknown_error = isinstance(
                     command_exception, commands.CommandInvokeError
@@ -222,13 +222,13 @@ class BotManagementCog(BaseExtensionCog, name="bot-management"):
                     embed=discord.Embed.from_dict(
                         invocation_embed_dict
                         | dict(
-                            title=f"Command Invocation "
+                            title="Command Invocation "
                             + (
                                 f"(`{ctx.command.qualified_name}`)"
                                 if ctx.command
                                 else ""
                             )
-                            + f"\n  • Status: "
+                            + "\n  • Status: "
                             + (
                                 "Failed (Unknown Error) ❌"
                                 if is_unknown_error
@@ -243,7 +243,11 @@ class BotManagementCog(BaseExtensionCog, name="bot-management"):
                     ),
                     attachments=invocation_log_message.attachments
                     + (
-                        [discord.File(strio, filename="command_invocation_error.txt")]  # type: ignore
+                        [
+                            discord.File(
+                                tiow.buffer, filename="command_invocation_error.txt"
+                            )
+                        ]
                         if is_unknown_error
                         else []
                     ),
@@ -256,7 +260,7 @@ class BotManagementCog(BaseExtensionCog, name="bot-management"):
                 embed=discord.Embed.from_dict(
                     invocation_embed_dict
                     | dict(
-                        title=f"Command Invocation "
+                        title="Command Invocation "
                         + (f"(`{ctx.command.qualified_name}`)" if ctx.command else "")
                         + "\n  • Status: Completed ✅",
                         color=constants.SUCCESS_COLOR,
@@ -270,7 +274,7 @@ class BotManagementCog(BaseExtensionCog, name="bot-management"):
                 embed=discord.Embed.from_dict(
                     invocation_embed_dict
                     | dict(
-                        title=f"Command Invocation "
+                        title="Command Invocation "
                         + (f"(`{ctx.command.qualified_name}`)" if ctx.command else "")
                         + "\n  • Status: Completed ✅",
                         color=constants.SUCCESS_COLOR,
@@ -309,23 +313,23 @@ class BotManagementCog(BaseExtensionCog, name="bot-management"):
                 ),
                 attachments=[
                     discord.File(
-                        io.StringIO(
+                        io.BytesIO(
                             "\n".join(
                                 ANSI_FORMATTER.format(record)
                                 for record in recent_records
-                            )
-                        ),  # type: ignore
+                            ).encode("utf-8")
+                        ),
                         filename=f"{self.log_filename}_"
                         f"{first_record_dt.strftime('%Y-%m-%d_%H-%M-%S')}"
                         f"--{last_record_dt.strftime('%Y-%m-%d_%H-%M-%S')}.log.ansi",
                     ),
                     discord.File(
-                        io.StringIO(
+                        io.BytesIO(
                             "\n".join(
                                 DEFAULT_FORMATTER.format(record)
                                 for record in recent_records
-                            )
-                        ),  # type: ignore
+                            ).encode("utf-8")
+                        ),
                         filename=f"{self.log_filename}_"
                         f"{first_record_dt.strftime('%Y-%m-%d_%H-%M-%S')}"
                         f"--{last_record_dt.strftime('%Y-%m-%d_%H-%M-%S')}.log",
@@ -347,23 +351,23 @@ class BotManagementCog(BaseExtensionCog, name="bot-management"):
                 ),
                 files=[
                     discord.File(
-                        io.StringIO(
+                        io.BytesIO(
                             "\n".join(
                                 ANSI_FORMATTER.format(record)
                                 for record in recent_records
-                            )
-                        ),  # type: ignore
+                            ).encode("utf-8")
+                        ),
                         filename=f"{self.log_filename}_"
                         f"{first_record_dt.strftime('%Y-%m-%d %H-%M-%S')}"
                         f"--{last_record_dt.strftime('%Y-%m-%d %H-%M-%S')}.log.ansi",
                     ),
                     discord.File(
-                        io.StringIO(
+                        io.BytesIO(
                             "\n".join(
                                 DEFAULT_FORMATTER.format(record)
                                 for record in recent_records
-                            )
-                        ),  # type: ignore
+                            ).encode("utf-8")
+                        ),
                         filename=f"{self.log_filename}_"
                         f"{first_record_dt.strftime('%Y-%m-%d %H-%M-%S')}"
                         f"--{last_record_dt.strftime('%Y-%m-%d %H-%M-%S')}.log",
@@ -542,12 +546,12 @@ class BotManagementCog(BaseExtensionCog, name="bot-management"):
             ),
             file=(
                 discord.File(
-                    io.StringIO(repr(eval_output)),  # type: ignore
+                    io.BytesIO(repr(eval_output).encode("utf-8")),
                     filename=f"eval_output_{datetime.datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}.txt",
                 )
                 if len(eval_output) > 4096
                 else None
-            ),
+            ),  # type: ignore
         )
 
     @is_bot_manager()
@@ -618,7 +622,7 @@ class BotManagementCog(BaseExtensionCog, name="bot-management"):
             inf = float("inf")
             before_ts = before.timestamp() if before else inf
             after_ts = after.timestamp() if after else 0.0
-            strio = io.StringIO()
+            tiow = io.TextIOWrapper(io.BytesIO(), encoding="utf-8")
             record_strings = []
             record_matches = []
             _limit = limit or inf
@@ -662,7 +666,7 @@ class BotManagementCog(BaseExtensionCog, name="bot-management"):
                             ):
                                 if total_record_writes + 1 > _limit:
                                     break
-                                strio.write(line)  # include line as it's within range
+                                tiow.write(line)  # include line as it's within range
                                 total_record_writes += 1
                                 if not first_record_dt:
                                     first_record_dt = iso_dt
@@ -674,7 +678,7 @@ class BotManagementCog(BaseExtensionCog, name="bot-management"):
                             if defer_writes:
                                 record_strings[-1] += line
                             else:
-                                strio.write(line)
+                                tiow.write(line)
 
             if (
                 defer_writes and record_strings and record_matches
@@ -682,7 +686,7 @@ class BotManagementCog(BaseExtensionCog, name="bot-management"):
                 # record string list is sliced to only pick x newest entries, where x equals a specified limit
                 limit_index = max(0, len(record_strings) - limit)  # type: ignore
                 for string in record_strings[limit_index:]:  # type: ignore
-                    strio.write(string)
+                    tiow.write(string)
                     total_record_writes += 1
 
                 if not first_record_dt:
@@ -695,21 +699,21 @@ class BotManagementCog(BaseExtensionCog, name="bot-management"):
                     last_selected_match.group(1)
                 )
 
-            if not strio.tell():
+            if not tiow.tell():
                 raise commands.CommandInvokeError(
                     commands.CommandError(
                         "No log data was found for the specified range."
                     )
                 )
 
-            strio.seek(0)
+            tiow.seek(0)
 
             await ctx.send(
                 content=f"Bot logs from **<t:{int(first_record_dt.timestamp())}:f>** "  # type: ignore
                 f"to **<t:{int(last_record_dt.timestamp())}:f>** "  # type: ignore
                 f"(**{total_record_writes}** total) :",
                 file=discord.File(
-                    strio,  # type: ignore
+                    tiow.buffer,
                     filename=f"{self.log_filename}_"
                     f"{first_record_dt.strftime('%Y-%m-%d_%H-%M-%S')}"  # type: ignore
                     f"--{last_record_dt.strftime('%Y-%m-%d_%H-%M-%S')}.log",  # type: ignore
