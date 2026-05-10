@@ -7,8 +7,5 @@ services:
       dockerfile: Dockerfile
     tty: true
     # Add helpful development volumes here
-    volumes:
-      # Mount environment and config files directory
-      # to the service as a volume
-      - ${ENV_VOLUME}:/app/env/
-
+    # volumes:
+      - ...:...
