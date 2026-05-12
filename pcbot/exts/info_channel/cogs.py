@@ -1,7 +1,7 @@
 import asyncio
 import logging
 import re
-from typing import Collection, TypedDict
+from typing import Any, Collection, TypedDict
 
 import discord
 from discord import app_commands
@@ -23,12 +23,34 @@ MAX_INFO_KEYS = 5
 # Combined title + description budget for each info embed.
 MAX_INFO_EMBED_FIELDS = 2000
 
+DISCORD_MESSAGE_URL_RE = re.compile(
+    r"^https?://(?:ptb\.|canary\.)?discord(?:app)?\.com/channels/(\d+)/(\d+)(?:/(\d+))?/?$"
+)
+
 
 class InfoEntryValue(TypedDict):
     """Cached payload for a single info entry."""
 
+    thread_id: int
     name: str
     content: str
+
+
+class InfoCacheEntryRow(TypedDict):
+    """Row shape for cache_entries."""
+
+    uid: str
+    thread_id: int
+    name: str
+    content: str
+
+
+class InfoCacheKeyRow(TypedDict):
+    """Row shape for cache_keys."""
+
+    uid: str
+    key: str
+    thread_id: int
 
 
 def invocation_error(ctx, *args):
@@ -74,7 +96,7 @@ class InfoChannelCog(BaseExtensionCog, name="info-channel"):
     def _extract_keys(self, thread_name: str) -> list[str]:
         """Extract key(s) from thread titles using the configured regex.
 
-        If the match contains '/' or '|', split into separate keys.
+        The regex is expected to capture bracketed keys like "[ key | alias ]".
         """
         match = self._key_re.search(thread_name)
         if not match:
@@ -89,8 +111,8 @@ class InfoChannelCog(BaseExtensionCog, name="info-channel"):
         if not raw_value:
             return []
 
-        if "/" in raw_value or "|" in raw_value:
-            parts = [part.strip() for part in re.split(r"[\/|]", raw_value)]
+        if "|" in raw_value:
+            parts = [part.strip() for part in raw_value.split("|")]
             return [self._normalize_key(p) for p in parts if p]
 
         return [self._normalize_key(raw_value)]
@@ -171,10 +193,10 @@ class InfoChannelCog(BaseExtensionCog, name="info-channel"):
 
     @staticmethod
     def _build_sql_in_clause(
-        prefix: str, values: Collection[str]
-    ) -> tuple[str, dict[str, int | str]]:
+        prefix: str, values: Collection
+    ) -> tuple[str, dict[str, Any]]:
         placeholders: list[str] = []
-        params: dict[str, int | str] = {}
+        params: dict[str, Any] = {}
         for index, value in enumerate(values):
             key = f"{prefix}{index}"
             placeholders.append(f":{key}")
@@ -238,15 +260,35 @@ class InfoChannelCog(BaseExtensionCog, name="info-channel"):
                 dict(uid=str(self.bot.uid), key=key, thread_id=thread_id),
             )
 
-    async def _fetch_entry_for_key(
-        self, conn: AsyncConnection, key: str
-    ) -> tuple[int, InfoEntryValue] | None:
+    async def _fetch_entry_for_thread_id(
+        self, conn: AsyncConnection, thread_id: int
+    ) -> InfoCacheEntryRow | None:
         result = await conn.execute(
             text(
-                f"SELECT ck.key, ce.thread_id, ce.name, ce.content "
-                f"FROM '{DB_PREFIX}cache_keys' ck "
-                f"JOIN '{DB_PREFIX}cache_entries' ce ON ck.thread_id = ce.thread_id "
-                "WHERE ck.uid = :uid AND ck.key = :key"
+                f"SELECT uid, thread_id, name, content FROM '{DB_PREFIX}cache_entries' "
+                "WHERE uid = :uid AND thread_id = :thread_id"
+            ),
+            dict(uid=str(self.bot.uid), thread_id=thread_id),
+        )
+        row = result.fetchone()
+        if row is None:
+            return None
+
+        uid, thread_id_val, name, content = row
+        return InfoCacheEntryRow(
+            uid=str(uid),
+            thread_id=int(thread_id_val),
+            name=str(name),
+            content=str(content or ""),
+        )
+
+    async def _fetch_key_for_value(
+        self, conn: AsyncConnection, key: str
+    ) -> InfoCacheKeyRow | None:
+        result = await conn.execute(
+            text(
+                f"SELECT uid, key, thread_id FROM '{DB_PREFIX}cache_keys' "
+                "WHERE uid = :uid AND key = :key"
             ),
             dict(uid=str(self.bot.uid), key=key),
         )
@@ -254,7 +296,49 @@ class InfoChannelCog(BaseExtensionCog, name="info-channel"):
         if row is None:
             return None
 
-        return int(row.thread_id), {"name": row.name, "content": row.content or ""}
+        uid, key_val, thread_id_val = row
+        return InfoCacheKeyRow(
+            uid=str(uid),
+            key=str(key_val),
+            thread_id=int(thread_id_val),
+        )
+
+    async def _fetch_entry_for_key(
+        self, conn: AsyncConnection, key: str
+    ) -> InfoEntryValue | None:
+        key_row = await self._fetch_key_for_value(conn, key)
+        if key_row is None:
+            return None
+
+        entry_row = await self._fetch_entry_for_thread_id(conn, key_row["thread_id"])
+        if entry_row is None:
+            return None
+
+        entry = InfoEntryValue(
+            thread_id=entry_row["thread_id"],
+            name=entry_row["name"],
+            content=entry_row["content"],
+        )
+        # handle redirections
+
+        redirect = entry["content"].strip()
+        match = DISCORD_MESSAGE_URL_RE.fullmatch(redirect)
+        if not match:
+            return entry
+
+        target_thread_id = int(match.group(2))
+        if target_thread_id == entry_row["thread_id"]:
+            return entry
+
+        redirected = await self._fetch_entry_for_thread_id(conn, target_thread_id)
+        if redirected is None:
+            return entry
+
+        return InfoEntryValue(
+            thread_id=target_thread_id,
+            name=redirected["name"],
+            content=redirected["content"],
+        )
 
     async def _refresh_cache_from_threads(self) -> None:
         threads = await self._iter_info_threads()
@@ -305,47 +389,19 @@ class InfoChannelCog(BaseExtensionCog, name="info-channel"):
                 await self._upsert_entry(conn, thread.id, thread.name, content)
                 await self._update_keys_for_thread(conn, thread.id, keys, channel_id)
 
-    async def _get_entries_for_keys(
-        self, keys: list[str]
-    ) -> tuple[list[tuple[int, InfoEntryValue]], list[str]]:
-        resolved: list[tuple[int, InfoEntryValue]] = []
-        missing: list[str] = []
-        seen_primary: set[int] = set()
+    async def _get_entry_for_key(self, key: str) -> InfoEntryValue | None:
+        async with self.db_engine.connect() as conn:
+            normalized = self._normalize_key(key)
+            entry = await self._fetch_entry_for_key(conn, normalized)
+            if entry is not None:
+                return entry
+
+        async with self._db_lock:
+            await self._refresh_cache_from_threads()
 
         async with self.db_engine.connect() as conn:
-            for key in keys:
-                normalized = self._normalize_key(key)
-                entry = await self._fetch_entry_for_key(conn, normalized)
-                if entry is None:
-                    missing.append(key)
-                    continue
-                thread_id, value = entry
-                if thread_id in seen_primary:
-                    continue
-                seen_primary.add(thread_id)
-                resolved.append((thread_id, value))
-
-        if missing:
-            async with self._db_lock:
-                await self._refresh_cache_from_threads()
-
-            still_missing: list[str] = []
-            async with self.db_engine.connect() as conn:
-                for key in missing:
-                    normalized = self._normalize_key(key)
-                    entry = await self._fetch_entry_for_key(conn, normalized)
-                    if entry is None:
-                        still_missing.append(key)
-                        continue
-                    thread_id, value = entry
-                    if thread_id in seen_primary:
-                        continue
-                    seen_primary.add(thread_id)
-                    resolved.append((thread_id, value))
-
-            missing = still_missing
-
-        return resolved, missing
+            normalized = self._normalize_key(key)
+            return await self._fetch_entry_for_key(conn, normalized)
 
     @staticmethod
     def _trim_text_to_limit(text: str, limit: int) -> str:
@@ -388,9 +444,11 @@ class InfoChannelCog(BaseExtensionCog, name="info-channel"):
         embed_dict = {
             **embed_author,
             "title": title,
-            "url": f"https://discord.com/channels/{ctx.guild.id}/{thread_id}/{thread_id}"
-            if ctx.guild
-            else "",
+            "url": (
+                f"https://discord.com/channels/{ctx.guild.id}/{thread_id}/{thread_id}"
+                if ctx.guild
+                else ""
+            ),
             "description": description,
             "color": int(self.theme_color),
         }
@@ -400,33 +458,29 @@ class InfoChannelCog(BaseExtensionCog, name="info-channel"):
         ]
 
     async def _send_info_response(
-        self, ctx: commands.Context[BotT], keys: Collection[str]
+        self, ctx: commands.Context[BotT], key_text: str
     ) -> None:
-        if not keys:
-            raise invocation_error(ctx, "You must provide at least one key.")
-
-        if len(keys) > MAX_INFO_KEYS:
-            raise invocation_error(
-                ctx,
-                f"You can only request up to {MAX_INFO_KEYS} keys at once.",
-            )
+        key_text = key_text.strip()
+        if not key_text:
+            raise invocation_error(ctx, "You must provide a key.")
 
         if ctx.interaction and not ctx.interaction.response.is_done():
             await ctx.interaction.response.defer(thinking=True)
 
-        resolved, missing = await self._get_entries_for_keys(list(keys))
-
-        if not resolved:
-            raise invocation_error(
+        entry = await self._get_entry_for_key(key_text)
+        if entry is None:
+            embeds = self._build_info_embed(
                 ctx,
-                "No info entries were found for the provided keys.",
+                "Not Found",
+                f"No info entries were found for: {key_text}",
+                self.info_channel_ids[0],
             )
-
-        embeds: list[discord.Embed] = []
-        for thread_id, entry in resolved:
+        else:
+            thread_id = entry["thread_id"]
             description = (
                 entry.get("content", "") or "(No content found for this entry.)"
             )
+            embeds: list[discord.Embed] = []
             for segment in self._split_entry_description_by_divider(description):
                 embeds.extend(
                     self._build_info_embed(
@@ -437,28 +491,19 @@ class InfoChannelCog(BaseExtensionCog, name="info-channel"):
                     )
                 )
 
-        if missing:
-            embeds.extend(
-                self._build_info_embed(
-                    ctx,
-                    "Not Found",
-                    "No info entries were found for: " + ", ".join(missing),
-                    self.info_channel_ids[0],
-                )
-            )
-
         reply_member: discord.Member | None = None
-        reference = ctx.message.reference
-        if reference and isinstance(reference.resolved, discord.Message):
-            if isinstance(reference.resolved.author, discord.Member):
-                reply_member = reference.resolved.author
+        if ctx.message is not None:
+            reference = ctx.message.reference
+            if reference and isinstance(reference.resolved, discord.Message):
+                if isinstance(reference.resolved.author, discord.Member):
+                    reply_member = reference.resolved.author
 
         await self.send_paginated_response_embeds(
             ctx,
             *embeds,
-            member=[ctx.author, reply_member]
-            if reply_member
-            else ctx.author,  # pyright: ignore[reportArgumentType]
+            member=(
+                [ctx.author, reply_member] if reply_member else ctx.author
+            ),  # pyright: ignore[reportArgumentType]
         )
 
     @commands.Cog.listener()
@@ -566,7 +611,7 @@ class InfoChannelCog(BaseExtensionCog, name="info-channel"):
         **`<keys Text>...`**
         > One or more info entry keys separated by spaces.
         """
-        await self._send_info_response(ctx, keys)
+        await self._send_info_response(ctx, " ".join(keys))
 
     @app_commands.command(
         name="info",
@@ -580,8 +625,7 @@ class InfoChannelCog(BaseExtensionCog, name="info-channel"):
         interaction: discord.Interaction[BotT],
         keys: str,
     ):
-        parts = [part.strip() for part in re.split(r"[\s,]+", keys) if part.strip()]
         await self._send_info_response(
             await commands.Context[BotT].from_interaction(interaction),
-            parts,
+            keys,
         )

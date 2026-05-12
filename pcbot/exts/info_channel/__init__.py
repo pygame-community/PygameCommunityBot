@@ -28,7 +28,7 @@ async def setup(
     bot: BotT,
     info_channel_id: int | None = None,
     info_channel_ids: list[int] | None = None,
-    info_entry_key_regexp: str = r"(?:[a-z\d\-]+(?:\s*\|\s*[a-z\d\-]+)*)",
+    info_entry_key_regexp: str = r"\[\s*([a-z\d][a-z\d\s\-]*?(?:\s*\|\s*[a-z\d][a-z\d\s\-]*?)*)\s*\]",
     theme_color: int | discord.Color = 0xFFD868,
 ):
     from .cogs import InfoChannelCog
