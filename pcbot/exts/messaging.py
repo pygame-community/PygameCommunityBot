@@ -2325,18 +2325,7 @@ class Messaging(BaseExtensionCog, name="messaging"):
 
             await asyncio.sleep(0)
 
-    @commands.guild_only()
-    @commands.max_concurrency(1, per=commands.BucketType.default, wait=True)
-    @message.command(
-        name="clone",
-        usage="<message Message>... [to: Channel] [embeds: yes|no] [attachments: yes|no] "
-        "[as_spoiler: yes|no] [info: yes|no] [author_info: yes|no] [skip_empty: yes|no]",
-        extras=dict(
-            response_deletion_with_reaction=True,
-        ),
-    )
-    @flagconverter_kwargs()
-    async def message_clone(
+    async def message_clone_func(
         self,
         ctx: commands.Context[BotT],
         *message: discord.Message | ReferencedMessage,
@@ -2344,48 +2333,12 @@ class Messaging(BaseExtensionCog, name="messaging"):
         content: bool = True,
         embeds: bool = True,
         attachments: bool = True,
-        as_spoiler: bool | None = None,
+        spoiler: bool | None = None,
         info: bool = False,
         author_info: bool = True,
         skip_empty: bool = True,
+        delete_original: bool = False,
     ):
-        """Clone the specified messages with all or some of their parts included.
-        Message components in action rows are ignored.
-
-        __**Parameters:**__
-
-        **`<message Message>...`**
-        > The messages to clone.
-
-        **`[to: Channel]`**
-        > A flag for the channel to send the cloned messages to.
-        > Defaults to the invocation channel.
-
-        **`[content: yes|no]`**
-        > A flag for whether to include message content in the cloned messages.
-        > Defaults to 'yes'.
-
-        **`[attachments: yes|no]`**
-        > A flag for whether to incude message attachments in the cloned messages.
-        > Defaults to 'yes'.
-
-        **`[embeds: yes|no]`**
-        > A flag for whether to include message embeds in the cloned messages.
-        > Defaults to 'yes'.
-
-        **`[info: yes|no]`**
-        > A flag for whether to send an informational embed containing details about a message.
-        > If set to 'no', this flag will supress the `author_info:` flag.
-        > Defaults to 'no'.
-
-        **`[author_info: yes|no]`**
-        > A flag for whether to send an informational embed containing details about a message author.
-        > Defaults to 'yes'.
-
-        **`[skip_empty: yes|no]`**
-        > A flag for whether to automatically ignore messages without content, embeds or attachments.
-        > Defaults to 'yes'.
-        """
         assert (
             ctx.guild
             and ctx.bot.user
@@ -2441,6 +2394,7 @@ class Messaging(BaseExtensionCog, name="messaging"):
         no_mentions = discord.AllowedMentions.none()
         first_cloned_msg = None
         for i, msg in enumerate(messages):
+            cloned_any = False
             attached_files = []
             if msg.attachments and attachments:
                 filesize_limit = 2**20 * 8  # 8 MiB
@@ -2453,9 +2407,7 @@ class Messaging(BaseExtensionCog, name="messaging"):
                         (
                             await a.to_file(
                                 spoiler=(
-                                    as_spoiler
-                                    if as_spoiler is not None
-                                    else a.is_spoiler()
+                                    spoiler if spoiler is not None else a.is_spoiler()
                                 )
                             )
                             if (cum_size := cum_size + a.size) <= filesize_limit
@@ -2504,6 +2456,7 @@ class Messaging(BaseExtensionCog, name="messaging"):
                             embeds=msg.embeds if embeds else None,  # type: ignore
                             files=attached_files if attachments else None,  # type: ignore
                         )
+                        cloned_any = True
                     else:
                         first_cloned_msg = await destination.send(
                             content=msg.content if content else None,
@@ -2511,6 +2464,7 @@ class Messaging(BaseExtensionCog, name="messaging"):
                             files=attached_files if attachments else None,  # type: ignore
                             allowed_mentions=no_mentions,
                         )
+                        cloned_any = True
 
                 elif (
                     not (msg.content or msg.embeds or attached_files) and not skip_empty
@@ -2532,6 +2486,184 @@ class Messaging(BaseExtensionCog, name="messaging"):
                         await ctx.send(embed=info_embed)
 
                 await asyncio.sleep(0)
+
+            if delete_original and cloned_any:
+                try:
+                    await msg.delete()
+                except discord.HTTPException:
+                    pass  # silently ignore deletion failures
+
+    @commands.guild_only()
+    @commands.max_concurrency(1, per=commands.BucketType.default, wait=True)
+    @message.command(
+        name="clone",
+        usage="<message Message>... [to: Channel] [embeds: yes|no] [attachments: yes|no] "
+        "[spoiler: yes|no] [info: yes|no] [author_info: yes|no] "
+        "[delete_original: yes|no] [skip_empty: yes|no]",
+        extras=dict(
+            response_deletion_with_reaction=True,
+        ),
+    )
+    @flagconverter_kwargs()
+    async def message_clone(
+        self,
+        ctx: commands.Context[BotT],
+        *message: discord.Message | ReferencedMessage,
+        to: tuple[MessageableGuildChannel, ...] = (),
+        content: bool = True,
+        embeds: bool = True,
+        attachments: bool = True,
+        spoiler: bool | None = None,
+        info: bool = False,
+        author_info: bool = True,
+        delete_original: bool = False,
+        skip_empty: bool = True,
+    ):
+        """Clone the specified messages with all or some of their parts included.
+        Message components in action rows are ignored.
+
+        __**Parameters:**__
+
+        **`<message Message>...`**
+        > The messages to clone.
+
+        **`[to: Channel]`**
+        > A flag for the channel to send the cloned messages to.
+        > Defaults to the invocation channel.
+
+        **`[content: yes|no]`**
+        > A flag for whether to include message content in the cloned messages.
+        > Defaults to 'yes'.
+
+        **`[attachments: yes|no]`**
+        > A flag for whether to incude message attachments in the cloned messages.
+        > Defaults to 'yes'.
+
+        **`[spoiler: yes|no]`**
+        > A flag for whether to explicitly spoiler message attachments.
+        > Defaults to each attachment's spoiler state if omitted.
+
+        **`[embeds: yes|no]`**
+        > A flag for whether to include message embeds in the cloned messages.
+        > Defaults to 'yes'.
+
+        **`[info: yes|no]`**
+        > A flag for whether to send an informational embed containing details about a message.
+        > If set to 'no', this flag will supress the `author_info:` flag.
+        > Defaults to 'no'.
+
+        **`[author_info: yes|no]`**
+        > A flag for whether to send an informational embed containing details about a message author.
+        > Defaults to 'yes'.
+
+        **`[delete_original: yes|no]`**
+        > A flag for whether to delete a source message after cloning it.
+        > Defaults to 'no'.
+
+        **`[skip_empty: yes|no]`**
+        > A flag for whether to automatically ignore messages without content, embeds or attachments.
+        > Defaults to 'yes'.
+        """
+        return await self.message_clone_func(
+            ctx,
+            *message,
+            to=to,
+            content=content,
+            embeds=embeds,
+            attachments=attachments,
+            spoiler=spoiler,
+            info=info,
+            author_info=author_info,
+            delete_original=delete_original,
+            skip_empty=skip_empty,
+        )
+
+    @commands.guild_only()
+    @commands.max_concurrency(1, per=commands.BucketType.default, wait=True)
+    @message.command(
+        name="qclone",
+        aliases=["quarantine"],
+        usage="<message Message>... [to: Channel] [embeds: yes|no] [attachments: yes|no] "
+        "[spoiler: yes|no] [info: yes|no] [author_info: yes|no] "
+        "[delete_original: yes|no] [skip_empty: yes|no]",
+        extras=dict(
+            response_deletion_with_reaction=True,
+        ),
+    )
+    @flagconverter_kwargs()
+    async def message_qclone(
+        self,
+        ctx: commands.Context[BotT],
+        *message: discord.Message | ReferencedMessage,
+        to: tuple[MessageableGuildChannel, ...] = (),
+        content: bool = True,
+        embeds: bool = True,
+        attachments: bool = True,
+        spoiler: bool | None = None,
+        info: bool = True,
+        author_info: bool = True,
+        delete_original: bool = True,
+        skip_empty: bool = True,
+    ):
+        """Quarantine clone the specified messages by cloning them, deleting the originals,
+        and printing message and author info by default.
+        Message components in action rows are ignored.
+
+        __**Parameters:**__
+
+        **`<message Message>...`**
+        > The messages to clone.
+
+        **`[to: Channel]`**
+        > A flag for the channel to send the cloned messages to.
+        > Defaults to the invocation channel.
+
+        **`[content: yes|no]`**
+        > A flag for whether to include message content in the cloned messages.
+        > Defaults to 'yes'.
+
+        **`[attachments: yes|no]`**
+        > A flag for whether to incude message attachments in the cloned messages.
+        > Defaults to 'yes'.
+
+        **`[spoiler: yes|no]`**
+        > A flag for whether to explicitly spoiler message attachments.
+        > Defaults to each attachment's spoiler state if omitted.
+
+        **`[embeds: yes|no]`**
+        > A flag for whether to include message embeds in the cloned messages.
+        > Defaults to 'yes'.
+
+        **`[info: yes|no]`**
+        > A flag for whether to send an informational embed containing details about a message.
+        > If set to 'no', this flag will supress the `author_info:` flag.
+        > Defaults to 'yes'.
+
+        **`[author_info: yes|no]`**
+        > A flag for whether to send an informational embed containing details about a message author.
+        > Defaults to 'yes'.
+
+        **`[delete_original: yes|no]`**
+        > A flag for whether to delete the source messages after cloning them.
+        > Defaults to 'yes'.
+
+        **`[skip_empty: yes|no]`**
+        > A flag for whether to automatically ignore messages without content, embeds or attachments.
+        > Defaults to 'yes'.
+        """
+        return await self.message_clone_func(
+            ctx,
+            *message,
+            to=to,
+            content=content,
+            embeds=embeds,
+            attachments=attachments,
+            spoiler=spoiler,
+            info=info,
+            author_info=author_info,
+            delete_original=delete_original,
+            skip_empty=skip_empty,
+        )
 
     @commands.guild_only()
     @message.command(name="archive", extras=dict(response_deletion_with_reaction=True))
