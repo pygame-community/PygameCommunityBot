@@ -597,6 +597,7 @@ class InfoChannelCog(BaseExtensionCog, name="info-channel"):
     @commands.group(
         invoke_without_command=True,
         name="info",
+        aliases=["faq"],
         usage="<keys Text>...",
         description="Look up info entries by key.",
         extras=dict(
@@ -621,6 +622,23 @@ class InfoChannelCog(BaseExtensionCog, name="info-channel"):
         keys="One or more keys separated by spaces.",
     )
     async def info_app_command(
+        self,
+        interaction: discord.Interaction[BotT],
+        keys: str,
+    ):
+        await self._send_info_response(
+            await commands.Context[BotT].from_interaction(interaction),
+            keys,
+        )
+
+    @app_commands.command(
+        name="faq",
+        description="Look up frequently asked questions by key.",
+    )
+    @app_commands.describe(
+        keys="One or more keys separated by spaces.",
+    )
+    async def faq_app_command(
         self,
         interaction: discord.Interaction[BotT],
         keys: str,
