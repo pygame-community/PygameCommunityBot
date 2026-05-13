@@ -105,6 +105,220 @@ def get_message_embed_by_index(
     return message.embeds[clamped_index]
 
 
+async def _parse_embeds(
+    embeds: tuple[Parens[discord.Message, int] | discord.Message | CodeBlock, ...],
+) -> list[discord.Embed]:
+    parsed: list[discord.Embed] = []
+    for i, item in enumerate(embeds):
+        if isinstance(item, CodeBlock):
+            code_block = item
+            if code_block.language in ("json", None):
+                try:
+                    embed_dict = json.loads(code_block.code)
+                except Exception as err:
+                    raise commands.CommandInvokeError(
+                        commands.CommandError(
+                            f"Error while parsing JSON code block "
+                            f"{i}: {err.__class__.__name__}: {err.args[0]}"
+                        )
+                    )
+            elif code_block.language in ("py", "python"):
+                try:
+                    embed_dict = literal_eval(code_block.code)
+                except Exception as err:
+                    raise commands.CommandInvokeError(
+                        commands.CommandError(
+                            f"Error while parsing Python dict code block "
+                            f"{i}: {err.__class__.__name__}: {err.args[0]}"
+                        )
+                    )
+            else:
+                raise commands.CommandInvokeError(
+                    commands.CommandError(
+                        f"Unsupported code block language: {code_block.language}"
+                    )
+                )
+        elif isinstance(item, (discord.Message, tuple)):
+            embed_msg = item
+            attachment_index = 0
+            if isinstance(embed_msg, tuple):
+                embed_msg, attachment_index = embed_msg[0], embed_msg[1]
+
+            if not (embed_msg_attachments := embed_msg.attachments):
+                raise commands.CommandInvokeError(
+                    commands.CommandError(
+                        f"Error with `embeds` argument {i}: Messages "
+                        "specified for flag `embeds` must have at least one "
+                        "attachment as `.txt`, `.py` file containing a Python "
+                        "dictionary, or a `.json` file containing embed data. "
+                        "It must be less than 10KB in size."
+                    )
+                )
+
+            embed_attachment = embed_msg_attachments[
+                min(attachment_index, len(embed_msg_attachments) - 1)
+            ]
+
+            if not (
+                embed_attachment.content_type
+                and embed_attachment.content_type.startswith(
+                    ("text", "application/json")
+                )
+                and embed_attachment.size < 10240
+            ):
+                raise commands.CommandInvokeError(
+                    commands.CommandError(
+                        f"Error with `embeds` argument {i}: Messages "
+                        "specified for flag `embeds` must have at least one "
+                        "attachment as `.txt`, `.py` file containing a Python "
+                        "dictionary, or a `.json` file containing embed data. "
+                        "It must be less than 10KB in size."
+                    )
+                )
+
+            embed_data = (await embed_attachment.read()).decode("utf-8")
+
+            if (
+                embed_attachment.content_type.startswith(("application/json", "text"))
+                and "x-python" not in embed_attachment.content_type
+            ):
+                try:
+                    embed_dict = json.loads(embed_data)
+                except Exception as err:
+                    raise commands.CommandInvokeError(
+                        commands.CommandError(
+                            f"Error while parsing embed JSON from attachment "
+                            f"{i}: {err.__class__.__name__}: {err.args[0]}"
+                        )
+                    )
+            else:
+                try:
+                    embed_dict = literal_eval(embed_data)
+                except Exception as err:
+                    raise commands.CommandInvokeError(
+                        commands.CommandError(
+                            f"Error while parsing Python embed dict from attachment "
+                            f"{i}: {err.__class__.__name__}: {err.args[0]}"
+                        )
+                    )
+        else:
+            continue
+
+        parsed.append(discord.Embed.from_dict(embed_dict))
+
+    return parsed
+
+
+async def _resolve_embeds(
+    embeds: tuple[Parens[discord.Message, int] | discord.Message | CodeBlock, ...] = (),
+    embed_src: list[tuple[discord.Message | ReferencedMessage, int]] = [],
+    embeds_src: discord.Message | ReferencedMessage | None = None,
+    message_src: discord.Message | ReferencedMessage | None = None,
+    *,
+    former_embeds: list[discord.Embed] | None = None,
+) -> list[discord.Embed]:
+    if embeds:
+        parsed = await _parse_embeds(embeds)
+        if former_embeds is not None:
+            parsed = [
+                embed or former_embeds[i]
+                for i, embed in enumerate(parsed)
+                if embed or i < len(former_embeds)
+            ]
+        return parsed
+
+    if embed_src:
+        return [get_message_embed_by_index(msg, index=idx) for msg, idx in embed_src]
+
+    if embeds_src is not None:
+        if not embeds_src.embeds:
+            raise commands.CommandInvokeError(
+                commands.CommandError(
+                    "Message specified for `embeds_src` has no embeds to use."
+                )
+            )
+        return list(embeds_src.embeds)
+
+    if message_src is not None:
+        return list(message_src.embeds)
+
+    return []
+
+
+async def _resolve_send_files(
+    attachments: list[discord.Attachment],
+    attachment_src: list[tuple[discord.Message | ReferencedMessage, int]] = [],
+    attachments_src: discord.Message | ReferencedMessage | None = None,
+    message_src: discord.Message | ReferencedMessage | None = None,
+    *,
+    size_limit: int = 2**20 * 25,
+) -> list[discord.File]:
+    files: list[discord.File] = []
+
+    if attachments:
+        for i, att in enumerate(attachments):
+            if att.size > size_limit:
+                raise commands.CommandInvokeError(
+                    commands.CommandError(
+                        f"Attachment {i} is too large to be resent "
+                        f"(> {size_limit // 2**20} MiB)"
+                    )
+                )
+            files.append(await att.to_file(use_cached=True))
+        return files
+
+    if attachment_src:
+        for src_message, index in attachment_src:
+            files.append(
+                await get_message_attachment_file(
+                    src_message,
+                    index=index,
+                    size_limit=size_limit,
+                )
+            )
+    elif attachments_src is not None:
+        if not attachments_src.attachments:
+            raise commands.CommandInvokeError(
+                commands.CommandError(
+                    "Message specified for `attachments_src` has no attachments to use."
+                )
+            )
+        files.extend(
+            await get_message_attachments_files(
+                attachments_src,
+                size_limit=size_limit,
+            )
+        )
+    elif message_src is not None and message_src.attachments:
+        files.extend(
+            await get_message_attachments_files(
+                message_src,
+                size_limit=size_limit,
+            )
+        )
+
+    return files
+
+
+def _build_allowed_mentions(
+    mention_all: bool,
+    mention_everyone: bool = False,
+    mention_users: bool | tuple = False,
+    mention_these_users: tuple[discord.User, ...] = (),
+    mention_roles: bool | tuple = False,
+    mention_these_roles: tuple[discord.Role, ...] = (),
+    mention_replied_user: bool = False,
+) -> discord.AllowedMentions:
+    if mention_all:
+        return discord.AllowedMentions.all()
+    return discord.AllowedMentions(
+        everyone=mention_everyone,
+        users=(mention_these_users if mention_these_users else mention_users),
+        roles=(mention_these_roles if mention_these_roles else mention_roles),
+        replied_user=mention_replied_user,
+    )
+
+
 def trim_markdown_h1_prefix(content: str) -> str:
     """Trim a leading markdown H1 line from content if present."""
 
@@ -447,226 +661,6 @@ class Messaging(BaseExtensionCog, name="messaging"):
 
         return (webhook, thread)
 
-    async def _parse_embeds(
-        self,
-        embeds: tuple[Parens[discord.Message, int] | discord.Message | CodeBlock, ...],
-    ) -> list[discord.Embed]:
-        parsed: list[discord.Embed] = []
-        for i, item in enumerate(embeds):
-            if isinstance(item, CodeBlock):
-                code_block = item
-                if code_block.language in ("json", None):
-                    try:
-                        embed_dict = json.loads(code_block.code)
-                    except Exception as err:
-                        raise commands.CommandInvokeError(
-                            commands.CommandError(
-                                f"Error while parsing JSON code block "
-                                f"{i}: {err.__class__.__name__}: {err.args[0]}"
-                            )
-                        )
-                elif code_block.language in ("py", "python"):
-                    try:
-                        embed_dict = literal_eval(code_block.code)
-                    except Exception as err:
-                        raise commands.CommandInvokeError(
-                            commands.CommandError(
-                                f"Error while parsing Python dict code block "
-                                f"{i}: {err.__class__.__name__}: {err.args[0]}"
-                            )
-                        )
-                else:
-                    raise commands.CommandInvokeError(
-                        commands.CommandError(
-                            f"Unsupported code block language: {code_block.language}"
-                        )
-                    )
-            elif isinstance(item, (discord.Message, tuple)):
-                embed_msg = item
-                attachment_index = 0
-                if isinstance(embed_msg, tuple):
-                    embed_msg, attachment_index = embed_msg[0], embed_msg[1]
-
-                if not (embed_msg_attachments := embed_msg.attachments):
-                    raise commands.CommandInvokeError(
-                        commands.CommandError(
-                            f"Error with `embeds` argument {i}: Messages "
-                            "specified for flag `embeds` must have at least one "
-                            "attachment as `.txt`, `.py` file containing a Python "
-                            "dictionary, or a `.json` file containing embed data. "
-                            "It must be less than 10KB in size."
-                        )
-                    )
-
-                embed_attachment = embed_msg_attachments[
-                    min(attachment_index, len(embed_msg_attachments) - 1)
-                ]
-
-                if not (
-                    embed_attachment.content_type
-                    and embed_attachment.content_type.startswith(
-                        ("text", "application/json")
-                    )
-                    and embed_attachment.size < 10240
-                ):
-                    raise commands.CommandInvokeError(
-                        commands.CommandError(
-                            f"Error with `embeds` argument {i}: Messages "
-                            "specified for flag `embeds` must have at least one "
-                            "attachment as `.txt`, `.py` file containing a Python "
-                            "dictionary, or a `.json` file containing embed data. "
-                            "It must be less than 10KB in size."
-                        )
-                    )
-
-                embed_data = (await embed_attachment.read()).decode("utf-8")
-
-                if (
-                    embed_attachment.content_type.startswith(
-                        ("application/json", "text")
-                    )
-                    and "x-python" not in embed_attachment.content_type
-                ):
-                    try:
-                        embed_dict = json.loads(embed_data)
-                    except Exception as err:
-                        raise commands.CommandInvokeError(
-                            commands.CommandError(
-                                f"Error while parsing embed JSON from attachment "
-                                f"{i}: {err.__class__.__name__}: {err.args[0]}"
-                            )
-                        )
-                else:
-                    try:
-                        embed_dict = literal_eval(embed_data)
-                    except Exception as err:
-                        raise commands.CommandInvokeError(
-                            commands.CommandError(
-                                f"Error while parsing Python embed dict from attachment "
-                                f"{i}: {err.__class__.__name__}: {err.args[0]}"
-                            )
-                        )
-            else:
-                continue
-
-            parsed.append(discord.Embed.from_dict(embed_dict))
-
-        return parsed
-
-    async def _resolve_embeds(
-        self,
-        embeds: tuple[
-            Parens[discord.Message, int] | discord.Message | CodeBlock, ...
-        ] = (),
-        embed_src: list[tuple[discord.Message | ReferencedMessage, int]] = [],
-        embeds_src: discord.Message | ReferencedMessage | None = None,
-        message_src: discord.Message | ReferencedMessage | None = None,
-        *,
-        former_embeds: list[discord.Embed] | None = None,
-    ) -> list[discord.Embed]:
-        if embeds:
-            parsed = await self._parse_embeds(embeds)
-            if former_embeds is not None:
-                parsed = [
-                    embed or former_embeds[i]
-                    for i, embed in enumerate(parsed)
-                    if embed or i < len(former_embeds)
-                ]
-            return parsed
-
-        if embed_src:
-            return [
-                get_message_embed_by_index(msg, index=idx) for msg, idx in embed_src
-            ]
-
-        if embeds_src is not None:
-            if not embeds_src.embeds:
-                raise commands.CommandInvokeError(
-                    commands.CommandError(
-                        "Message specified for `embeds_src` has no embeds to use."
-                    )
-                )
-            return list(embeds_src.embeds)
-
-        if message_src is not None:
-            return list(message_src.embeds)
-
-        return []
-
-    async def _resolve_send_files(
-        self,
-        attachments: list[discord.Attachment],
-        attachment_src: list[tuple[discord.Message | ReferencedMessage, int]] = [],
-        attachments_src: discord.Message | ReferencedMessage | None = None,
-        message_src: discord.Message | ReferencedMessage | None = None,
-        *,
-        size_limit: int = 2**20 * 25,
-    ) -> list[discord.File]:
-        files: list[discord.File] = []
-
-        if attachments:
-            for i, att in enumerate(attachments):
-                if att.size > size_limit:
-                    raise commands.CommandInvokeError(
-                        commands.CommandError(
-                            f"Attachment {i} is too large to be resent "
-                            f"(> {size_limit // 2**20} MiB)"
-                        )
-                    )
-                files.append(await att.to_file(use_cached=True))
-            return files
-
-        if attachment_src:
-            for src_message, index in attachment_src:
-                files.append(
-                    await get_message_attachment_file(
-                        src_message,
-                        index=index,
-                        size_limit=size_limit,
-                    )
-                )
-        elif attachments_src is not None:
-            if not attachments_src.attachments:
-                raise commands.CommandInvokeError(
-                    commands.CommandError(
-                        "Message specified for `attachments_src` has no attachments to use."
-                    )
-                )
-            files.extend(
-                await get_message_attachments_files(
-                    attachments_src,
-                    size_limit=size_limit,
-                )
-            )
-        elif message_src is not None and message_src.attachments:
-            files.extend(
-                await get_message_attachments_files(
-                    message_src,
-                    size_limit=size_limit,
-                )
-            )
-
-        return files
-
-    def _build_allowed_mentions(
-        self,
-        mention_all: bool,
-        mention_everyone: bool = False,
-        mention_users: bool | tuple = False,
-        mention_these_users: tuple[discord.User, ...] = (),
-        mention_roles: bool | tuple = False,
-        mention_these_roles: tuple[discord.Role, ...] = (),
-        mention_replied_user: bool = False,
-    ) -> discord.AllowedMentions:
-        if mention_all:
-            return discord.AllowedMentions.all()
-        return discord.AllowedMentions(
-            everyone=mention_everyone,
-            users=(mention_these_users if mention_these_users else mention_users),
-            roles=(mention_these_roles if mention_these_roles else mention_roles),
-            replied_user=mention_replied_user,
-        )
-
     async def message_send_func(
         self,
         ctx: commands.Context[BotT],
@@ -708,6 +702,7 @@ class Messaging(BaseExtensionCog, name="messaging"):
             )
             and isinstance(ctx.author, discord.Member)
         )
+        commands.command
 
         if not (
             content
@@ -751,20 +746,20 @@ class Messaging(BaseExtensionCog, name="messaging"):
         elif message_src is not None and message_src.content:
             resolved_content = message_src.content
 
-        parsed_embeds = await self._resolve_embeds(
+        parsed_embeds = await _resolve_embeds(
             embeds=embeds,
             embed_src=embed_src,
             embeds_src=embeds_src,
             message_src=message_src,
         )
-        files = await self._resolve_send_files(
+        files = await _resolve_send_files(
             attachments,
             attachment_src=attachment_src,
             attachments_src=attachments_src,
             message_src=message_src,
             size_limit=2**20 * 25,
         )
-        allowed_mentions = self._build_allowed_mentions(
+        allowed_mentions = _build_allowed_mentions(
             mention_all,
             mention_everyone,
             mention_users,
@@ -975,14 +970,14 @@ class Messaging(BaseExtensionCog, name="messaging"):
         elif message_src is not None and message_src.content:
             resolved_content = message_src.content
 
-        parsed_embeds = await self._resolve_embeds(
+        parsed_embeds = await _resolve_embeds(
             embeds=embeds,
             embed_src=embed_src,
             embeds_src=embeds_src,
             message_src=message_src,
             former_embeds=message.embeds,
         )
-        files = await self._resolve_send_files(
+        files = await _resolve_send_files(
             attachments,
             attachment_src=attachment_src,
             attachments_src=attachments_src,
@@ -1597,20 +1592,20 @@ class Messaging(BaseExtensionCog, name="messaging"):
         elif message_src is not None and message_src.content:
             resolved_content = message_src.content
 
-        parsed_embeds = await self._resolve_embeds(
+        parsed_embeds = await _resolve_embeds(
             embeds=embeds,
             embed_src=embed_src,
             embeds_src=embeds_src,
             message_src=message_src,
         )
-        files = await self._resolve_send_files(
+        files = await _resolve_send_files(
             attachments,
             attachment_src=attachment_src,
             attachments_src=attachments_src,
             message_src=message_src,
             size_limit=2**20 * 25,
         )
-        allowed_mentions = self._build_allowed_mentions(
+        allowed_mentions = _build_allowed_mentions(
             mention_all,
             mention_everyone,
             mention_users,
@@ -1804,7 +1799,7 @@ class Messaging(BaseExtensionCog, name="messaging"):
                 )
             )
 
-        allowed_mentions = self._build_allowed_mentions(
+        allowed_mentions = _build_allowed_mentions(
             mention_all,
             mention_everyone,
             mention_users,
@@ -2527,8 +2522,8 @@ class Messaging(BaseExtensionCog, name="messaging"):
         **`<message Message>...`**
         > The messages to clone.
 
-        **`[to: Channel]`**
-        > A flag for the channel to send the cloned messages to.
+        **`[to: Channel...]`**
+        > A flag for the channels to send the cloned messages to.
         > Defaults to the invocation channel.
 
         **`[content: yes|no]`**
@@ -2614,8 +2609,8 @@ class Messaging(BaseExtensionCog, name="messaging"):
         **`<message Message>...`**
         > The messages to clone.
 
-        **`[to: Channel]`**
-        > A flag for the channel to send the cloned messages to.
+        **`[to: Channel...]`**
+        > A flag for the channels to send the cloned messages to.
         > Defaults to the invocation channel.
 
         **`[content: yes|no]`**
