@@ -101,6 +101,28 @@ class PygameCommunityBot(snakecore.commands.Bot):
             and any(role.id in owner_role_ids for role in user.roles)
         ) or await super().is_owner(user)
 
+    def _hoist_command_to_root(self, command: commands.Command) -> None:
+        for name in (command.name, *command.aliases):
+            if name not in self.all_commands:
+                self.all_commands[name] = command
+            else:
+                _logger.warning(
+                    f"Command '{command.qualified_name}' has 'add_root_aliases' set to "
+                    f"True but its name '{name}' conflicts with an existing command "
+                    f"{self.all_commands[name].qualified_name}, skipping root aliases..."
+                )
+
+    def add_command(self, command: commands.Command) -> None:
+        super().add_command(command)
+
+        if command.extras.get("add_root_aliases", False):
+            self._hoist_command_to_root(command)
+
+        if isinstance(command, commands.Group):
+            for subcommand in command.walk_commands():
+                if subcommand.extras.get("add_root_aliases", False):
+                    self._hoist_command_to_root(subcommand)
+
     async def process_commands(
         self, message: discord.Message, /, ctx: commands.Context | None = None
     ) -> None:
@@ -161,7 +183,9 @@ class PygameCommunityBot(snakecore.commands.Bot):
         if new.author.bot:
             return
 
-        if (time.time() - (new.edited_at or new.created_at).timestamp()) < 120:
+        if (
+            time.time() - (new.edited_at or new.created_at).timestamp()
+        ) < 120:  # ignore edits made after 2 minutes
             ctx = await self.get_context(new)
 
             if not (ctx.command and ctx.valid):

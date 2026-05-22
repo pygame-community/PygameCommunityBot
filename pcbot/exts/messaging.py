@@ -514,11 +514,6 @@ def get_msg_info_embed(msg: discord.Message, author: bool = True):
 
 
 class Messaging(BaseExtensionCog, name="messaging"):
-    async def cog_load(self):
-        self.bot.all_commands["qclone"] = self.bot.all_commands[  # type: ignore
-            "quarantine"
-        ] = self.message_qclone
-
     async def _fetch_url_bytes(self, url: str) -> bytes:
         """Fetch raw bytes from a URL using aiohttp.
 
@@ -2586,9 +2581,7 @@ class Messaging(BaseExtensionCog, name="messaging"):
         usage="<message Message>... [to: Channel] [embeds: yes|no] [attachments: yes|no] "
         "[spoiler: yes|no] [info: yes|no] [author_info: yes|no] "
         "[delete_original: yes|no] [skip_empty: yes|no]",
-        extras=dict(
-            response_deletion_with_reaction=True,
-        ),
+        extras=dict(add_root_aliases=True),
     )
     @flagconverter_kwargs()
     async def message_qclone(
