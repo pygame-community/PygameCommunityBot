@@ -97,10 +97,12 @@ class PGCCog(BaseExtensionCog, name="pgc"):
         bot: BotT,
         theme_color: int | discord.Color = 0,
         honeypot_channel_id: int | None = None,
+        thread_message_autopin_channel_ids: list[int] | None = None,
     ) -> None:
         super().__init__(bot, theme_color)
         self.honeypot_channel_id = honeypot_channel_id
         self.honeypot_victims = set()
+        self.thread_message_autopin_channel_ids = thread_message_autopin_channel_ids
 
     @commands.Cog.listener()
     async def on_ready(self):
@@ -133,6 +135,16 @@ class PGCCog(BaseExtensionCog, name="pgc"):
             ).send_messages
         ):
             return
+
+        if (
+            self.thread_message_autopin_channel_ids
+            and isinstance(message.channel, discord.Thread)
+            and message.channel.parent_id in self.thread_message_autopin_channel_ids
+        ):
+            try:
+                await message.pin()
+            except discord.HTTPException:
+                pass
 
         if message.channel.id == self.honeypot_channel_id:
             await message.delete()
@@ -201,5 +213,15 @@ class PGCCog(BaseExtensionCog, name="pgc"):
 
 
 @snakecore.commands.decorators.with_config_kwargs
-async def setup(bot: BotT, honeypot_channel_id: int | None = None) -> None:
-    await bot.add_cog(PGCCog(bot, honeypot_channel_id=honeypot_channel_id))
+async def setup(
+    bot: BotT,
+    honeypot_channel_id: int | None = None,
+    thread_message_autopin_channel_ids: list[int] | None = None,
+) -> None:
+    await bot.add_cog(
+        PGCCog(
+            bot,
+            honeypot_channel_id=honeypot_channel_id,
+            thread_message_autopin_channel_ids=thread_message_autopin_channel_ids,
+        )
+    )
