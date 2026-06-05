@@ -155,7 +155,7 @@ class UserCrosspostCache(TypedDict):
     ]  # Mapping from source message ID -> (alert channel ID, alert message ID)
 
 
-class AntiCrosspostCog(BaseExtensionCog, name="anti-crosspost"):
+class AntiCrosspostCog(BaseExtensionCog, name="anti_crosspost"):
     def __init__(
         self,
         bot: BotT,

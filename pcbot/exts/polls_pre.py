@@ -46,7 +46,7 @@ def parse_text_to_mapping(
     return mapping
 
 
-class PollsPreCog(BaseExtensionCog, name="polls-pre"):
+class PollsPreCog(BaseExtensionCog, name="polls_pre"):
     @commands.Cog.listener()
     async def on_raw_reaction_add(self, payload: discord.RawReactionActionEvent):
         channel = self.bot.get_channel(payload.channel_id)

@@ -61,7 +61,7 @@ class TextCommandCannotRunReason(enum.Enum):
     MISSING_CHANNEL_PERMISSIONS = enum.auto()
 
 
-class TextCommandManagerCog(BaseExtensionCog, name="text-command-manager"):
+class TextCommandManagerCog(BaseExtensionCog, name="text_command_manager"):
     """A text command manager to meet all your text
     command management needs, from enabling/disabling commands
     and/or their subcommands to setting channel or role-specific permissions
@@ -76,7 +76,7 @@ class TextCommandManagerCog(BaseExtensionCog, name="text-command-manager"):
     ) -> None:
         super().__init__(bot)
         self.db_engine = db_engine
-        self.revisiob_number = revision_number
+        self.revision_number = revision_number
         self.cached_guild_text_command_state_maps: OrderedDict[
             int, dict[str, GuildTextCommandState]
         ] = OrderedDict()
@@ -730,9 +730,11 @@ class TextCommandManagerCog(BaseExtensionCog, name="text-command-manager"):
             main_embed.description = (
                 f"**Mock roles for {ctx.author.mention} ({len(role_ids)}):**\n\n"
                 + "\n".join(
-                    f"• @everyone (No Roles)"
-                    if role_id == ctx.guild.id
-                    else f"• <@&{role_id}>"
+                    (
+                        f"• @everyone (No Roles)"
+                        if role_id == ctx.guild.id
+                        else f"• <@&{role_id}>"
+                    )
                     for role_id in role_ids
                 )
                 + f"\n\nThese mock roles will expire **<t:{int(timestamp+deletion_delay_secs)}:R>**."
@@ -928,17 +930,21 @@ class TextCommandManagerCog(BaseExtensionCog, name="text-command-manager"):
             channel_sort_lambda = lambda item: channel.position if (channel := ctx.guild.get_channel(item[0])) else -1  # type: ignore
 
             roles_embed_field["value"] = "\n".join(
-                f"`{'✅' if override_bool else '❌'}`  <@&{role_id}>"
-                if role_id != everyone_role_id
-                else f"`{'✅' if override_bool else '❌'}`  @everyone"
+                (
+                    f"`{'✅' if override_bool else '❌'}`  <@&{role_id}>"
+                    if role_id != everyone_role_id
+                    else f"`{'✅' if override_bool else '❌'}`  @everyone"
+                )
                 for role_id, override_bool in sorted(
                     condensed_role_overrides.items(), key=role_sort_lambda, reverse=True
                 )
             )
             channels_embed_field["value"] = "\n".join(
-                f"`{'✅' if override_bool else '❌'}`  <#{channel_id}> "
-                if channel_id != all_channels_id
-                else f"`{'✅' if override_bool else '❌'}`  **All Channels**"
+                (
+                    f"`{'✅' if override_bool else '❌'}`  <#{channel_id}> "
+                    if channel_id != all_channels_id
+                    else f"`{'✅' if override_bool else '❌'}`  **All Channels**"
+                )
                 for channel_id, override_bool in sorted(
                     condensed_channel_overrides.items(),
                     key=channel_sort_lambda,

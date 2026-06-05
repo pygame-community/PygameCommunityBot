@@ -178,20 +178,20 @@ class BotManagementCog(BaseExtensionCog, name="bot_management"):
 
         await asyncio.sleep(2)  # sleep to make rate-limits less likely
 
-        self.cached_invocation_log_messages[ctx.message.id] = invocation_log_message = (
-            await self.invocation_log_channel.send(
-                embed=discord.Embed.from_dict(
-                    invocation_embed_dict
-                    | dict(
-                        title="Command Invocation "
-                        + (f"(`{ctx.command.qualified_name}`)" if ctx.command else "")
-                        + "\n  • Status: Running "
-                        f"{ctx.bot.get_emoji(constants.PGC_LOADING_EMOJI_ID) or '🔄'}",
-                        color=int(self.theme_color),
-                    )
-                ),
-                file=log_txt_file,  # type: ignore
-            )
+        self.cached_invocation_log_messages[
+            ctx.message.id
+        ] = invocation_log_message = await self.invocation_log_channel.send(
+            embed=discord.Embed.from_dict(
+                invocation_embed_dict
+                | dict(
+                    title="Command Invocation "
+                    + (f"(`{ctx.command.qualified_name}`)" if ctx.command else "")
+                    + "\n  • Status: Running "
+                    f"{ctx.bot.get_emoji(constants.PGC_LOADING_EMOJI_ID) or '🔄'}",
+                    color=int(self.theme_color),
+                )
+            ),
+            file=log_txt_file,  # type: ignore
         )
 
         done, pending = await asyncio.wait(

@@ -86,7 +86,7 @@ BotT = snakecore.commands.Bot | snakecore.commands.AutoShardedBot
 DOC_EMBED_LIMIT = 3
 
 
-class DocsPreCog(BaseExtensionCog, name="docs-pre"):
+class DocsPreCog(BaseExtensionCog, name="docs_pre"):
     async def put_main_doc(self, ctx: commands.Context[BotT], name: str):
         """
         Put main part of the doc into embed(s)
