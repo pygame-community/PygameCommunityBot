@@ -102,7 +102,11 @@ class PGCCog(BaseExtensionCog, name="pgc"):
         super().__init__(bot, theme_color)
         self.honeypot_channel_id = honeypot_channel_id
         self.honeypot_victims = set()
-        self.thread_message_autopin_channel_ids = thread_message_autopin_channel_ids
+        self.thread_message_autopin_channel_ids = (
+            {*thread_message_autopin_channel_ids}
+            if thread_message_autopin_channel_ids is not None
+            else None
+        )
 
     @commands.Cog.listener()
     async def on_ready(self):
@@ -137,8 +141,10 @@ class PGCCog(BaseExtensionCog, name="pgc"):
             return
 
         if (
-            self.thread_message_autopin_channel_ids
+            not message.pinned
+            and self.thread_message_autopin_channel_ids
             and isinstance(message.channel, discord.Thread)
+            and message.id == message.channel.id
             and message.channel.parent_id in self.thread_message_autopin_channel_ids
         ):
             try:
