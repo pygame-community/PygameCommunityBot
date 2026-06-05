@@ -51,7 +51,7 @@ class InactiveHelpThreadData(TypedDict):
     alert_message_id: NotRequired[int]
 
 
-class HelpForumsPreCog(BaseExtensionCog, name="helpforums-pre"):
+class HelpForumsPreCog(BaseExtensionCog, name="helpforums_pre"):
     def __init__(
         self,
         bot: BotT,
