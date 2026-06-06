@@ -18,11 +18,16 @@ MessageableGuildChannel = discord.TextChannel | discord.VoiceChannel | discord.T
 PGC_GUILD_ID = 772505616680878080
 
 PRESENCE_MAP = {
-    discord.ActivityType.watching: ["the pygame community", "over fellow pygamers"],
-    discord.ActivityType.playing: ["Hiss at newcomers", "at Pygame Community Discord"],
+    discord.ActivityType.watching: [
+        "watching " + form for form in ("the pygame community", "over fellow pygamers")
+    ],
+    discord.ActivityType.playing: [
+        "playing " + form
+        for form in (" 'Hiss at newcomers'", " at Pygame Community Discord")
+    ],
     discord.ActivityType.listening: [
-        *(random.choice(["'pg?help'", "pg!help", "?help"]) for _ in range(4)),
-        "bugs in my head",
+        "listening to " + form
+        for form in ("bugs in my head", "?help", "pg?help", "pg!help")
     ],
 }
 
